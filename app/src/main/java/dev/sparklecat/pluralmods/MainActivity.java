@@ -23,7 +23,7 @@ public final class MainActivity extends Activity {
     private final java.util.List<View> controls = new java.util.ArrayList<>();
     private LinearLayout content;
     private TextView status, selected;
-    private Button patch, install, save;
+    private Button patch, install, save, checkUpdates;
     private ProgressBar progress;
     private boolean busy;
     private File source, output;
@@ -97,6 +97,12 @@ public final class MainActivity extends Activity {
         text(updateCard, "Version " + BuildConfig.VERSION_NAME, 13, ACCENT, false);
         updateStatus = text(updateCard, "Updates are verified before Android asks you to install them.", 14, MUTED, false);
         previewUpdates = updatePreference(updateCard, "Include preview releases", "preview_updates", true);
+        checkUpdates = button(updateCard, "Check for updates", () -> {
+            promptedVersion = null;
+            checkPatchUpdates();
+            checkForUpdates();
+        });
+        text(updateCard, "Checks for patcher and mod updates.", 13, MUTED, false);
         updateProgress = new ProgressBar(this); updateProgress.setVisibility(View.GONE); updateCard.addView(updateProgress);
         button(content, "Save mod source code", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE).setType("application/zip").putExtra(Intent.EXTRA_TITLE, "plural-star-mods-source.zip"), SAVE_SOURCE));
@@ -147,7 +153,8 @@ public final class MainActivity extends Activity {
     private void refreshUpdates() {
         if (previewUpdates == null) return;
         previewUpdates.setEnabled(!busy && !updateBusy);
-        updateProgress.setVisibility(updateBusy ? View.VISIBLE : View.GONE);
+        checkUpdates.setEnabled(!busy && !updateBusy && !checkingPatches);
+        updateProgress.setVisibility(updateBusy || checkingPatches ? View.VISIBLE : View.GONE);
     }
     private void updateUi(Runnable action) { runOnUiThread(() -> { if (!destroyed) action.run(); }); }
     private void updateWork(String label, CheckedAction action) {
@@ -282,6 +289,7 @@ public final class MainActivity extends Activity {
         if (destroyed || checkingPatches) return;
         checkingPatches = true;
         patchStatus.setText("Checking for patch updates…");
+        refreshUpdates();
         updateWorker.execute(() -> {
             try {
                 org.json.JSONObject info = payloadInfo();
@@ -297,7 +305,7 @@ public final class MainActivity extends Activity {
                 });
             } catch (Exception e) {
                 updateUi(() -> patchStatus.setText("Could not check patches. Updates will be checked again when preparing the app."));
-            } finally { updateUi(() -> checkingPatches = false); }
+            } finally { updateUi(() -> { checkingPatches = false; refreshUpdates(); }); }
         });
     }
     private void build() { build(false); }
