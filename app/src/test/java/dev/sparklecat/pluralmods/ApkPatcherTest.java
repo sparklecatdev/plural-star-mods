@@ -62,19 +62,31 @@ public class ApkPatcherTest {
         String apkPath = System.getenv("PLURAL_STAR_APK");
         Assume.assumeTrue("Set PLURAL_STAR_APK to run real-release integration", apkPath != null);
         File source = new File(apkPath);
-        assertEquals(ApkPatcher.SOURCE_SHA256, ApkPatcher.sha256(source));
+        File assets = new File("src/main/assets/payloads");
+        var provenance = new org.json.JSONObject(new String(Files.readAllBytes(new File(assets, "provenance.json").toPath()), StandardCharsets.UTF_8));
+        String expectedHash = provenance.getString("supported_apk_sha256");
+        assertEquals(expectedHash, ApkPatcher.sha256(source));
+        CompatibilityPack pack = null;
+        if (System.getenv("PLURAL_STAR_BASE") != null) {
+            File archive = new File("../.work/compat-release/compat-" + expectedHash + ".zip");
+            pack = CompatibilityPack.read(archive, expectedHash, provenance.getString("version"));
+            assertEquals(provenance.getString("runtime"), pack.info.getString("runtime"));
+        }
+        final CompatibilityPack matching = pack;
         File store = new File(temp, "test.jks");
         Process p = new ProcessBuilder(System.getProperty("java.home") + "/bin/keytool", "-genkeypair", "-alias", "test", "-keystore", store.toString(), "-storepass", "test-password", "-keypass", "test-password", "-keyalg", "RSA", "-keysize", "2048", "-dname", "CN=Test", "-validity", "3650").redirectErrorStream(true).start();
         p.getInputStream().readAllBytes(); assertEquals(0, p.waitFor());
         KeyStore keys = KeyStore.getInstance("PKCS12");
         try (InputStream in = new FileInputStream(store)) { keys.load(in, "test-password".toCharArray()); }
         var signer = new ApkSigner.SignerConfig.Builder("test", (PrivateKey) keys.getKey("test", "test-password".toCharArray()), List.of((X509Certificate) keys.getCertificate("test"))).build();
-        File assets = new File("src/main/assets/payloads");
         for (String variant : List.of("wallpaper", "storage", "wallpaper-storage")) {
             File bundle = new File(assets, variant + ".bundle"), output = new File(temp, variant + ".apk");
             assertTrue(bundle.isFile());
             File nativeCode = new File(assets, variant + ".dex");
-            ApkPatcher.patch(source, output, () -> new FileInputStream(bundle), () -> new FileInputStream(nativeCode), signer, note -> {});
+            boolean fromPack = matching != null && variant.equals("wallpaper-storage");
+            ApkPatcher.patch(source, output, expectedHash,
+                () -> fromPack ? matching.open("wallpaper-storage.bundle") : new FileInputStream(bundle),
+                () -> fromPack ? matching.open("wallpaper-storage.dex") : new FileInputStream(nativeCode), signer, note -> {});
             ApkVerifier.Result verification = new ApkVerifier.Builder(output).setMinCheckedPlatformVersion(24).build().verify();
             assertTrue(verification.getErrors().toString(), verification.isVerified());
             try (ZipFile before = new ZipFile(source); ZipFile after = new ZipFile(output)) {

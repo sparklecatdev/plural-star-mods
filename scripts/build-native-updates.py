@@ -1,31 +1,30 @@
 #!/usr/bin/env python3
 """Add the OTA file loader to the pinned host; keep other native classes unchanged."""
 import hashlib
-import json
 import os
 import pathlib
 import subprocess
 import urllib.request
 import zipfile
+from base_config import load
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-PIN = '0357111d02c6e6bb0ce4946e2aeb7e216e96d23aa4ae7ef29017c4fd1dc19e6f'
 
 def run(*args):
     subprocess.run(args, cwd=ROOT, check=True)
 
 def main():
+    base, release = load()
     work = ROOT / '.work/native-updates'
     work.mkdir(parents=True, exist_ok=True)
     apk = pathlib.Path(os.environ.get('PLURAL_STAR_APK', str(ROOT / '.work/plural-star.apk')))
     if not apk.exists():
         apk.parent.mkdir(parents=True, exist_ok=True)
-        urllib.request.urlretrieve('https://github.com/ByHanyou/Plural-Star/releases/download/v1.23.3/app-release.apk', apk)
-    if hashlib.sha256(apk.read_bytes()).hexdigest() != PIN:
+        urllib.request.urlretrieve(base['url'], apk)
+    if hashlib.sha256(apk.read_bytes()).hexdigest() != base['sha256']:
         raise ValueError('Unsupported original APK')
     with zipfile.ZipFile(apk) as source:
         (work / 'original.dex').write_bytes(source.read('classes2.dex'))
-    release = json.loads((ROOT / 'payload/release.json').read_text())
     sdk = pathlib.Path(os.environ['ANDROID_HOME'])
     java = pathlib.Path(os.environ['JAVA_HOME']) / 'bin'
     run('bash', 'gradlew', ':native-tools:installDist')

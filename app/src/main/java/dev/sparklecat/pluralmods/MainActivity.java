@@ -59,8 +59,11 @@ public final class MainActivity extends Activity {
         text(content, "Get Plural Star with all mods included.", 16, MUTED, false);
 
         LinearLayout first = card("01", "Get Plural Star");
-        text(first, "Download a compatible copy, choose an APK, or use the app already on your device.", 15, MUTED, false);
-        button(first, "Download Plural Star", () -> work("Downloading Plural Star…", () -> importApk(UpdateClient.openOriginalApk())));
+        text(first, "Download the latest official release, choose an APK, or use the app already on your device. Matching patches are fetched automatically.", 15, MUTED, false);
+        button(first, "Download latest Plural Star", () -> work("Checking the latest release…", () -> {
+            File download = updater.downloadOriginal(note -> updateUi(() -> status.setText(note)));
+            try { importApk(new FileInputStream(download)); } finally { download.delete(); }
+        }));
         button(first, "Choose APK file", () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
             startActivityForResult(intent, PICK_APK);
@@ -95,7 +98,7 @@ public final class MainActivity extends Activity {
         updateStatus = text(updateCard, "Updates are verified before Android asks you to install them.", 14, MUTED, false);
         previewUpdates = updatePreference(updateCard, "Include preview releases", "preview_updates", true);
         updateProgress = new ProgressBar(this); updateProgress.setVisibility(View.GONE); updateCard.addView(updateProgress);
-        button(content, "Save patcher source code", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
+        button(content, "Save mod source code", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE).setType("application/zip").putExtra(Intent.EXTRA_TITLE, "plural-star-mods-source.zip"), SAVE_SOURCE));
         button(content, "Plural Star project ↗", () -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ByHanyou/Plural-Star"))));
         text(content, "Independent mods · AGPL-3.0\nPlural Star by TheHanyou, SPARKLECATDEV, and contributors", 12, MUTED, false);
@@ -247,7 +250,7 @@ public final class MainActivity extends Activity {
         File temporary = new File(getCacheDir(), "import.apk");
         try {
             try (InputStream in = input; OutputStream out = new FileOutputStream(temporary)) { ApkPatcher.copy(in, out, 160L * 1024 * 1024); }
-            if (!ApkPatcher.SOURCE_SHA256.equals(ApkPatcher.sha256(temporary))) throw new IOException("This copy is not compatible. Use Download Plural Star to get the supported official release.");
+            updater.compatibility(temporary, note -> updateUi(() -> status.setText(note)));
             java.nio.file.Files.move(temporary.toPath(), source.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             output.delete();
             updateUi(() -> { selected.setText("Plural Star is ready · verified official copy"); status.setText("Tap Prepare and install to continue."); });
@@ -263,6 +266,13 @@ public final class MainActivity extends Activity {
         });
     }
     private org.json.JSONObject payloadInfo() throws Exception {
+        CompatibilityPack pack = updater.cachedCompatibility(source);
+        if (pack != null) return pack.info;
+        if (source.isFile() && !ApkPatcher.SOURCE_SHA256.equals(ApkPatcher.sha256(source)))
+            throw new IOException("Download matching patches before preparing this APK.");
+        return embeddedInfo();
+    }
+    private org.json.JSONObject embeddedInfo() throws Exception {
         try (InputStream in = getAssets().open("payloads/provenance.json"); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             ApkPatcher.copy(in, out, 16384);
             return new org.json.JSONObject(out.toString("UTF-8"));
@@ -293,7 +303,8 @@ public final class MainActivity extends Activity {
     private void build() { build(false); }
     private void build(boolean included) {
         work("Checking patches…", () -> {
-            org.json.JSONObject info = payloadInfo();
+            CompatibilityPack matching = updater.compatibility(source, note -> updateUi(() -> status.setText(note)));
+            org.json.JSONObject info = matching == null ? embeddedInfo() : matching.info;
             String version = info.getString("version");
             File downloaded = null;
             if (!included) {
@@ -308,9 +319,9 @@ public final class MainActivity extends Activity {
                     boolean safeFallback = ReleaseVersion.parse(version).compareTo(ReleaseVersion.parse(prepared)) >= 0;
                     updateUi(() -> {
                         AlertDialog.Builder dialog = new AlertDialog.Builder(this).setTitle("Patch check unavailable")
-                            .setMessage("Could not fetch the latest patches. " + (safeFallback ? "Retry when connected, or use the patches included in this patcher." : "Reconnect and try again to keep your newer patches."))
+                            .setMessage("Could not fetch the latest patches. " + (safeFallback ? "Retry when connected, or use the saved matching patches." : "Reconnect and try again to keep your newer patches."))
                             .setNegativeButton("Cancel", null);
-                        if (safeFallback) dialog.setPositiveButton("Use included patches", (d, w) -> build(true));
+                        if (safeFallback) dialog.setPositiveButton("Use saved patches", (d, w) -> build(true));
                         dialog.show();
                     });
                     throw e;
@@ -320,8 +331,10 @@ public final class MainActivity extends Activity {
             if (ReleaseVersion.parse(version).compareTo(ReleaseVersion.parse(previous)) < 0)
                 throw new IOException("Newer patches were prepared before. Reconnect and try again to keep them.");
             final File bundle = downloaded;
-            ApkPatcher.patch(source, output, () -> bundle == null ? getAssets().open("payloads/wallpaper-storage.bundle") : new FileInputStream(bundle),
-                () -> getAssets().open("payloads/wallpaper-storage.dex"), SigningIdentity.load(), note -> updateUi(() -> status.setText(note)));
+            ApkPatcher.patch(source, output, info.getString("supported_apk_sha256"),
+                () -> bundle != null ? new FileInputStream(bundle) : matching == null ? getAssets().open("payloads/wallpaper-storage.bundle") : matching.open("wallpaper-storage.bundle"),
+                () -> matching == null ? getAssets().open("payloads/wallpaper-storage.dex") : matching.open("wallpaper-storage.dex"),
+                SigningIdentity.load(), note -> updateUi(() -> status.setText(note)));
             getPreferences(0).edit().putInt("last_patch_version", BuildConfig.VERSION_CODE).putString("prepared_patch", version).apply();
             final String prepared = version;
             updateUi(() -> { patch.setText("Update installed mods"); patchStatus.setText("Prepared patches " + prepared + " · verified"); });
@@ -376,7 +389,8 @@ public final class MainActivity extends Activity {
             runOnUiThread(() -> status.setText("Patched APK saved to your chosen location."));
         });
         if (request == SAVE_SOURCE) work("Saving source code…", () -> {
-            try (InputStream in = getAssets().open("source/plural-star-mods-source.zip"); OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
+            CompatibilityPack matching = updater.cachedCompatibility(source);
+            try (InputStream in = matching == null ? getAssets().open("source/plural-star-mods-source.zip") : matching.open("source.zip"); OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
                 if (out == null) throw new IOException("Destination is not writable.");
                 ApkPatcher.copy(in, out, 16L * 1024 * 1024);
             }

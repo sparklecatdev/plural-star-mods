@@ -14,15 +14,67 @@ public final class UpdateClient {
     private final Context context;
     public interface Progress { void update(String message); }
     public UpdateClient(Context context) { this.context = context.getApplicationContext(); }
-    public static InputStream openOriginalApk() throws Exception {
-        HttpsURLConnection connection = connect("https://github.com/ByHanyou/Plural-Star/releases/download/v1.23.3/app-release.apk", false);
+    public File downloadOriginal(Progress progress) throws Exception {
+        CompatibilityPack.Asset release = CompatibilityPack.latestOriginal(readText(CompatibilityPack.LATEST_API, 1024 * 1024, true));
+        File target = new File(context.getCacheDir(), "official-download.apk");
         try {
-            return new FilterInputStream(connection.getInputStream()) {
-                @Override public void close() throws IOException {
-                    try { super.close(); } finally { connection.disconnect(); }
-                }
-            };
-        } catch (Exception e) { connection.disconnect(); throw e; }
+            progress.update("Downloading Plural Star " + release.version + "…");
+            downloadAsset(release, target);
+            return target;
+        } catch (Exception e) { target.delete(); throw e; }
+    }
+    private void downloadAsset(CompatibilityPack.Asset asset, File target) throws Exception {
+        HttpsURLConnection connection = connect(asset.url, false);
+        try (InputStream in = connection.getInputStream(); OutputStream out = new FileOutputStream(target)) {
+            ApkPatcher.copy(in, out, asset.bytes);
+        } finally { connection.disconnect(); }
+        UpdateTrust.checkDownload(target, asset.bytes, asset.sha256);
+    }
+    public CompatibilityPack cachedCompatibility(File original) throws Exception {
+        if (!original.isFile()) return null;
+        return cachedCompatibility(ApkPatcher.sha256(original));
+    }
+    private CompatibilityPack cachedCompatibility(String base) throws Exception {
+        if (ApkPatcher.SOURCE_SHA256.equals(base)) return null;
+        File[] files = context.getFilesDir().listFiles();
+        CompatibilityPack best = null;
+        if (files != null) for (File file : files) {
+            String prefix = "compat-" + base + "-";
+            if (!file.getName().matches(prefix + "[0-9a-f]{64}\\.zip")) continue;
+            try {
+                String hash = file.getName().substring(prefix.length(), prefix.length() + 64);
+                if (!ApkPatcher.sha256(file).equals(hash)) continue;
+                CompatibilityPack pack = CompatibilityPack.read(file, base, null);
+                if (best == null || ReleaseVersion.parse(pack.info.getString("version")).compareTo(ReleaseVersion.parse(best.info.getString("version"))) > 0) best = pack;
+            } catch (Exception invalid) { /* Ignore incomplete or damaged cache files. */ }
+        }
+        return best;
+    }
+    public CompatibilityPack compatibility(File original, Progress progress) throws Exception {
+        String base = ApkPatcher.sha256(original);
+        if (ApkPatcher.SOURCE_SHA256.equals(base)) return null;
+        CompatibilityPack cached = cachedCompatibility(base);
+        try {
+            progress.update("Checking compatibility…");
+            CompatibilityPack.Asset asset = CompatibilityPack.select(readText(UpdatePolicy.API, 1024 * 1024, true), base);
+            if (asset == null) {
+                if (cached != null) return cached;
+                throw new IOException("No tested patches are available for this APK yet. New official releases are checked automatically; try again later or report a compatibility issue.");
+            }
+            if (cached != null && ReleaseVersion.parse(cached.info.getString("version")).compareTo(ReleaseVersion.parse(asset.version)) >= 0) return cached;
+            File target = new File(context.getFilesDir(), "compat-" + base + "-" + asset.sha256 + ".zip");
+            File temporary = new File(context.getFilesDir(), "compat-download.part");
+            try {
+                progress.update("Downloading matching patches…");
+                downloadAsset(asset, temporary);
+                CompatibilityPack.read(temporary, base, asset.version);
+                java.nio.file.Files.move(temporary.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                return CompatibilityPack.read(target, base, asset.version);
+            } finally { temporary.delete(); }
+        } catch (Exception e) {
+            if (cached != null) return cached;
+            throw e;
+        }
     }
     public File updateFile() { return new File(context.getFilesDir(), "self-update.apk"); }
     public UpdatePolicy.Release check(boolean previews) throws Exception {

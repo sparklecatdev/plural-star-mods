@@ -74,8 +74,9 @@ public final class UpdatePolicy {
             JSONObject row = list.optJSONObject(i);
             if (row == null || row.optBoolean("draft", true) || row.optBoolean("prerelease", false)) continue;
             String tag = row.optString("tag_name", "");
-            if (!tag.matches("patches-v[0-9]+\\.[0-9]+\\.[0-9]+")) continue;
-            ReleaseVersion version = ReleaseVersion.parse(tag.substring(9));
+            String patchVersion = patchVersion(tag);
+            if (patchVersion == null) continue;
+            ReleaseVersion version = ReleaseVersion.parse(patchVersion);
             if (version == null || version.compareTo(current) <= 0) continue;
             String name = "patches-" + runtime + "-" + variant + "-" + version.name + ".bundle";
             JSONArray assets = row.optJSONArray("assets");
@@ -100,10 +101,17 @@ public final class UpdatePolicy {
         return best;
     }
     static String trustedAsset(String url, String tag, String name) {
+        return trustedAsset(url, REPO, tag, name);
+    }
+    static String patchVersion(String tag) {
+        Matcher m = Pattern.compile("^(?:patches|compat-v[0-9]+\\.[0-9]+\\.[0-9]+-patches)-v([0-9]+\\.[0-9]+\\.[0-9]+)$").matcher(tag);
+        return m.matches() ? m.group(1) : null;
+    }
+    static String trustedAsset(String url, String repo, String tag, String name) {
         try {
             URI uri = URI.create(url);
             if (!validHttps(uri) || !uri.getHost().equals("github.com") || uri.getRawQuery() != null || uri.getRawFragment() != null) return null;
-            return uri.getPath().equals("/" + REPO + "/releases/download/" + tag + "/" + name) ? url : null;
+            return uri.getPath().equals("/" + repo + "/releases/download/" + tag + "/" + name) ? url : null;
         } catch (RuntimeException e) { return null; }
     }
     public static boolean downloadUrlAllowed(URI uri) {

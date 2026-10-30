@@ -29,8 +29,11 @@ public final class ApkPatcher {
     }
 
     public static void patch(File source, File output, Payload payload, Payload nativeCode, ApkSigner.SignerConfig signer, Progress progress) throws Exception {
+        patch(source, output, SOURCE_SHA256, payload, nativeCode, signer, progress);
+    }
+    public static void patch(File source, File output, String expectedSha256, Payload payload, Payload nativeCode, ApkSigner.SignerConfig signer, Progress progress) throws Exception {
         progress.update("Verifying the original APK…");
-        if (source.length() > MAX_APK || !SOURCE_SHA256.equals(sha256(source)))
+        if (expectedSha256 == null || !expectedSha256.matches("[0-9a-f]{64}") || source.length() > MAX_APK || !expectedSha256.equals(sha256(source)))
             throw new IOException("This APK does not match the supported release. Use Download Plural Star to get a compatible official copy.");
         File unsigned = new File(output.getParentFile(), "unsigned.tmp");
         File signed = new File(output.getParentFile(), "signed.tmp");

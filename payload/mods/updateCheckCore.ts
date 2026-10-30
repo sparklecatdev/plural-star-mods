@@ -32,8 +32,9 @@ export function latestPatch(data: unknown, current: string, runtime: string, var
   let best: PatchRelease | null = null;
   for (const row of data) {
     const tag = row?.tag_name;
-    if (row?.draft !== false || row?.prerelease === true || typeof tag !== 'string' || !/^patches-v\d+\.\d+\.\d+$/.test(tag)) continue;
-    const version = tag.slice(9);
+    const match = typeof tag === 'string' ? /^(?:patches|compat-v\d+\.\d+\.\d+-patches)-v(\d+\.\d+\.\d+)$/.exec(tag) : null;
+    if (row?.draft !== false || row?.prerelease === true || !match) continue;
+    const version = match[1];
     if (!parseVersion(version) || compareVersions(version, current) <= 0) continue;
     const name = `patches-${runtime}-${variant}-${version}.bundle`;
     const asset = Array.isArray(row.assets) ? row.assets.find((a: {name?: string}) => a?.name === name) : null;

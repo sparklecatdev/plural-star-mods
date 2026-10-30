@@ -59,6 +59,12 @@ public class UpdatePolicyTest {
                 .put("digest", "sha256:" + String.join("", Collections.nCopies(64, "a")))));
     }
     @Test public void selectsNewestCompatibleStablePatchIndependentlyOfPatcherReleases() throws Exception {
+        JSONObject compat = patchRelease("0.4.4");
+        String compatTag = "compat-v1.24.0-patches-v0.4.4";
+        compat.put("tag_name", compatTag);
+        compat.getJSONArray("assets").getJSONObject(0).put("browser_download_url",
+            "https://github.com/" + UpdatePolicy.REPO + "/releases/download/" + compatTag + "/patches-" + RUNTIME + "-" + VARIANT + "-0.4.4.bundle");
+        assertEquals("0.4.4", UpdatePolicy.selectPatch(new JSONArray().put(compat).toString(), "0.4.3", RUNTIME, VARIANT).version.name);
         JSONArray rows = new JSONArray().put(patchRelease("0.4.3")).put(release("v9.0.0", false, false))
             .put(patchRelease("0.10.0")).put(patchRelease("0.5.0"))
             .put(patchRelease("8.0.0").put("prerelease", true)).put(patchRelease("9.0.0").put("draft", true));

@@ -13,7 +13,7 @@ vm.runInNewContext(code, {exports: moduleExports, require: n => require(require.
 const {compareVersions, parseVersion, latestPatch, createUpdateChecker} = moduleExports;
 const runtime = 'plural-star-1.23.3-mods-1', variant = 'wallpaper-storage';
 const release = (tag, draft = false) => {
-  const version = tag.slice(9), name = `patches-${runtime}-${variant}-${version}.bundle`;
+  const version = tag.split('-v').at(-1), name = `patches-${runtime}-${variant}-${version}.bundle`;
   return {tag_name: tag, draft, assets: [{name, state: 'uploaded', size: 123,
     digest: 'sha256:' + 'a'.repeat(64),
     browser_download_url: `https://github.com/sparklecatdev/plural-star-mods/releases/download/${tag}/${name}`}]};
@@ -28,6 +28,7 @@ test('semantic version ordering agrees with release and preview ordering', () =>
 });
 
 test('only verified newer compatible stable patch releases are shown', () => {
+  assert.equal(latest([release('compat-v1.24.0-patches-v0.4.4')]).version, '0.4.4');
   assert.equal(latest([release('patches-v0.4.0'), release('patches-v0.10.0'), release('patches-v9.0.0', true)]).version, '0.10.0');
   assert.equal(latest([release('patches-v0.2.0')]), null);
   assert.equal(latest([release('v0.4.0')]), null); // Patcher releases are independent.

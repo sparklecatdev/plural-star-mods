@@ -7,8 +7,8 @@ android {
         applicationId 'dev.sparklecat.pluralmods'
         minSdk 26
         targetSdk 36
-        versionCode 8
-        versionName '0.5.3'
+        versionCode 9
+        versionName '0.6.0'
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     buildFeatures { buildConfig true }
@@ -43,7 +43,12 @@ tasks.register('packageSource', Zip) {
 }
 tasks.named('preBuild').configure { dependsOn 'verifyPayloads', 'packageSource' }
 tasks.withType(Test).configureEach {
-    inputs.files(fileTree('src/main/assets/payloads') { include '*.bundle', '*.dex' })
+    inputs.files(fileTree('src/main/assets/payloads') { include '*.bundle', '*.dex', 'provenance.json' })
     inputs.property('officialApkConfigured', System.getenv('PLURAL_STAR_APK') != null)
     if (System.getenv('PLURAL_STAR_APK')) inputs.file(System.getenv('PLURAL_STAR_APK'))
+    inputs.property('compatibilityConfigured', System.getenv('PLURAL_STAR_BASE') != null)
+    if (System.getenv('PLURAL_STAR_BASE')) {
+        inputs.file(System.getenv('PLURAL_STAR_BASE'))
+        inputs.files(rootProject.fileTree('.work/compat-release') { include 'compat-*.zip' })
+    }
 }
