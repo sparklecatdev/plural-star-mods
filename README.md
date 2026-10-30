@@ -1,6 +1,6 @@
 # sparklecat's plural star mods
 
-An offline Android patcher for [ByHanyou/Plural-Star](https://github.com/ByHanyou/Plural-Star), with selectable wallpaper backgrounds and an encrypted app storage saver/restorer.
+An Android patcher with offline APK patching for [ByHanyou/Plural-Star](https://github.com/ByHanyou/Plural-Star), with selectable wallpaper backgrounds and an encrypted app storage saver/restorer.
 
 The repository is **plural-star-mods**. The Android launcher name is **sparklecat's plural star mods**.
 
@@ -13,7 +13,8 @@ The repository is **plural-star-mods**. The Android launcher name is **sparkleca
 - **Real APK patching:** verify the official APK, replace its JavaScript bundle, align stored ZIP entries, sign with a persistent device key, verify the generated signature, then save or install the result.
 - **Selectable mods:** include wallpaper, storage tools, or both when patching; control them in Settings afterward.
 - **Offline source access:** save the complete patcher source ZIP from inside the patcher, including the pinned wallpaper patch and payload build scripts.
-- **No root, account, server, or network permission required by the patcher.** The patched Plural Star retains its original networking behavior.
+- **Updates:** check for new releases automatically once a day when opened, or manually from Settings. Downloads are verified before Android asks to install them.
+- **No root or account required.** Patching works offline; optional update checks and downloads use GitHub over HTTPS. The patched Plural Star retains its original networking behavior.
 
 ## Supported versions
 
@@ -38,7 +39,15 @@ Other versions, split APKs, and already patched APKs are deliberately rejected. 
 
 Android prevents a separate patcher from reading the official app's private storage. The first migration therefore uses Plural Star's existing export/import support. Standard exports may omit device identity and other local-only state; friend/device links may need to be set up again. Full storage snapshots become available inside the patched app.
 
-**Keep the patcher installed and do not clear its app data.** Its APK signing key lives in Android Keystore. Uninstalling/resetting the patcher loses that key, so future patched APKs cannot update an installation signed by the old key. Take a storage snapshot before changing patcher installations or signing keys. Development APKs from separate CI runs may also use different patcher signing certificates.
+**Keep the patcher installed and do not clear its app data.** Its APK signing key lives in Android Keystore. Uninstalling/resetting the patcher loses that key, so future patched APKs cannot update an installation signed by the old key. Take a storage snapshot before changing patcher installations or signing keys. The v0.1.0 and v0.2.0 development APKs use different signing certificates. Moving from those previews to v0.3.0 requires backing up Plural Star first, then reinstalling the patcher. That resets its device signing key, so the modded Plural Star also needs a backed-up reinstall. Publisher-signed releases from v0.3.0 onward use a persistent certificate and support in-place patcher updates, preserving that device key.
+
+## Updates
+
+In Plural Star, open **Settings → sparklecat's mods → Open updater**. The patcher also has its own update card. Both apps can check once per day when opened; automatic checks can be disabled independently, and manual checks remain available. There are no update popups or full-screen menus on launch. The patcher includes preview releases by default; turn that option off to check stable releases only.
+
+Choose **Download and install update** in the patcher. It downloads the APK and `SHA256SUMS` from this repository, checks the exact size and SHA-256, verifies the APK signature against the installed patcher's certificate, and requires the same package plus a newer version and version code. Downloads remain private until verified. Android asks for installation permission and confirmation; installation is never silent. Offline or rate-limited checks do not interrupt app launch or patching.
+
+After updating the patcher, choose **Update installed mods** to rebuild from the cached original APK, then install the result over your modded Plural Star. Keep the patcher installed and retain its app data so its per-device signing key stays available. The updater updates the patcher; new mod code reaches Plural Star through this repatching step.
 
 ## Storage snapshots
 
@@ -65,7 +74,7 @@ Requirements: Node.js 24, npm, Python 3, Git, JDK 21, Android SDK platform 36/bu
 
 ```sh
 python3 scripts/build-payloads.py
-bash gradlew testDebugUnitTest lintDebug assembleDebug
+bash gradlew testDebugUnitTest lintDebug lintRelease assembleDebug assembleRelease
 ```
 
 The APK is `app/build/outputs/apk/debug/app-debug.apk`. This is a development build; inspect and test it before using it with important data. The GitHub Actions workflow also builds this artifact.
@@ -82,7 +91,17 @@ PLURAL_STAR_APK=/path/to/original/app-release.apk bash gradlew testDebugUnitTest
 
 These tests generate a temporary test key, patch all three bundles, verify their signatures, and compare every unchanged APK entry with the official original. Storage tests cover interrupted restore recovery, queued cold restores, path/size validation, and password/tamper rejection. Component tests check automatic launch, reduced-motion behavior, app-lock protection, Settings navigation, feature switches, and wallpaper retention.
 
-The included CI builds development APKs. For distribution, use your own stable patcher signing key and retain it privately; never commit a keystore or password. The separate per-device key used to sign patched Plural Star APKs is generated on the phone.
+The included CI builds development APKs and unsigned release APKs. Distributed releases use a separate persistent publisher key; its public certificate SHA-256 is pinned in `release-signing.sha256`. Never replace that pin for an existing installation. The separate per-device key used to sign patched Plural Star APKs is generated on the phone.
+
+For maintainers with the original publisher key, build from a clean committed tree, then run:
+
+```sh
+python3 scripts/release-artifact.py sign
+```
+
+By default the private PKCS#12 keystore and password file live in ignored `.work/signing/release.p12` and `.work/signing/release-password.txt` (alias `sparklecat-release`). Keep a secure private backup of both files outside a disposable checkout. They must never be committed, included in APKs, or uploaded as release assets. The helper checks the public certificate pin, release package/version, alignment, and complete embedded source against the clean commit. It writes only the signed APK and public manifest to `.work/signed/`.
+
+The release workflow accepts a successful main CI run, a matching draft release, and a staging commit containing only that signed `patcher.apk` and `manifest.json`. It repeats verification before publishing the APK, matching source ZIP, and `SHA256SUMS`. No private signing material is sent to GitHub. Debug artifacts from CI are for development and do not share the publisher signature.
 
 ## Credits and license
 

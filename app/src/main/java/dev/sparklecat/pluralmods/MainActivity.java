@@ -16,9 +16,10 @@ import java.util.Arrays;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_APK = 10, SAVE_APK = 11, SAVE_SOURCE = 12;
+    private static final int PICK_APK = 10, SAVE_APK = 11, SAVE_SOURCE = 12, ALLOW_SELF_UPDATE = 13;
     private static final int BG = Color.rgb(20,16,31), CARD = Color.rgb(36,27,51), INK = Color.rgb(255,246,255), MUTED = Color.rgb(197,185,212), ACCENT = Color.rgb(229,181,255);
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final ExecutorService updateWorker = Executors.newSingleThreadExecutor();
     private final java.util.List<View> controls = new java.util.ArrayList<>();
     private LinearLayout content;
     private TextView status, selected;
@@ -27,11 +28,24 @@ public final class MainActivity extends Activity {
     private ProgressBar progress;
     private boolean busy;
     private File source, output;
+    private UpdateClient updater;
+    private UpdatePolicy.Release availableUpdate;
+    private TextView updateStatus;
+    private Button checkUpdate, downloadUpdate, installUpdate;
+    private CheckBox automaticUpdates, previewUpdates;
+    private ProgressBar updateProgress;
+    private LinearLayout updateCard;
+    private ScrollView mainScroll;
+    private String downloadedVersion;
+    private boolean updateBusy;
+    private volatile boolean destroyed;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         source = new File(getFilesDir(), "original.apk"); output = new File(getFilesDir(), "patched.apk");
+        updater = new UpdateClient(this);
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(BG); scroll.setFillViewport(true);
+        mainScroll = scroll;
         content = column(); content.setPadding(dp(24), dp(28), dp(24), dp(32)); scroll.addView(content);
         scroll.setOnApplyWindowInsetsListener((v, insets) -> {
             if (android.os.Build.VERSION.SDK_INT >= 30) {
@@ -45,6 +59,16 @@ public final class MainActivity extends Activity {
         text(content, "sparklecat's\nplural star mods", 31, INK, true);
         text(content, "A little more you. A little more sparkle.", 16, MUTED, false);
         text(content, "OFFLINE PATCHER  ·  PLURAL STAR 1.23.3", 11, ACCENT, true);
+
+        updateCard = card("↻", "App updates");
+        text(updateCard, "Version " + BuildConfig.VERSION_NAME + " · updates from GitHub", 13, ACCENT, false);
+        updateStatus = text(updateCard, "Updates are verified before Android asks you to install them. Patching still works offline.", 14, MUTED, false);
+        automaticUpdates = updatePreference(updateCard, "Check for updates automatically", "auto_update", true);
+        previewUpdates = updatePreference(updateCard, "Include preview releases", "preview_updates", true);
+        checkUpdate = button(updateCard, "Check for updates", () -> checkForUpdates(true));
+        downloadUpdate = button(updateCard, "Download and install update", this::downloadSelfUpdate);
+        installUpdate = button(updateCard, "Install downloaded update", this::installSelfUpdate);
+        updateProgress = new ProgressBar(this); updateProgress.setVisibility(View.GONE); updateCard.addView(updateProgress);
 
         LinearLayout first = card("01", "Choose Plural Star");
         text(first, "Select the original 1.23.3 app-release.apk. Its SHA-256 must match the official release; other versions and split APKs are rejected.", 15, MUTED, false);
@@ -65,6 +89,11 @@ public final class MainActivity extends Activity {
         patch = button(build, "✦  Patch APK", this::build);
         progress = new ProgressBar(this); progress.setVisibility(View.GONE); build.addView(progress);
         status = text(build, output.exists() ? "Your previous patched APK is ready." : "Ready when you are. All patching happens on your device.", 14, MUTED, false);
+        int lastPatch = getPreferences(0).getInt("last_patch_version", 0);
+        if (source.exists() && lastPatch > 0 && lastPatch < BuildConfig.VERSION_CODE) {
+            patch.setText("Update installed mods");
+            status.setText("A new mod pack is ready. Update your installed mods using the saved original APK, then install the result.");
+        }
         save = button(build, "Save patched APK", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE).setType("application/vnd.android.package-archive")
             .putExtra(Intent.EXTRA_TITLE, "plural-star-sparklecat-mods.apk"), SAVE_APK));
@@ -80,6 +109,16 @@ public final class MainActivity extends Activity {
         button(content, "Plural Star project ↗", () -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ByHanyou/Plural-Star"))));
         text(content, "Independent mods · AGPL-3.0\nPlural Star by ByHanyou and contributors", 12, MUTED, false);
         refresh();
+        if (updater.updateFile().isFile()) updateWork("Checking downloaded update…", () -> {
+            try {
+                String version = updater.verify(updater.updateFile(), null);
+                updateUi(() -> { downloadedVersion = version; updateStatus.setText("Downloaded update v" + version + " is ready to install."); });
+            } catch (Exception invalid) {
+                updater.updateFile().delete();
+                updateUi(() -> updateStatus.setText("Ready to check for updates."));
+            }
+        });
+        handleUpdateLink(getIntent());
     }
     private LinearLayout column() { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); return l; }
     private int dp(int n) { return Math.round(n * getResources().getDisplayMetrics().density); }
@@ -111,7 +150,93 @@ public final class MainActivity extends Activity {
         patch.setEnabled(!busy && source.exists() && (wallpaper.isChecked() || storage.isChecked()));
         save.setEnabled(!busy && output.exists()); install.setEnabled(!busy && output.exists());
         progress.setVisibility(busy ? View.VISIBLE : View.GONE);
+        refreshUpdates();
     }
+    private CheckBox updatePreference(LinearLayout parent, String label, String key, boolean fallback) {
+        CheckBox view = new CheckBox(this); view.setText(label); view.setTextColor(INK); view.setMinHeight(dp(48));
+        view.setChecked(getPreferences(0).getBoolean(key, fallback)); parent.addView(view); controls.add(view);
+        view.setOnCheckedChangeListener((button, value) -> {
+            getPreferences(0).edit().putBoolean(key, value).apply();
+            if (value || key.equals("preview_updates")) checkForUpdates(true);
+        });
+        return view;
+    }
+    private void refreshUpdates() {
+        if (checkUpdate == null) return;
+        checkUpdate.setEnabled(!busy && !updateBusy);
+        automaticUpdates.setEnabled(!busy && !updateBusy); previewUpdates.setEnabled(!busy && !updateBusy);
+        downloadUpdate.setVisibility(availableUpdate == null ? View.GONE : View.VISIBLE);
+        downloadUpdate.setEnabled(!busy && !updateBusy && (availableUpdate != null && !availableUpdate.version.name.equals(downloadedVersion)));
+        if (availableUpdate != null) downloadUpdate.setText("Download and install v" + availableUpdate.version.name);
+        installUpdate.setVisibility(downloadedVersion == null ? View.GONE : View.VISIBLE);
+        installUpdate.setEnabled(!busy && !updateBusy);
+        updateProgress.setVisibility(updateBusy ? View.VISIBLE : View.GONE);
+    }
+    private void updateUi(Runnable action) { runOnUiThread(() -> { if (!destroyed) action.run(); }); }
+    private void updateWork(String label, CheckedAction action) {
+        if (destroyed || updateBusy) return;
+        updateBusy = true; updateStatus.setText(label); refresh();
+        updateWorker.execute(() -> {
+            try { action.run(); }
+            catch (Exception e) { updateUi(() -> updateStatus.setText("Update unavailable: " + e.getMessage())); }
+            finally { updateUi(() -> { updateBusy = false; refresh(); maybeCheckAutomatically(); }); }
+        });
+    }
+    private void maybeCheckAutomatically() {
+        if (automaticUpdates == null || !automaticUpdates.isChecked() || updateBusy || destroyed) return;
+        long last = getPreferences(0).getLong("last_update_check", 0), now = System.currentTimeMillis();
+        if (last == 0 || now < last || now - last >= 24L * 60 * 60 * 1000) checkForUpdates(false);
+    }
+    private void checkForUpdates(boolean manual) {
+        if (updateBusy || destroyed) return;
+        if (!manual && !automaticUpdates.isChecked()) return;
+        boolean previews = previewUpdates.isChecked();
+        availableUpdate = null;
+        getPreferences(0).edit().putLong("last_update_check", System.currentTimeMillis()).apply();
+        updateWork("Checking for updates…", () -> {
+            UpdatePolicy.Release release = updater.check(previews);
+            updateUi(() -> {
+                availableUpdate = release;
+                updateStatus.setText(release == null ? "You're up to date." : "Version " + release.version.name + " is available.");
+            });
+        });
+    }
+    private void downloadSelfUpdate() {
+        UpdatePolicy.Release release = availableUpdate;
+        if (release == null) return;
+        updateWork("Preparing update…", () -> {
+            updater.download(release, note -> updateUi(() -> updateStatus.setText(note)));
+            updateUi(() -> { downloadedVersion = release.version.name; updateStatus.setText("Update verified and ready to install."); openSelfInstaller(); });
+        });
+    }
+    private void installSelfUpdate() {
+        updateWork("Verifying downloaded update…", () -> {
+            String version = updater.verify(updater.updateFile(), null);
+            updateUi(() -> { downloadedVersion = version; openSelfInstaller(); });
+        });
+    }
+    private void openSelfInstaller() {
+        if (busy) { updateStatus.setText("Update downloaded. Finish patching, then tap Install downloaded update."); return; }
+        if (!getPackageManager().canRequestPackageInstalls()) {
+            updateStatus.setText("Allow installs from this app, then return to install the update.");
+            startActivityForResult(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName())), ALLOW_SELF_UPDATE);
+            return;
+        }
+        Intent intent = new Intent(Intent.ACTION_VIEW).setDataAndType(ApkProvider.UPDATE_URI, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        intent.setClipData(ClipData.newRawUri("Verified app update", ApkProvider.UPDATE_URI));
+        try { startActivity(intent); }
+        catch (ActivityNotFoundException e) { message("No Android package installer is available on this device."); }
+    }
+    private void handleUpdateLink(Intent intent) {
+        Uri data = intent == null ? null : intent.getData();
+        if (data != null && "sparklecatmods".equals(data.getScheme()) && "updates".equals(data.getHost())) {
+            mainScroll.post(() -> mainScroll.smoothScrollTo(0, updateCard.getTop()));
+            checkForUpdates(true);
+        }
+    }
+    @Override protected void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); handleUpdateLink(intent); }
+    @Override protected void onResume() { super.onResume(); maybeCheckAutomatically(); }
     private void work(String label, CheckedAction action) {
         busy = true; status.setText(label); refresh();
         worker.execute(() -> {
@@ -141,8 +266,12 @@ public final class MainActivity extends Activity {
     }
     private void build() {
         String variant = wallpaper.isChecked() ? (storage.isChecked() ? "wallpaper-storage" : "wallpaper") : "storage";
-        work("Preparing patch…", () -> ApkPatcher.patch(source, output, () -> getAssets().open("payloads/" + variant + ".bundle"), SigningIdentity.load(),
-            note -> runOnUiThread(() -> status.setText(note))));
+        work("Preparing patch…", () -> {
+            ApkPatcher.patch(source, output, () -> getAssets().open("payloads/" + variant + ".bundle"), SigningIdentity.load(),
+                note -> runOnUiThread(() -> status.setText(note)));
+            getPreferences(0).edit().putInt("last_patch_version", BuildConfig.VERSION_CODE).apply();
+            runOnUiThread(() -> patch.setText("✦  Patch APK"));
+        });
     }
     private void openPluralStar() {
         Intent launch = getPackageManager().getLaunchIntentForPackage("com.pluralspace.app");
@@ -175,6 +304,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == ALLOW_SELF_UPDATE) { if (getPackageManager().canRequestPackageInstalls()) installSelfUpdate(); return; }
         if (result != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         if (request == PICK_APK) work("Checking selected APK…", () -> importApk(getContentResolver().openInputStream(uri)));
@@ -193,5 +323,5 @@ public final class MainActivity extends Activity {
             runOnUiThread(() -> status.setText("Complete patcher source saved to your chosen location."));
         });
     }
-    @Override protected void onDestroy() { worker.shutdown(); super.onDestroy(); }
+    @Override protected void onDestroy() { destroyed = true; worker.shutdown(); updateWorker.shutdownNow(); super.onDestroy(); }
 }

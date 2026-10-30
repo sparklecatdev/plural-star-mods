@@ -22,7 +22,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: python3 scripts/build-payloads.py
       - run: curl --fail --location https://github.com/ByHanyou/Plural-Star/releases/download/v1.23.3/app-release.apk --output "$RUNNER_TEMP/plural-star.apk"
-      - run: PLURAL_STAR_APK="$RUNNER_TEMP/plural-star.apk" bash gradlew testDebugUnitTest lintDebug assembleDebug
+      - run: PLURAL_STAR_APK="$RUNNER_TEMP/plural-star.apk" bash gradlew testDebugUnitTest lintDebug lintRelease assembleDebug assembleRelease
       - uses: actions/upload-artifact@v4
         with:
           name: sparklecat-plural-star-mods-debug

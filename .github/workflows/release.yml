@@ -10,7 +10,11 @@ on:
         description: 'Draft release tag matching the checked app version'
         required: true
         type: string
-        default: v0.2.0
+        default: v0.3.0
+      prebuilt_ref:
+        description: 'Commit SHA of the public, privately signed APK staging branch'
+        required: true
+        type: string
 permissions:
   contents: write
   actions: read
@@ -22,6 +26,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       BUILD_RUN_ID: ${{ inputs.build_run_id }}
       RELEASE_TAG: ${{ inputs.release_tag }}
+      PREBUILT_REF: ${{ inputs.prebuilt_ref }}
     steps:
       - name: Wait for checks and validate source
         id: build
@@ -29,6 +34,7 @@ jobs:
         run: |
           [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$PREBUILT_REF" =~ ^[0-9a-f]{40}$ ]]
           gh run watch "$BUILD_RUN_ID" --exit-status --interval 30
           gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID" > "$RUNNER_TEMP/build.json"
           gh release view "$RELEASE_TAG" --json isDraft,targetCommitish > "$RUNNER_TEMP/release.json"
@@ -49,6 +55,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ steps.build.outputs.commit }}
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.prebuilt_ref }}
+          path: .release-input
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -58,26 +69,24 @@ jobs:
           cmdline-tools-version: 13114758
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
           log-accepted-android-sdk-licenses: false
-      - name: Download APK and package matching source
+      - name: Verify signed APK and package matching source
         shell: bash
         run: |
           mkdir dist
-          gh run download "$BUILD_RUN_ID" --name sparklecat-plural-star-mods-debug --dir dist
           python3 - <<'PY'
           import os, pathlib, re
           version = re.search(r"versionName '([^']+)'", pathlib.Path('app/build.gradle').read_text()).group(1)
           assert os.environ['RELEASE_TAG'] == 'v' + version, 'Release tag must match the checked app version'
           PY
           version="${RELEASE_TAG#v}"
-          mv dist/app-debug.apk "dist/sparklecat-plural-star-mods-$version-debug.apk"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "dist/sparklecat-plural-star-mods-$version-debug.apk"
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "dist/sparklecat-plural-star-mods-$version-debug.apk"
+          cp .release-input/patcher.apk "dist/sparklecat-plural-star-mods-$version.apk"
+          python3 scripts/release-artifact.py verify --apk "dist/sparklecat-plural-star-mods-$version.apk" --source-commit "${{ steps.build.outputs.commit }}" --manifest .release-input/manifest.json
           git archive --format=zip --output="dist/plural-star-mods-$version-source.zip" HEAD
       - name: Upload assets and publish development preview
         working-directory: dist
         shell: bash
         run: |
           version="${RELEASE_TAG#v}"
-          sha256sum "sparklecat-plural-star-mods-$version-debug.apk" "plural-star-mods-$version-source.zip" > SHA256SUMS
-          gh release upload "$RELEASE_TAG" "sparklecat-plural-star-mods-$version-debug.apk" "plural-star-mods-$version-source.zip" SHA256SUMS --clobber
+          sha256sum "sparklecat-plural-star-mods-$version.apk" "plural-star-mods-$version-source.zip" > SHA256SUMS
+          gh release upload "$RELEASE_TAG" "sparklecat-plural-star-mods-$version.apk" "plural-star-mods-$version-source.zip" SHA256SUMS --clobber
           gh release edit "$RELEASE_TAG" --draft=false --prerelease

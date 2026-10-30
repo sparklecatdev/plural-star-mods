@@ -10,6 +10,7 @@ import type {ModId} from './modPreferencesCore';
 import {options} from './modOptions';
 import {WallpaperControls} from './WallpaperControls';
 import {BackupTools} from './BackupTools';
+import {UpdateEntry} from './UpdateEntry';
 
 export function ModSettingsButton() {
   const [open, setOpen] = useState(false);
@@ -49,6 +50,7 @@ function ModMenu({onClose}: {onClose: () => void}) {
             onToggle={() => { void toggle('storage'); }} />
           {enabled.storage && <BackupTools onBusy={setBusy} />}
         </View>}
+        {!busy && <UpdateEntry />}
         {!!error && <Text accessibilityRole="alert" style={{color: T.danger, fontSize: fs(14)}}>{error}</Text>}
         <Text style={{color: T.muted, fontSize: fs(12)}}>Your choices are saved automatically. Turning a feature off keeps its saved data.</Text>
       </ScrollView>

@@ -37,6 +37,7 @@ function rootHarness({password = null, reduceMotion = false, recoveryError = fal
         sequence: () => ({start: fn => animations.push(fn), stop: () => {}})}},
     '@react-native-async-storage/async-storage': {getItem: async () => password ? JSON.stringify({appLockPassword: password}) : null},
     './modPreferences': {modPreferences: {load: async () => {}}},
+    './updateCheck': {updateChecker: {check: async () => {}}},
     './storageSnapshot': {recoverBeforeStart: async () => { await recovered; if (recoveryError) throw Error('restore failed'); },
       retryStoragePreparation: async () => {}, recovery: {recover: async () => {}}, restoreQueue: {cancel: async () => {}}},
     './toolsState': {setToolsOpen: value => gates.push(value), waitForStorageIdle: async () => {}},
@@ -108,6 +109,7 @@ test('Settings opens the mod menu; both switches persist and hide disabled contr
     './modPreferences': {modPreferences: prefs, useModPreferences: () => React.useSyncExternalStore(prefs.subscribe, prefs.getSnapshot)},
     './modOptions': {options: {wallpaper: true, storage: true}},
     './WallpaperControls': {WallpaperControls: host('WallpaperControls')}, './BackupTools': {BackupTools: host('BackupTools')},
+    './UpdateEntry': {UpdateEntry: host('UpdateEntry')},
   });
   let renderer;
   await act(async () => { renderer = create(React.createElement(ModSettingsButton)); });
@@ -181,4 +183,37 @@ test('Settings restore confirms and queues the backup without restoring over the
   await act(async () => renderer.root.findAllByType('Button').find(n => n.props.children === 'Cancel pending restore').props.onPress());
   assert.equal(actions.at(-1), 'cancel');
   await act(async () => renderer.unmount());
+});
+
+test('update settings display availability, persist opt-out, and retain manual checks', async () => {
+  const calls = [];
+  const state = {automatic: true, available: '0.4.0', checking: false, error: ''};
+  const {UpdateEntry} = load('UpdateEntry.tsx', {
+    'react-native': {View: 'View'}, '../components/AppText': {Text: 'Text'},
+    '../components/controls': {Btn: host('Button'), ToggleRow: host('Toggle')},
+    '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n},
+    './updateCheck': {useUpdateCheck: () => state, openUpdater: async () => calls.push('open'),
+      updateChecker: {setAutomatic: async value => calls.push(value), check: async force => calls.push(['check', force])}},
+  });
+  let renderer;
+  await act(async () => { renderer = create(React.createElement(UpdateEntry)); });
+  assert.ok(renderer.root.findAllByType('Text').some(n => n.props.children === 'Mod pack 0.4.0 is available.'));
+  await act(async () => renderer.root.findByType('Toggle').props.onToggle());
+  await act(async () => renderer.root.findAllByType('Button').find(n => n.props.children === 'Check for updates').props.onPress());
+  await act(async () => renderer.root.findAllByType('Button').find(n => n.props.children === 'Open updater').props.onPress());
+  assert.deepEqual(calls, [false, ['check', true], 'open']);
+  await act(async () => renderer.unmount());
+});
+
+test('opening updater uses the app link and falls back to the trusted release page', async () => {
+  const urls = []; let installed = true;
+  const {openUpdater} = load('updateCheck.ts', {
+    '@react-native-async-storage/async-storage': {getItem: async () => null, setItem: async () => {}},
+    'react-native': {Linking: {openURL: async url => { urls.push(url); if (!installed && url.startsWith('sparklecatmods:')) throw Error('not installed'); }}},
+    './modOptions': {payloadVersion: '0.3.0'},
+    './updateCheckCore': {createUpdateChecker: () => ({}), UPDATE_API: '',
+      UPDATE_PAGE: 'https://github.com/sparklecatdev/plural-star-mods/releases', UPDATER_LINK: 'sparklecatmods://updates'},
+  });
+  await openUpdater(); installed = false; await openUpdater();
+  assert.deepEqual(urls, ['sparklecatmods://updates', 'sparklecatmods://updates', 'https://github.com/sparklecatdev/plural-star-mods/releases']);
 });

@@ -5,6 +5,7 @@ import json
 import pathlib
 import shutil
 import subprocess
+import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE = ROOT / '.work' / 'upstream'
@@ -38,7 +39,8 @@ def main():
         if wallpaper:
             run('git', 'apply', str(ROOT / 'payload/wallpaper-pr-24.patch'))
         shutil.copytree(ROOT / 'payload/mods', SOURCE / 'src/mods', dirs_exist_ok=True)
-        (SOURCE / 'src/mods/modOptions.ts').write_text('export const options = ' + json.dumps({'wallpaper': wallpaper, 'storage': storage}) + ';\n')
+        version = re.search(r"versionName '([^']+)'", (ROOT / 'app/build.gradle').read_text()).group(1)
+        (SOURCE / 'src/mods/modOptions.ts').write_text('export const options = ' + json.dumps({'wallpaper': wallpaper, 'storage': storage}) + ';\nexport const payloadVersion = ' + json.dumps(version) + ';\n')
         # Install the entry point into Settings for every payload combination.
         settings = SOURCE / 'src/modals/SystemModal.tsx'
         settings_text = settings.read_text()
@@ -82,6 +84,7 @@ def main():
         run('node', str(ROOT / 'tests/storage.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/mods.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/ui.test.cjs'), str(SOURCE))
+        run('node', str(ROOT / 'tests/updates.test.cjs'), str(SOURCE))
         run('npx', '--no-install', 'react-native', 'bundle', '--platform', 'android', '--dev', 'false',
             '--entry-file', 'index.js', '--bundle-output', str(destination / (variant + '.bundle')),
             '--assets-dest', str(ROOT / '.work' / 'bundle-assets'), '--max-workers', '2', '--reset-cache')

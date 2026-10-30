@@ -7,16 +7,18 @@ android {
         applicationId 'dev.sparklecat.pluralmods'
         minSdk 26
         targetSdk 36
-        versionCode 2
-        versionName '0.2.0'
+        versionCode 3
+        versionName '0.3.0'
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildFeatures { buildConfig true }
     buildTypes { release { minifyEnabled false } }
     lint { abortOnError true }
 }
 dependencies {
     implementation 'com.android.tools.build:apksig:8.12.0'
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
 }
 tasks.register('verifyPayloads') {
     doLast {
@@ -28,7 +30,7 @@ tasks.register('verifyPayloads') {
 }
 tasks.register('packageSource', Zip) {
     from(rootProject.projectDir) {
-        include '.github/**', '.gitattributes', '.gitignore', 'LICENSE', 'LICENSES/**', 'THIRD_PARTY_NOTICES.md', 'README.md'
+        include '.github/**', '.gitattributes', '.gitignore', 'LICENSE', 'LICENSES/**', 'THIRD_PARTY_NOTICES.md', 'README.md', 'release-signing.sha256'
         include 'app/build.gradle', 'app/src/**', 'build.gradle', 'settings.gradle', 'gradle.properties', 'gradlew', 'gradlew.bat', 'gradle/**', 'payload/**', 'scripts/**', 'tests/**'
         exclude 'app/src/main/assets/**', '**/__pycache__/**', '**/node_modules/**'
     }
