@@ -25,7 +25,8 @@ def main():
     # .work/upstream is disposable generated build state, never a user's checkout.
     run('git', 'reset', '--hard', COMMIT)
     if not (SOURCE / 'node_modules').exists():
-        run('npm', 'ci', '--no-audit', '--no-fund')
+        # The pinned upstream lockfile omits optional peer dependencies.
+        run('npm', 'ci', '--legacy-peer-deps', '--no-audit', '--no-fund')
     run('npm', 'ci', '--no-audit', '--no-fund', cwd=ROOT / 'tests')
     destination = ROOT / 'app/src/main/assets/payloads'
     destination.mkdir(parents=True, exist_ok=True)
@@ -38,6 +39,7 @@ def main():
         storage = 'storage' in variant
         if wallpaper:
             run('git', 'apply', str(ROOT / 'payload/wallpaper-pr-24.patch'))
+        run('git', 'apply', str(ROOT / 'payload/pluralkit-pr-11.patch'))
         shutil.copytree(ROOT / 'payload/mods', SOURCE / 'src/mods', dirs_exist_ok=True)
         version = re.search(r"versionName '([^']+)'", (ROOT / 'app/build.gradle').read_text()).group(1)
         (SOURCE / 'src/mods/modOptions.ts').write_text('export const options = ' + json.dumps({'wallpaper': wallpaper, 'storage': storage}) + ';\nexport const payloadVersion = ' + json.dumps(version) + ';\n')
@@ -85,11 +87,13 @@ def main():
         run('node', str(ROOT / 'tests/mods.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/ui.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/updates.test.cjs'), str(SOURCE))
+        run('node', str(ROOT / 'tests/pluralkit.test.cjs'), str(SOURCE))
         run('npx', '--no-install', 'react-native', 'bundle', '--platform', 'android', '--dev', 'false',
             '--entry-file', 'index.js', '--bundle-output', str(destination / (variant + '.bundle')),
             '--assets-dest', str(ROOT / '.work' / 'bundle-assets'), '--max-workers', '2', '--reset-cache')
     (destination / 'provenance.json').write_text(json.dumps({'upstream': COMMIT, 'wallpaper_pr': 24,
-        'wallpaper_commit': '72aa97e443a313016d07c9dfec4f09a06edea304', 'bundle_format': 'javascript',
+        'wallpaper_commit': '72aa97e443a313016d07c9dfec4f09a06edea304',
+        'pluralkit_pr': 11, 'pluralkit_commit': 'c1bd5e2f7a5fbb7934733e331154307948424cb0', 'bundle_format': 'javascript',
         'supported_apk_sha256': '0357111d02c6e6bb0ce4946e2aeb7e216e96d23aa4ae7ef29017c4fd1dc19e6f'}, indent=2) + '\n')
 
 if __name__ == '__main__':

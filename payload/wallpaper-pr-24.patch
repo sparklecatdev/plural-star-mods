@@ -26,7 +26,7 @@ new file mode 100644
 index 0000000..9d88c15
 --- /dev/null
 +++ b/scripts/background-settings.test.js
-@@ -0,0 +1,165 @@
+@@ -0,0 +1,166 @@
 +// Run with: node --test scripts/background-settings.test.js
 +const assert = require('node:assert/strict');
 +const fs = require('node:fs');
@@ -65,6 +65,7 @@ index 0000000..9d88c15
 +  const imports = {
 +    '../storage': {KEYS: {settings: 'settings'}, store},
 +    './appStore': {useAppStore: {getState: () => state}},
++    '../mods/pluralKitSync': {syncPluralKitFront: () => {}},
 +  };
 +  imports['./settings'] = load('src/store/settings.ts', imports);
 +  Object.assign(imports, {

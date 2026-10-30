@@ -1,0 +1,75 @@
+diff --git a/src/modals/SystemModal.tsx b/src/modals/SystemModal.tsx
+index bd61a4e..df4da2c 100644
+--- a/src/modals/SystemModal.tsx
++++ b/src/modals/SystemModal.tsx
+@@ -1,4 +1,5 @@
+ import React, {useState} from 'react';
++import {PluralKitSettings} from '../mods/PluralKitSettings';
+ import {View, TouchableOpacity, Text as RawText} from 'react-native';
+ import {Text, TextInput} from '../components/AppText';
+ import {useTranslation} from 'react-i18next';
+@@ -35,6 +36,8 @@ interface SettingsDraft {
+   showAppLockPw: boolean;
+   filesEnabled: boolean;
+   gpsEnabled: boolean;
++  pkFrontSyncEnabled: boolean;
++  pkToken: string;
+   singletMode: boolean;
+   textScale: TextScale;
+   fontChoice: FontChoice;
+@@ -59,6 +62,8 @@ const draftFrom = (system: SystemInfo, settings: AppSettings): SettingsDraft =>
+   showAppLockPw: !!settings.appLockPassword,
+   filesEnabled: settings.filesEnabled ?? true,
+   gpsEnabled: !!settings.gpsEnabled,
++  pkFrontSyncEnabled: !!settings.pkFrontSyncEnabled,
++  pkToken: settings.pkToken || '',
+   singletMode: settings.accountMode === 'singlet',
+   textScale: settings.textScale ?? 1.0,
+   fontChoice: fontChoiceOf(settings),
+@@ -90,7 +95,7 @@ export const SystemModal = ({visible, system, settings, palettes, activePaletteI
+   const save = async () => {
+     try {
+       await onSave({...system, ...(d.singletMode ? {name: d.sysName, description: d.sysDesc} : {}), journalPassword: d.showJournalPw && d.journalPw ? d.journalPw : undefined});
+-      await onSaveSettings({...settings, accountMode: d.singletMode ? 'singlet' : 'system', locations: d.locs, customMoods: d.moods, language: d.lang, notificationsEnabled: d.notifEnabled, persistentFrontNotif: d.persistFront, filesEnabled: d.filesEnabled, gpsEnabled: d.gpsEnabled, textScale: d.textScale, fontChoice: d.fontChoice, useDyslexicFont: d.fontChoice === 'opendyslexic', frontCheckInterval: d.frontCheckInterval, notificationRefreshMinutes: d.notifRefreshMins, noteboardNotifications: d.noteboardNotifs, terminology: d.termMap, tierNames: d.tierMap, appLockPassword: d.showAppLockPw && d.appLockPw ? d.appLockPw : undefined});
++      await onSaveSettings({...settings, accountMode: d.singletMode ? 'singlet' : 'system', locations: d.locs, customMoods: d.moods, language: d.lang, notificationsEnabled: d.notifEnabled, persistentFrontNotif: d.persistFront, filesEnabled: d.filesEnabled, gpsEnabled: d.gpsEnabled, pkFrontSyncEnabled: d.pkFrontSyncEnabled, pkToken: d.pkToken.trim() || undefined, textScale: d.textScale, fontChoice: d.fontChoice, useDyslexicFont: d.fontChoice === 'opendyslexic', frontCheckInterval: d.frontCheckInterval, notificationRefreshMinutes: d.notifRefreshMins, noteboardNotifications: d.noteboardNotifs, terminology: d.termMap, tierNames: d.tierMap, appLockPassword: d.showAppLockPw && d.appLockPw ? d.appLockPw : undefined});
+       onClose();
+     } catch (e) {
+       reportSaveError(e);
+@@ -117,6 +122,7 @@ export const SystemModal = ({visible, system, settings, palettes, activePaletteI
+       <PasswordSection label={t('modal.appLockPassword')} on={d.showAppLockPw} setOn={on => setD(x => ({...x, showAppLockPw: on, appLockPw: on ? x.appLockPw : ''}))}
+         value={d.appLockPw} onChange={v => put('appLockPw', v)} placeholder={t('modal.appLockPasswordPlaceholder')}
+         addLabel={t('modal.addAppLockPassword')} removeLabel={t('modal.removeAppLockPassword')} desc={t('modal.appLockPasswordDesc')} style={sectionBox} />
++      <PluralKitSettings enabled={d.pkFrontSyncEnabled} token={d.pkToken} onToggle={() => put('pkFrontSyncEnabled', !d.pkFrontSyncEnabled)} onToken={v => put('pkToken', v)} />
+       <ToggleRow label={t('modal.gpsLocation')} desc={t('modal.gpsDesc')} value={d.gpsEnabled} onToggle={() => put('gpsEnabled', !d.gpsEnabled)} style={sectionBox} />
+       <ToggleRow label={t('modal.fileAccess')} desc={t('modal.fileAccessDesc')} value={d.filesEnabled} onToggle={() => put('filesEnabled', !d.filesEnabled)} style={sectionBox} />
+       <View style={sectionBox}>
+diff --git a/src/model/types.ts b/src/model/types.ts
+index 8944e7e..b6024a0 100644
+--- a/src/model/types.ts
++++ b/src/model/types.ts
+@@ -283,6 +283,8 @@ export interface AppSettings {
+   customMoods: string[];
+   lightMode: boolean;
+   gpsEnabled: boolean;
++  pkFrontSyncEnabled?: boolean;
++  pkToken?: string;
+   filesEnabled: boolean;
+   language: SupportedLanguage;
+   notificationsEnabled: boolean;
+diff --git a/src/store/actions.ts b/src/store/actions.ts
+index 069e993..f481659 100644
+--- a/src/store/actions.ts
++++ b/src/store/actions.ts
+@@ -10,3 +10,4 @@
+ import {deleteAvatar} from '../utils/mediaUtils';
+ import {migrateInlineChatMedia, rebaseChatMessageMedia} from '../utils/mediaMigrations';
++import {syncPluralKitFront} from '../mods/pluralKitSync';
+ import {reschedulePlannerNotifications} from '../services/reminders';
+@@ -162,6 +163,7 @@ export const updateFront = async (primary: FrontTier, coFront: FrontTier, coCons
+   setFront(finalFront);
+   await store.set(KEYS.front, finalFront);
+   await saveHistory(newHistory);
++  syncPluralKitFront(finalFront?.primary.memberIds || []);
+ 
+   if (finalFront) {
+     const allFrontIds = allFrontMemberIds(finalFront);

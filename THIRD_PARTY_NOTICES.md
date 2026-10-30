@@ -29,3 +29,7 @@ The patcher links Android apksig under Apache-2.0. Payload dependencies and thei
 individual notices are available in the pinned upstream repository and its locked
 npm dependency packages. Plural Star source and the wallpaper feature are
 AGPL-3.0; the complete feature diff is included in payload/wallpaper-pr-24.patch.
+
+PluralKit front sync is adapted from sparklecatdev's Plural Star PR #11
+(c1bd5e2f7a5fbb7934733e331154307948424cb0) under AGPL-3.0. The adapted
+feature diff is in payload/pluralkit-pr-11.patch with runtime code in payload/mods.

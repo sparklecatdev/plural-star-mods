@@ -26,6 +26,28 @@ function load(name, imports = {}, generated = false) {
 const theme = {bg: '#14101F', text: '#ffffff', surface: '#241b33', accent: '#e5b5ff', dim: '#c5b9d4', muted: '#9889a8', danger: '#ffb4c8', border: '#51465e'};
 const host = name => ({children, ...props}) => React.createElement(name, props, children);
 
+test('PluralKit settings require opt-in and mask the token while editing', async () => {
+  const calls = [];
+  const {PluralKitSettings} = load('PluralKitSettings.tsx', {
+    'react-native': {View: 'View'}, 'react-i18next': {useTranslation: () => ({t: (key, options) => options?.defaultValue || key})},
+    '../components/AppText': {Text: 'Text', TextInput: 'TextInput'},
+    '../components/controls': {ToggleRow: host('Toggle')},
+    '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n},
+  });
+  const props = {token: 'secret', onToggle: () => calls.push('toggle'), onToken: value => calls.push(value)};
+  let renderer;
+  await act(async () => { renderer = create(React.createElement(PluralKitSettings, {...props, enabled: false})); });
+  assert.equal(renderer.root.findAllByType('TextInput').length, 0);
+  await act(async () => renderer.root.findByType('Toggle').props.onToggle());
+  await act(async () => renderer.update(React.createElement(PluralKitSettings, {...props, enabled: true})));
+  const input = renderer.root.findByType('TextInput');
+  assert.equal(input.props.secureTextEntry, true);
+  assert.equal(input.props.value, 'secret');
+  await act(async () => input.props.onChangeText('replacement'));
+  assert.deepEqual(calls, ['toggle', 'replacement']);
+  await act(async () => renderer.unmount());
+});
+
 function rootHarness({password = null, reduceMotion = false, recoveryError = false, deferred = false} = {}) {
   const animations = []; const gates = []; let resolveRecovery;
   const recovered = deferred ? new Promise(resolve => { resolveRecovery = resolve; }) : Promise.resolve();
