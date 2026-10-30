@@ -1,0 +1,1051 @@
+diff --git a/App.tsx b/App.tsx
+index 5e376c5..31041c7 100644
+--- a/App.tsx
++++ b/App.tsx
+@@ -29,6 +29,7 @@ import {createStartup} from './src/app/startup/loadAll';
+ import type {Startup} from './src/app/startup/loadAll';
+ import {TabHost, initialTabMemory} from './src/app/TabHost';
+ import type {TabMemory} from './src/app/TabHost';
++import {AppBackground} from './src/app/AppBackground';
+ import {AppModals} from './src/app/AppModals';
+ import {useAppTheme} from './src/app/useAppTheme';
+ import {ThemeProvider} from './src/themeContext';
+@@ -138,7 +139,9 @@ function MainAppContent() {
+         <StatusBar barStyle={C.isLight ? 'dark-content' : 'light-content'} backgroundColor="transparent" translucent />
+         <AppHeader systemName={system.name || t('systemProfile.unnamed')} canLock={!!appSettings.appLockPassword} onLock={() => setLocked(true)} onOpenSettings={openSystem}
+           onOpenProfile={isSinglet ? undefined : openSystemProfile} />
+-        <TabHost isSinglet={isSinglet} screens={screens} memory={tabMemoryRef} />
++        <AppBackground>
++          <TabHost isSinglet={isSinglet} screens={screens} memory={tabMemoryRef} />
++        </AppBackground>
+         <AppModals isSinglet={isSinglet} selfMember={selfMember} />
+       </View>
+     </ThemeProvider>
+diff --git a/scripts/background-settings.test.js b/scripts/background-settings.test.js
+new file mode 100644
+index 0000000..9d88c15
+--- /dev/null
++++ b/scripts/background-settings.test.js
+@@ -0,0 +1,165 @@
++// Run with: node --test scripts/background-settings.test.js
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const path = require('node:path');
++const vm = require('node:vm');
++const {test} = require('node:test');
++const babel = require('@babel/core');
++
++function load(file, imports) {
++  const filename = path.resolve(__dirname, '..', file);
++  const {code} = babel.transformSync(fs.readFileSync(filename, 'utf8'), {
++    filename, presets: ['module:@react-native/babel-preset'], babelrc: false, configFile: false,
++  });
++  const context = {exports: {}, require: name => {
++    if (name.startsWith('@babel/runtime/helpers/')) return require(name);
++    assert.ok(Object.hasOwn(imports, name), `Unexpected import: ${name}`);
++    return imports[name];
++  }};
++  vm.runInNewContext(code, context, {filename});
++  return context.exports;
++}
++const plain = value => JSON.parse(JSON.stringify(value));
++function harness() {
++  let state = {appSettings: {backgroundImage: 'old.png', language: 'en'},
++    setAppSettings: value => { state.appSettings = value; }, setActivePaletteId: () => {}};
++  let stored = plain(state.appSettings);
++  let fail = false;
++  let gate;
++  const removed = [];
++  let n = 0;
++  const store = {set: async (key, value) => {
++    if (gate) await gate;
++    if (fail) throw Error('disk full');
++    if (key === 'settings') stored = plain(value);
++  }};
++  const imports = {
++    '../storage': {KEYS: {settings: 'settings'}, store},
++    './appStore': {useAppStore: {getState: () => state}},
++  };
++  imports['./settings'] = load('src/store/settings.ts', imports);
++  Object.assign(imports, {
++    '../utils': {}, '../i18n/i18n': {changeLanguage: async () => {}}, '../utils/gpsLocation': {},
++    '../utils/permissions': {}, '../utils/log': {}, '../utils/emitter': {Emitter: class {}},
++    '../theme': {LIGHT_PALETTE: {id: 'light'}}, '../utils/mediaUtils': {},
++    '../utils/mediaMigrations': {}, '../services/reminders': {}, '../mailbox/mailbox': {},
++    '../utils/backgroundImage': {
++      saveBackgroundImageFromUri: async () => `new-${++n}.png`,
++      removeBackgroundImage: async name => { if (name) removed.push(name); },
++    },
++  });
++  return {actions: load('src/store/actions.ts', imports), state, removed,
++    stored: () => stored, fail: value => { fail = value; }, hold: promise => { gate = promise; }};
++}
++
++test('replacing and removing delete only the formerly committed file', async () => {
++  const h = harness();
++  await h.actions.changeBackgroundImage('content://gallery/photo');
++  assert.equal(h.stored().backgroundImage, 'new-1.png');
++  assert.deepEqual(h.removed, ['old.png']);
++  await h.actions.changeBackgroundImage();
++  assert.equal(h.stored().backgroundImage, undefined);
++  assert.deepEqual(h.removed, ['old.png', 'new-1.png']);
++});
++
++test('failed replacement retains the current file and settings and cleans the new file', async () => {
++  const h = harness();
++  h.fail(true);
++  await assert.rejects(h.actions.changeBackgroundImage('file:///photo'), /disk full/);
++  assert.equal(h.state.appSettings.backgroundImage, 'old.png');
++  assert.equal(h.stored().backgroundImage, 'old.png');
++  assert.deepEqual(h.removed, ['new-1.png']);
++  h.fail(false);
++  await h.actions.changeBackgroundImage('file:///photo');
++  assert.equal(h.stored().backgroundImage, 'new-2.png');
++});
++
++test('failed removal preserves the selected background', async () => {
++  const h = harness();
++  h.fail(true);
++  await assert.rejects(h.actions.changeBackgroundImage(), /disk full/);
++  assert.equal(h.state.appSettings.backgroundImage, 'old.png');
++  assert.deepEqual(h.removed, []);
++});
++
++test('concurrent background, palette and list saves persist all changes', async () => {
++  const h = harness();
++  await Promise.all([
++    h.actions.changeBackgroundImage('file:///photo'),
++    h.actions.selectPalette('light'),
++    h.actions.saveMemberSortMode('name'),
++  ]);
++  assert.deepEqual(h.stored(), {backgroundImage: 'new-1.png', language: 'en',
++    activePaletteId: 'light', lightMode: true, memberSortMode: 'name'});
++  assert.deepEqual(plain(h.state.appSettings), h.stored());
++});
++
++test('saving an older settings draft never restores a replaced or removed image', async () => {
++  const h = harness();
++  const draft = {...h.state.appSettings, language: 'fr'};
++  await h.actions.changeBackgroundImage('file:///photo');
++  await h.actions.saveAppSettings(draft);
++  assert.equal(h.stored().backgroundImage, 'new-1.png');
++  await h.actions.changeBackgroundImage();
++  await h.actions.saveAppSettings(draft);
++  assert.equal(h.stored().backgroundImage, undefined);
++  assert.equal(h.stored().language, 'fr');
++});
++
++test('overlapping replacements leave only the latest image selected', async () => {
++  const h = harness();
++  await Promise.all([h.actions.changeBackgroundImage('file:///a'), h.actions.changeBackgroundImage('file:///b')]);
++  assert.equal(h.stored().backgroundImage, 'new-2.png');
++  assert.deepEqual(h.removed.sort(), ['new-1.png', 'old.png']);
++});
++
++test('an in-flight disk write keeps the current background alive', async () => {
++  const h = harness();
++  let release;
++  h.hold(new Promise(resolve => { release = resolve; }));
++  const saving = h.actions.changeBackgroundImage('file:///photo');
++  await new Promise(resolve => setImmediate(resolve));
++  assert.equal(h.state.appSettings.backgroundImage, 'old.png');
++  assert.deepEqual(h.removed, []);
++  release();
++  await saving;
++  assert.equal(h.state.appSettings.backgroundImage, 'new-1.png');
++});
++
++test('native file utility accepts content/file URIs and confines deletion to background files', async () => {
++  const copies = [], removed = [];
++  let fail = false;
++  const media = load('src/utils/backgroundImage.ts', {'./mediaFiles': {
++    BACKGROUND_DIR: '/documents/ps_backgrounds', ensureDir: async () => {},
++    removeIfExists: async name => removed.push(name),
++    downscaleOrCopy: async (...args) => { copies.push(args); if (fail) throw Error('copy failed'); },
++  }});
++  for (const uri of ['content://provider/42', 'file:///camera.jpg']) {
++    const name = await media.saveBackgroundImageFromUri(uri);
++    assert.match(name, /^background-[a-z0-9-]+\.png$/);
++    assert.equal(copies.at(-1)[0], uri);
++    assert.equal(copies.at(-1)[2], 1920);
++    assert.equal(media.backgroundImageUri(name), `/documents/ps_backgrounds/${name}`.replace(/^/, 'file://'));
++  }
++  await assert.rejects(media.saveBackgroundImageFromUri('https://example.com/photo'));
++  for (const invalid of ['../avatar.png', 'file:///photo', '', undefined]) {
++    assert.equal(media.backgroundImageUri(invalid), undefined);
++    await media.removeBackgroundImage(invalid);
++  }
++  assert.deepEqual(removed, []);
++  fail = true;
++  await assert.rejects(media.saveBackgroundImageFromUri('content://provider/bad'), /copy failed/);
++  assert.equal(removed[0], copies.at(-1)[1]);
++});
++
++test('export omits the device filename without changing settings or selected moods', async () => {
++  const settings = {backgroundImage: 'local.png', customMoods: ['calm'], language: 'en'};
++  const {buildExportBase} = load('src/export/payload.ts', {
++    '../utils': {}, '../storage': {KEYS: {settings: 'settings'}, store: {get: async key => key === 'settings' ? settings : undefined}},
++    '../utils/concurrency': {},
++  });
++  const data = await buildExportBase({}, [], [], [], {settings: true, moods: true});
++  assert.deepEqual(plain(data.settings), {customMoods: ['calm'], language: 'en'});
++  assert.equal(settings.backgroundImage, 'local.png');
++  assert.deepEqual(plain(data.customMoods), ['calm']);
++});
+diff --git a/scripts/restore-settings.test.js b/scripts/restore-settings.test.js
+new file mode 100644
+index 0000000..a18c686
+--- /dev/null
++++ b/scripts/restore-settings.test.js
+@@ -0,0 +1,114 @@
++// Run with: node --test scripts/restore-settings.test.js
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const path = require('node:path');
++const {test} = require('node:test');
++const vm = require('node:vm');
++const babel = require('@babel/core');
++
++const filename = path.resolve(__dirname, '../src/import/restore.ts');
++const {code: outputText} = babel.transformSync(fs.readFileSync(filename, 'utf8'), {
++  filename, presets: ['module:@react-native/babel-preset'], babelrc: false, configFile: false,
++});
++
++// Exercise the public restore entry point with native I/O replaced by memory.
++async function restore(current, incoming, restoreIsBundle, importMode, selection = {settings: true}) {
++  const data = {_meta: {app: 'Plural Star'}, ...incoming};
++  let saved = current;
++  let writes = 0;
++  let confirm;
++  let done = false;
++  const errors = [];
++  const mocks = {
++    'react-native': {Alert: {alert: (_title, _message, buttons) => { confirm = buttons[1].onPress; }}},
++    'react-native-blob-util': {fs: {
++      dirs: {CacheDir: '/cache'},
++      readFile: async () => JSON.stringify(data),
++      exists: async () => false,
++    }},
++    '../storage': {KEYS: {settings: 'settings'}, store: {
++      get: async key => { assert.equal(key, 'settings'); return current; },
++      set: async (key, value) => {
++        assert.equal(key, 'settings');
++        saved = JSON.parse(JSON.stringify(value));
++        writes++;
++      },
++    }},
++    './zipBundle': {importZipBundle: async () => ({data})},
++    './detect': {isNativeBackup: () => true, looksLikeOurcana: () => false, looksLikeMultiplicity: () => false, looksLikeSP: () => false, looksLikeOctocon: () => false},
++    './restoreCommon': {},
++    '../utils/log': {},
++    '../utils/mediaMigrations': {},
++    './ourcana': {}, './multiplicity': {}, './simplyPlural': {}, './octocon': {},
++    './importNames': {}, './importError': {importErrorText: e => {throw e;}}, '../i18n/i18n': {}, '../utils': {},
++    '../utils/mediaUtils': {}, '../utils/concurrency': {}, './progress': {},
++    './convert': {}, './spApi': {},
++  };
++  const context = {
++    exports: {},
++    require: name => {
++      if (name.startsWith('@babel/runtime/helpers/')) return require(name);
++      assert.ok(Object.hasOwn(mocks, name), `Unexpected import: ${name}`);
++      return mocks[name];
++    },
++    setTimeout: () => 0,
++  };
++  vm.runInNewContext(outputText, context, {filename});
++  context.exports.handleRestore({
++    restorePath: restoreIsBundle ? '/backup.zip' : '/backup.json',
++    restorePreview: true, restoreIsBundle, importMode, restoreSel: selection,
++    setRestoring: () => {}, setRestoreProgress: () => {},
++    setRestoreDone: value => { done = value; },
++    setRestoreError: error => errors.push(error),
++    t: key => key, onDataImported: () => {}, history: [],
++  });
++  assert.equal(typeof confirm, 'function');
++  await confirm();
++  assert.deepEqual(errors, []);
++  assert.equal(done, true);
++  return {saved, writes};
++}
++
++for (const bundle of [false, true]) {
++  for (const mode of ['overwrite', 'update']) {
++    const label = `${bundle ? 'ZIP' : 'JSON'} / ${mode}`;
++    for (const [name, current, importedBackground, expected] of [
++      ['keeps local background when omitted', {backgroundImage: 'local.jpg'}, {}, 'local.jpg'],
++      ['ignores foreign background', {backgroundImage: 'local.jpg'}, {backgroundImage: 'foreign.jpg'}, 'local.jpg'],
++      ['keeps solid background', {}, {backgroundImage: 'foreign.jpg'}, undefined],
++      ['handles missing local settings', null, {backgroundImage: 'foreign.jpg'}, undefined],
++    ]) {
++      test(`${label}: ${name}`, async () => {
++        const local = current && {...current, customMoods: ['local mood'], lightMode: false};
++        const incoming = {settings: {...importedBackground, lightMode: true, customMoods: ['backup mood']}};
++        const original = JSON.stringify({local, incoming});
++        const {saved, writes} = await restore(local, incoming, bundle, mode);
++        assert.equal(writes, 1);
++        assert.equal(saved.backgroundImage, expected);
++        assert.equal(saved.lightMode, true);
++        assert.deepEqual(saved.customMoods, local?.customMoods || []);
++        assert.equal(JSON.stringify({local, incoming}), original);
++      });
++    }
++    test(`${label}: restores selected moods with settings`, async () => {
++      const {saved} = await restore({backgroundImage: 'local.jpg'}, {
++        settings: {lightMode: true}, customMoods: ['restored mood'],
++      }, bundle, mode, {settings: true, moods: true});
++      assert.equal(saved.backgroundImage, 'local.jpg');
++      assert.equal(saved.lightMode, true);
++      assert.deepEqual(saved.customMoods, ['restored mood']);
++    });
++    test(`${label}: moods-only restore keeps other local settings`, async () => {
++      const {saved} = await restore({backgroundImage: 'local.jpg', lightMode: false}, {
++        settings: {backgroundImage: 'foreign.jpg', lightMode: true, customMoods: ['restored mood']},
++      }, bundle, mode, {moods: true});
++      assert.deepEqual(saved, {backgroundImage: 'local.jpg', lightMode: false, customMoods: ['restored mood']});
++    });
++    test(`${label}: unselected settings are not written`, async () => {
++      const {writes} = await restore({backgroundImage: 'local.jpg'}, {
++        settings: {backgroundImage: 'foreign.jpg'},
++      }, bundle, mode, {});
++      assert.equal(writes, 0);
++    });
++  }
++}
+diff --git a/src/app/AppBackground.tsx b/src/app/AppBackground.tsx
+new file mode 100644
+index 0000000..0b91266
+--- /dev/null
++++ b/src/app/AppBackground.tsx
+@@ -0,0 +1,21 @@
++import React, {useMemo} from 'react';
++import {View} from 'react-native';
++import {BackgroundImage} from '../components/BackgroundImage';
++import {useAppStore} from '../store/appStore';
++import {ThemeProvider, useTheme} from '../themeContext';
++import {backgroundImageUri} from '../utils/backgroundImage';
++
++// Only screen canvases are transparent; sheets, setup and the lock screen keep
++// their normal palette. Profile themes can still supply their own solid canvas.
++export function AppBackground({children}: {children: React.ReactNode}) {
++  const theme = useTheme();
++  const filename = useAppStore(s => s.appSettings.backgroundImage);
++  const hasImage = !!backgroundImageUri(filename);
++  const screenTheme = useMemo(() => ({...theme, canvas: hasImage ? 'transparent' : theme.bg}), [theme, hasImage]);
++  return (
++    <View style={{flex: 1, backgroundColor: theme.bg}}>
++      <BackgroundImage filename={filename} theme={theme} />
++      <ThemeProvider value={screenTheme}>{children}</ThemeProvider>
++    </View>
++  );
++}
+diff --git a/src/app/AppModals.tsx b/src/app/AppModals.tsx
+index 12fb403..83de628 100644
+--- a/src/app/AppModals.tsx
++++ b/src/app/AppModals.tsx
+@@ -4,7 +4,7 @@ import {SetFrontModal, SetStatusModal, EditFrontDetailModal, MemberModal, Journa
+ import {ImageCropHost} from '../components/ImageCropModal';
+ import {useAppStore} from '../store/appStore';
+ import {useUiStore} from '../store/uiStore';
+-import {saveSystem, savePalettes, selectPalette, updateFront, updateFrontDetails, saveMember, deleteMember, saveEntry, saveSettingsWithSelf} from '../store/actions';
++import {changeBackgroundImage, saveSystem, savePalettes, selectPalette, updateFront, updateFrontDetails, saveMember, deleteMember, saveEntry, saveSettingsWithSelf} from '../store/actions';
+ import {reportSaveError} from '../utils/saveError';
+ 
+ export function AppModals({isSinglet, selfMember}: {isSinglet: boolean; selfMember: Member | undefined}) {
+@@ -74,6 +74,7 @@ export function AppModals({isSinglet, selfMember}: {isSinglet: boolean; selfMemb
+         onSaveSettings={async s => {await saveSettingsWithSelf(s); ui.closeSystem();}}
+         onSavePalettes={savePalettes}
+         onSelectPalette={selectPalette}
++        onChangeBackground={changeBackgroundImage}
+         onOpenProfile={() => { ui.closeSystem(); ui.openSystemProfile(); }}
+         onClose={ui.closeSystem} />
+       <SystemProfileModal visible={ui.systemProfileVisible && !isSinglet} system={system}
+diff --git a/src/components/BackgroundImage.tsx b/src/components/BackgroundImage.tsx
+new file mode 100644
+index 0000000..5169cb4
+--- /dev/null
++++ b/src/components/BackgroundImage.tsx
+@@ -0,0 +1,17 @@
++import React from 'react';
++import {Image, StyleSheet, View} from 'react-native';
++import type {ThemeColors} from '../theme';
++import {backgroundImageUri} from '../utils/backgroundImage';
++
++export const BackgroundImage = ({filename, theme: T}: {filename?: string; theme: ThemeColors}) => {
++  const uri = backgroundImageUri(filename);
++  return (
++    <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
++      style={[StyleSheet.absoluteFill, {backgroundColor: T.bg}]}>
++      {uri && <>
++        <Image source={{uri}} resizeMode="cover" style={StyleSheet.absoluteFill} />
++        <View style={[StyleSheet.absoluteFill, {backgroundColor: T.bg, opacity: 0.78}]} />
++      </>}
++    </View>
++  );
++};
+diff --git a/src/export/payload.ts b/src/export/payload.ts
+index f755ac9..4ea7f4c 100644
+--- a/src/export/payload.ts
++++ b/src/export/payload.ts
+@@ -45,6 +45,12 @@ export const buildExportBase = async (
+     }
+   }
+ 
++  // Background images are device-local and are not included in exports.
++  let exportSettings: AppSettings | undefined;
++  if (settings) {
++    const {backgroundImage: _backgroundImage, ...rest} = settings;
++    exportSettings = rest;
++  }
+   const membersForExport = members.map(({avatar: _a, banner: _b, ...rest}) => rest);
+ 
+   return {
+@@ -61,7 +67,7 @@ export const buildExportBase = async (
+     chatChannels: cat.chat ? (channels || []) : [],
+     chatCategories: cat.chat ? (chatCats || []) : [],
+     chatMessages: cat.chat ? chatMessages : {},
+-    settings: cat.settings ? (settings || undefined) : undefined,
++    settings: cat.settings ? exportSettings : undefined,
+     front: cat.frontHistory ? (front || undefined) : undefined,
+     palettes: cat.palettes ? (palettes || []) : [],
+     customMoods: cat.moods ? (settings?.customMoods || []) : [],
+diff --git a/src/i18n/en.json b/src/i18n/en.json
+index 36eb8a6..2cbacfa 100644
+--- a/src/i18n/en.json
++++ b/src/i18n/en.json
+@@ -756,6 +756,11 @@
+     "fileAccessDesc": "Allow importing and exporting files. On by default.",
+     "palette": "Theme Palette",
+     "paletteDesc": "Choose a built-in theme or create your own.",
++    "backgroundImage": "Background Image",
++    "backgroundImageDesc": "Use a photo behind your screens, tinted by your palette's background colour. Changes apply immediately.",
++    "chooseBackgroundImage": "Choose Image",
++    "changeBackgroundImage": "Change Image",
++    "backgroundImageFailed": "Could not update the background image. Please try again.",
+     "newPalette": "New Palette",
+     "paletteName": "Palette name…",
+     "palBg": "Background",
+diff --git a/src/import/restore.ts b/src/import/restore.ts
+index bc5366a..3c769e4 100644
+--- a/src/import/restore.ts
++++ b/src/import/restore.ts
+@@ -111,7 +111,8 @@ const restoreSharedPayload = async (data: Partial<ExportPayload>, ctx: RestoreCt
+     const currentSettings: Partial<AppSettings> = await store.get<AppSettings>(KEYS.settings) || {};
+     let newSettings: Partial<AppSettings> = {...currentSettings};
+     if (restoreSel.settings && data.settings) {
+-      newSettings = {...data.settings};
++      // Background files stay on this device and are not restored from backups.
++      newSettings = {...data.settings, backgroundImage: currentSettings.backgroundImage};
+       if (!restoreSel.moods) newSettings.customMoods = currentSettings.customMoods || [];
+     }
+     if (restoreSel.moods) newSettings.customMoods = data.customMoods || data.settings?.customMoods || [];
+diff --git a/src/modals/SystemModal.tsx b/src/modals/SystemModal.tsx
+index bd61a4e..c2acab2 100644
+--- a/src/modals/SystemModal.tsx
++++ b/src/modals/SystemModal.tsx
+@@ -11,6 +11,7 @@ import {SUPPORTED_LANGUAGES} from '../i18n/i18n';
+ import type {SupportedLanguage} from '../i18n/i18n';
+ import {Btn, Field, PasswordSection, SectionHead, ToggleRow, sectionLabel} from '../components/controls';
+ import {ChipListEditor, Dropdown} from './system/SettingsControls';
++import {BackgroundSection} from './system/BackgroundSection';
+ import {PaletteSection} from './system/PaletteSection';
+ import {DevSettings} from '../components/DevSettings';
+ import {reportSaveError} from '../utils/saveError';
+@@ -67,7 +68,8 @@ const draftFrom = (system: SystemInfo, settings: AppSettings): SettingsDraft =>
+ const FRONT_CHECK_HOURS = [0, 1, 2, 3, 4, 6, 8, 12] as const;
+ const REFRESH_MINUTES = [0, 15, 30, 60, 240, 480, 720, 1440] as const;
+ 
+-export const SystemModal = ({visible, system, settings, palettes, activePaletteId, onSave, onSaveSettings, onSavePalettes, onSelectPalette, onOpenProfile, onClose}: {
++export const SystemModal = ({visible, system, settings, palettes, activePaletteId, onSave, onSaveSettings, onSavePalettes, onSelectPalette, onChangeBackground, onOpenProfile, onClose}: {
++  onChangeBackground: (uri?: string) => Promise<void>;
+   visible: boolean; system: SystemInfo; settings: AppSettings; palettes: CustomPalette[]; activePaletteId: string;
+   onSave: (s: SystemInfo) => Promise<void>; onSaveSettings: (s: AppSettings) => Promise<void>; onSavePalettes: (p: CustomPalette[]) => Promise<void>; onSelectPalette: (id: string) => Promise<void>; onOpenProfile: () => void; onClose: () => void;
+ }) => {
+@@ -111,6 +113,8 @@ export const SystemModal = ({visible, system, settings, palettes, activePaletteI
+       <PaletteSection palettes={palettes} activePaletteId={activePaletteId} onSavePalettes={onSavePalettes} onSelectPalette={onSelectPalette}
+         style={{borderTopWidth: 1, borderTopColor: T.border, paddingTop: 14, marginTop: 4}} />
+ 
++      <BackgroundSection filename={settings.backgroundImage} onChange={onChangeBackground} />
++
+       <PasswordSection label={t('modal.globalJournalPassword')} on={d.showJournalPw} setOn={on => setD(x => ({...x, showJournalPw: on, journalPw: on ? x.journalPw : ''}))}
+         value={d.journalPw} onChange={v => put('journalPw', v)} placeholder={t('modal.lockJournal')}
+         addLabel={t('modal.addJournalPassword')} removeLabel={t('modal.removeJournalPassword')} style={sectionBox} />
+diff --git a/src/modals/system/BackgroundSection.tsx b/src/modals/system/BackgroundSection.tsx
+new file mode 100644
+index 0000000..eccb16e
+--- /dev/null
++++ b/src/modals/system/BackgroundSection.tsx
+@@ -0,0 +1,56 @@
++import React, {useRef, useState} from 'react';
++import {Alert, View} from 'react-native';
++import {useTranslation} from 'react-i18next';
++import {Text} from '../../components/AppText';
++import {BackgroundImage} from '../../components/BackgroundImage';
++import {useTheme} from '../../themeContext';
++import {fontScale} from '../../theme';
++import {launchImageLibrary} from 'react-native-image-picker';
++import {logError} from '../../utils/log';
++import {Btn} from '../../components/controls';
++
++export const BackgroundSection = ({filename, onChange}: {filename?: string; onChange: (uri?: string) => Promise<void>}) => {
++  const T = useTheme();
++  const {t} = useTranslation();
++  const fs = fontScale(T);
++  const [busy, setBusy] = useState(false);
++  const busyRef = useRef(false);
++
++  const change = async (remove = false) => {
++    if (busyRef.current) return;
++    busyRef.current = true;
++    setBusy(true);
++    let uri: string | undefined;
++    try {
++      if (!remove) {
++        const result = await launchImageLibrary({mediaType: 'photo', selectionLimit: 1, includeBase64: false, maxWidth: 1920, maxHeight: 1920, quality: 0.9});
++        if (result.didCancel) return;
++        if (result.errorCode) throw new Error(result.errorMessage || result.errorCode);
++        const image = result.assets?.[0];
++        if (!image?.uri) return;
++        uri = /^(file|content):\/\//.test(image.uri) ? image.uri : `file://${image.uri}`;
++      }
++      await onChange(uri);
++    } catch (e) {
++      logError('background', e);
++      Alert.alert(t('modal.saveFailed'), t('modal.backgroundImageFailed'));
++    } finally {
++      busyRef.current = false;
++      setBusy(false);
++    }
++  };
++
++  return (
++    <View style={{borderTopWidth: 1, borderTopColor: T.border, paddingTop: 14, marginTop: 14}}>
++      <Text accessibilityRole="header" style={{fontSize: fs(10), letterSpacing: 1, textTransform: 'uppercase', color: T.dim, marginBottom: 8, fontWeight: '600'}}>{t('modal.backgroundImage')}</Text>
++      <Text style={{fontSize: fs(11), color: T.muted, lineHeight: fs(15), marginBottom: 10}}>{t('modal.backgroundImageDesc')}</Text>
++      {filename && <View style={{height: 140, borderRadius: 10, overflow: 'hidden', marginBottom: 10}}>
++        <BackgroundImage filename={filename} theme={T} />
++      </View>}
++      <View style={{flexDirection: 'row', gap: 8}}>
++        <Btn disabled={busy} onPress={() => change()} style={{flex: 1}}>{t(filename ? 'modal.changeBackgroundImage' : 'modal.chooseBackgroundImage')}</Btn>
++        {filename && <Btn variant="ghost" disabled={busy} onPress={() => change(true)}>{t('common.remove')}</Btn>}
++      </View>
++    </View>
++  );
++};
+diff --git a/src/model/types.ts b/src/model/types.ts
+index 8944e7e..845b89d 100644
+--- a/src/model/types.ts
++++ b/src/model/types.ts
+@@ -291,6 +291,7 @@ export interface AppSettings {
+   tierNames?: Record<string, string>;
+   persistentFrontNotif?: boolean;
+   activePaletteId: string;
++  backgroundImage?: string;
+   textScale: TextScale;
+   memberSortMode?: MemberSortMode;
+   groupSortMode?: MemberSortMode;
+diff --git a/src/screens/ChatScreen.tsx b/src/screens/ChatScreen.tsx
+index 73e1c58..ec5577c 100644
+--- a/src/screens/ChatScreen.tsx
++++ b/src/screens/ChatScreen.tsx
+@@ -259,7 +259,7 @@ export const ChatScreen = ({onMentionPress}: Props) => {
+   );
+ 
+   return (
+-    <View style={{flex: 1, backgroundColor: T.bg, paddingBottom: keyboardLift}}>
++    <View style={{flex: 1, backgroundColor: T.canvas, paddingBottom: keyboardLift}}>
+       <View style={{flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: T.border}}>
+         <TouchableOpacity onPress={() => setShowChannelList(true)} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('chat.channels')} hitSlop={{top: 12, bottom: 12, left: 12, right: 12}} style={{marginRight: 10}}>
+           <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{fontSize: fs(16), color: T.dim}}>☰</Text>
+diff --git a/src/screens/ColorsScreen.tsx b/src/screens/ColorsScreen.tsx
+index f082604..54898c3 100644
+--- a/src/screens/ColorsScreen.tsx
++++ b/src/screens/ColorsScreen.tsx
+@@ -50,7 +50,7 @@ export const ColorsScreen = ({onBack}: Props) => {
+   const editingColor = editSlot === null ? '' : customColors[editSlot];
+ 
+   return (
+-    <View style={{flex: 1, backgroundColor: T.bg}}>
++    <View style={{flex: 1, backgroundColor: T.canvas}}>
+       <View style={{flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: T.border, gap: 8}}>
+         <TouchableOpacity onPress={onBack} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('common.back')} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}} style={{padding: 6}}>
+           <Text style={{fontSize: fs(16), color: T.dim}} accessibilityElementsHidden importantForAccessibility="no">‹</Text>
+diff --git a/src/screens/FrontScreen.tsx b/src/screens/FrontScreen.tsx
+index 8df4cbe..8913f6b 100644
+--- a/src/screens/FrontScreen.tsx
++++ b/src/screens/FrontScreen.tsx
+@@ -89,7 +89,7 @@ export const FrontScreen = () => {
+   return (
+     <View style={{flex: 1}}>
+       <ScrollView
+-        style={{flex: 1, backgroundColor: T.bg}}
++        style={{flex: 1, backgroundColor: T.canvas}}
+         scrollEnabled={!dragging}
+         contentContainerStyle={{
+           padding: 16,
+diff --git a/src/screens/HistoryScreen.tsx b/src/screens/HistoryScreen.tsx
+index 82cebec..ef65a7c 100644
+--- a/src/screens/HistoryScreen.tsx
++++ b/src/screens/HistoryScreen.tsx
+@@ -146,7 +146,7 @@ export const HistoryScreen = ({singlet = false, selfId, readOnly = false, histor
+     : [pickerPool('members', pickerMembers, t), pickerPool('facets', members.filter(isFacetMember), t), pickerPool('customFronts', pickerCustomFronts, t)];
+ 
+   return (
+-    <View style={{flex: 1, backgroundColor: T.bg}}>
++    <View style={{flex: 1, backgroundColor: T.canvas}}>
+       <View style={{backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: landscape ? 6 : 16}}>
+         <Text
+           accessibilityRole="header"
+diff --git a/src/screens/HubScreen.tsx b/src/screens/HubScreen.tsx
+index 8189493..1fa7c44 100644
+--- a/src/screens/HubScreen.tsx
++++ b/src/screens/HubScreen.tsx
+@@ -67,7 +67,7 @@ const MemoNetworkScreen = React.memo(NetworkScreen);
+ const TileFrame = ({title, onBack, right, children}: {title: string; onBack: () => void; right?: React.ReactNode; children: React.ReactNode}) => {
+   const T = useTheme();
+   return (
+-    <View style={{flex: 1, backgroundColor: T.bg}}>
++    <View style={{flex: 1, backgroundColor: T.canvas}}>
+       <BackHeader title={title} onBack={onBack} right={right} tile />
+       {children}
+     </View>
+@@ -198,7 +198,7 @@ export const HubScreen = ({singlet = false, selfId}: Props) => {
+   const framed = activeTile ? framedTile(activeTile) : null;
+   if (framed) return <TileFrame title={framed.title} onBack={closeTile} right={framed.right}>{framed.body}</TileFrame>;
+   const bare = activeTile ? bareTile(activeTile) : null;
+-  if (bare) return <View style={{flex: 1, backgroundColor: T.bg}}>{bare}</View>;
++  if (bare) return <View style={{flex: 1, backgroundColor: T.canvas}}>{bare}</View>;
+ 
+   const setTileDragBoth = (v: TileDrag | null) => {
+     tileDragRef.current = v;
+@@ -305,7 +305,7 @@ export const HubScreen = ({singlet = false, selfId}: Props) => {
+   const tileHeight = Math.max(104, Math.round(10 + fs(32) * iconCap + 6 + labelReserve + 10 + 4));
+ 
+   return (
+-    <ScrollView style={{flex: 1, backgroundColor: T.bg}} contentContainerStyle={{padding: 16, paddingBottom: 32}} scrollEnabled={!tileDrag}>
++    <ScrollView style={{flex: 1, backgroundColor: T.canvas}} contentContainerStyle={{padding: 16, paddingBottom: 32}} scrollEnabled={!tileDrag}>
+       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 20}}>
+         <Text
+           accessibilityRole="header"
+diff --git a/src/screens/JournalScreen.tsx b/src/screens/JournalScreen.tsx
+index 9821d1e..e5b8554 100644
+--- a/src/screens/JournalScreen.tsx
++++ b/src/screens/JournalScreen.tsx
+@@ -172,7 +172,7 @@ export const JournalScreen = () => {
+ 
+   if (!journalUnlocked) {
+     return (
+-      <View style={{flex: 1, backgroundColor: T.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32}}>
++      <View style={{flex: 1, backgroundColor: T.canvas, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32}}>
+         <Text style={{fontSize: fs(44), color: T.accent, marginBottom: 16}} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">◉</Text>
+         <Text accessibilityRole="header" style={[s.heading, {color: T.text, marginBottom: 8, fontSize: fs(22)}]}>{t('journal.locked')}</Text>
+         <Text style={{fontSize: fs(13), color: T.dim, textAlign: 'center', marginBottom: 24}}>{t('journal.enterPasswordToContinue')}</Text>
+@@ -283,7 +283,7 @@ export const JournalScreen = () => {
+   ) : null;
+ 
+   return (
+-    <View style={{flex: 1, backgroundColor: T.bg}}>
++    <View style={{flex: 1, backgroundColor: T.canvas}}>
+       <FlashList
+         data={subTab === 'entries' ? filteredJournal : NO_ENTRIES}
+         renderItem={renderEntry}
+diff --git a/src/screens/MailboxScreen.tsx b/src/screens/MailboxScreen.tsx
+index 22a1101..22a6156 100644
+--- a/src/screens/MailboxScreen.tsx
++++ b/src/screens/MailboxScreen.tsx
+@@ -147,7 +147,7 @@ export const MailboxScreen = ({onBack}: Props) => {
+     const owner = byId(openId);
+     const msgs = inboxMessages(notes, openId);
+     return (
+-      <View style={{flex: 1, backgroundColor: T.bg}}>
++      <View style={{flex: 1, backgroundColor: T.canvas}}>
+         <BackHeader title={t('mailbox.inboxOf', {name: owner?.name || '?'})} titleSize={18} onBack={() => setOpenId(null)} right={
+           <TouchableOpacity onPress={() => { setLockInput(''); setLockManage(true); }} activeOpacity={0.7}
+             accessibilityRole="button" accessibilityLabel={t('mailbox.lockTitle')} accessibilityValue={{text: owner?.mailboxPassword ? t('mailbox.locked') : t('mailbox.unlocked')}} style={{padding: 6}} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+@@ -181,7 +181,7 @@ export const MailboxScreen = ({onBack}: Props) => {
+   }
+ 
+   return (
+-    <View style={{flex: 1, backgroundColor: T.bg}}>
++    <View style={{flex: 1, backgroundColor: T.canvas}}>
+       <BackHeader title={t('mailbox.title')} onBack={onBack} right={
+         <TouchableOpacity onPress={() => {setComposing(c => !c); setToId(''); }} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={composing ? t('common.cancel') : t('mailbox.compose')} accessibilityState={{expanded: composing}}
+           hitSlop={{top: 8, bottom: 8}} style={{backgroundColor: composing ? T.surface : T.accentBg, borderWidth: 1, borderColor: composing ? T.border : `${T.accent}40`, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7}}>
+diff --git a/src/screens/MembersScreen.tsx b/src/screens/MembersScreen.tsx
+index 0fd15b2..3b4e5c0 100644
+--- a/src/screens/MembersScreen.tsx
++++ b/src/screens/MembersScreen.tsx
+@@ -390,7 +390,7 @@ export const MembersScreen = ({archiveOnly = false}: Props) => {
+         keyExtractor={(m: Member) => m.id}
+         extraData={flashExtraData}
+         maintainVisibleContentPosition={{disabled: true}}
+-        contentContainerStyle={{padding: 16, paddingBottom: 32, backgroundColor: T.bg}}
++        contentContainerStyle={{padding: 16, paddingBottom: 32, backgroundColor: T.canvas}}
+         keyboardShouldPersistTaps="handled"
+         scrollEnabled={!dragging}
+         onScroll={e => setShowTop((e.nativeEvent.contentOffset?.y || 0) > 500)}
+diff --git a/src/screens/NetworkScreen.tsx b/src/screens/NetworkScreen.tsx
+index 3c613c8..63dad4b 100644
+--- a/src/screens/NetworkScreen.tsx
++++ b/src/screens/NetworkScreen.tsx
+@@ -350,7 +350,7 @@ export const NetworkScreen = () => {
+   );
+ 
+   return (
+-    <View style={{flex: 1, backgroundColor: T.bg}}>
++    <View style={{flex: 1, backgroundColor: T.canvas}}>
+       <View style={{flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: T.border}} accessibilityRole="tablist">
+         <TabBtn selected={tab} onSelect={setTab} id="friends" label={t('network.tabFriends')} />
+         <TabBtn selected={tab} onSelect={setTab} id="privacy" label={t('network.tabPrivacy')} />
+diff --git a/src/screens/PlannerScreen.tsx b/src/screens/PlannerScreen.tsx
+index 4c4ba07..b1800be 100644
+--- a/src/screens/PlannerScreen.tsx
++++ b/src/screens/PlannerScreen.tsx
+@@ -88,7 +88,7 @@ export const PlannerScreen = ({onBack}: Props) => {
+   );
+ 
+   return (
+-    <View style={{flex: 1, backgroundColor: T.bg}}>
++    <View style={{flex: 1, backgroundColor: T.canvas}}>
+       <BackHeader title={t('planner.title')} onBack={onBack} />
+ 
+       <ScrollView style={{flex: 1}} contentContainerStyle={{padding: 16, paddingTop: 4, paddingBottom: 32}}>
+diff --git a/src/screens/ProfileScreen.tsx b/src/screens/ProfileScreen.tsx
+index c36f995..624413b 100644
+--- a/src/screens/ProfileScreen.tsx
++++ b/src/screens/ProfileScreen.tsx
+@@ -35,7 +35,7 @@ export const ProfileScreen = ({member}: Props) => {
+   const P = useMemo(() => (bgColor ? profileTheme(T, bgColor) : T), [bgColor, T]);
+ 
+   return (
+-    <View style={{flex: 1, backgroundColor: T.bg}}>
++    <View style={{flex: 1, backgroundColor: T.canvas}}>
+       <View style={{paddingHorizontal: 16, paddingTop: 16}}>
+         <View style={{flexDirection: 'row', alignItems: 'center'}}>
+           <Text accessibilityRole="header" style={[s.heading, {color: T.text, flex: 1, fontSize: fs(22)}]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+@@ -60,7 +60,7 @@ export const ProfileScreen = ({member}: Props) => {
+       </View>
+ 
+       {subTab === 'profile' && (
+-        <ScrollView style={{flex: 1, backgroundColor: P.bg}} contentContainerStyle={{paddingBottom: 140}}>
++        <ScrollView style={{flex: 1, backgroundColor: P.canvas}} contentContainerStyle={{paddingBottom: 140}}>
+           {member?.banner ? (
+             <Image source={{uri: member.banner}} accessibilityElementsHidden importantForAccessibility="no" style={{width: '100%', aspectRatio: 3}} resizeMode="cover" />
+           ) : null}
+diff --git a/src/screens/RetroHistoryScreen.tsx b/src/screens/RetroHistoryScreen.tsx
+index ca82f31..b2316a2 100644
+--- a/src/screens/RetroHistoryScreen.tsx
++++ b/src/screens/RetroHistoryScreen.tsx
+@@ -174,7 +174,7 @@ export const RetroHistoryScreen = ({onBack, editIndex, editEntry, singlet = fals
+   const detailTiers = FRONT_TIER_KEYS.filter(tier => tier === 'primary' || (!singlet && drafts[tier].ids.length > 0));
+ 
+   return (
+-    <KeyboardAwareScrollView style={{flex: 1, backgroundColor: T.bg}} contentContainerStyle={{padding: 16, paddingBottom: 40}} keyboardShouldPersistTaps="handled" bottomOffset={24}>
++    <KeyboardAwareScrollView style={{flex: 1, backgroundColor: T.canvas}} contentContainerStyle={{padding: 16, paddingBottom: 40}} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 16}}>
+         <TouchableOpacity onPress={onBack} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('common.back')} hitSlop={{top: 9, bottom: 9, left: 9, right: 9}} style={{padding: 4, marginRight: 12}}>
+           <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{fontSize: fs(18), color: T.dim}}>←</Text>
+diff --git a/src/screens/ShareScreen.tsx b/src/screens/ShareScreen.tsx
+index 185d7b3..5adf306 100644
+--- a/src/screens/ShareScreen.tsx
++++ b/src/screens/ShareScreen.tsx
+@@ -22,7 +22,7 @@ export const ShareScreen = () => {
+   const [section, setSection] = useState<Section>('export');
+   const shown = (id: Section) => (section === id ? undefined : HIDDEN);
+   return (
+-    <KeyboardAwareScrollView style={{flex: 1, backgroundColor: T.bg}} contentContainerStyle={share.content} keyboardShouldPersistTaps="handled" bottomOffset={24}>
++    <KeyboardAwareScrollView style={{flex: 1, backgroundColor: T.canvas}} contentContainerStyle={share.content} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+       <View style={{flexDirection: 'row', gap: 6, marginBottom: 4}}>
+         {SECTIONS.map(s => (
+           <ChoiceBtn key={s.id} label={t(s.key)} selected={section === s.id} onPress={() => setSection(s.id)}
+diff --git a/src/screens/StatsScreen.tsx b/src/screens/StatsScreen.tsx
+index 8e8c234..1695ef6 100644
+--- a/src/screens/StatsScreen.tsx
++++ b/src/screens/StatsScreen.tsx
+@@ -94,7 +94,7 @@ export const StatsScreen = ({singlet = false, selfId}: Props) => {
+   };
+ 
+   return (
+-    <KeyboardAwareScrollView style={{flex: 1, backgroundColor: T.bg}} contentContainerStyle={{padding: 16, paddingBottom: 40}} bottomOffset={24}>
++    <KeyboardAwareScrollView style={{flex: 1, backgroundColor: T.canvas}} contentContainerStyle={{padding: 16, paddingBottom: 40}} bottomOffset={24}>
+       <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16}}>
+         <RangeBtn selected={range} onSelect={setRange} id="all" label={t('stats.allTime')} />
+         <RangeBtn selected={range} onSelect={setRange} id="7d" label={t('stats.last7')} />
+diff --git a/src/screens/StatusScreen.tsx b/src/screens/StatusScreen.tsx
+index b8ec1e7..3c6e853 100644
+--- a/src/screens/StatusScreen.tsx
++++ b/src/screens/StatusScreen.tsx
+@@ -37,7 +37,7 @@ export const StatusScreen = ({selfId}: Props) => {
+ 
+   return (
+     <View style={{flex: 1}}>
+-      <ScrollView style={{flex: 1, backgroundColor: T.bg}} contentContainerStyle={{padding: 16, paddingBottom: 140}}>
++      <ScrollView style={{flex: 1, backgroundColor: T.canvas}} contentContainerStyle={{padding: 16, paddingBottom: 140}}>
+         <View style={{marginBottom: 16}}>
+           <Text accessibilityRole="header" style={[s.heading, {color: T.text, marginBottom: 10, fontSize: fs(22)}]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+             {t('status.current')}
+diff --git a/src/screens/SystemMapScreen.tsx b/src/screens/SystemMapScreen.tsx
+index 872556c..cac5f40 100644
+--- a/src/screens/SystemMapScreen.tsx
++++ b/src/screens/SystemMapScreen.tsx
+@@ -325,7 +325,7 @@ export const SystemMapScreen = ({onViewMember, onRelCountChange, focus}: Props)
+   );
+ 
+   return (
+-    <View ref={hostRef} onLayout={measureHost} style={{flex: 1, backgroundColor: T.bg}}>
++    <View ref={hostRef} onLayout={measureHost} style={{flex: 1, backgroundColor: T.canvas}}>
+       <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingVertical: 10}}>
+         {toolBtn(t('systemMap.addMember'), () => { setShowMemberPicker(true); setMemberPickerSearch(''); measureHost(); }, false, addableCount === 0)}
+         {toolBtn(t('systemMap.connections'), () => setShowConnections(true))}
+diff --git a/src/screens/WhiteboardScreen.tsx b/src/screens/WhiteboardScreen.tsx
+index 963ebb1..1ce2122 100644
+--- a/src/screens/WhiteboardScreen.tsx
++++ b/src/screens/WhiteboardScreen.tsx
+@@ -381,7 +381,7 @@ export const WhiteboardScreen = ({onBack}: Props) => {
+   const paths = useMemo(() => strokes.map(s => ({id: s.id, ...strokeAttrs(s)})), [strokes]);
+ 
+   return (
+-    <View style={{flex: 1, backgroundColor: T.bg}}>
++    <View style={{flex: 1, backgroundColor: T.canvas}}>
+       <WhiteboardHeader onBack={onBack} onUndo={undo} onZoom={zoomBy} onClear={clearAll} hasStrokes={strokes.length > 0} />
+ 
+       <WhiteboardToolbar tool={tool} onTool={selectTool} width={width} onWidth={setWidth} color={color} />
+diff --git a/src/screens/chat/ChannelList.tsx b/src/screens/chat/ChannelList.tsx
+index 7df4b53..98ddcdf 100644
+--- a/src/screens/chat/ChannelList.tsx
++++ b/src/screens/chat/ChannelList.tsx
+@@ -236,7 +236,7 @@ export const ChannelList = ({activeChannelId, onOpen, onActiveGone, onCleared}:
+   );
+ 
+   return (
+-    <KeyboardAwareScrollView style={{flex: 1, backgroundColor: T.bg}} contentContainerStyle={{padding: 16, paddingBottom: 32}} bottomOffset={24}>
++    <KeyboardAwareScrollView style={{flex: 1, backgroundColor: T.canvas}} contentContainerStyle={{padding: 16, paddingBottom: 32}} bottomOffset={24}>
+       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 10}}>
+         <Text accessibilityRole="header" style={sectionLabel(T, {flex: 1})}>{t('chat.channels')}</Text>
+         <ReorderLockButton on={reorderOn} onToggle={() => setReorderOn(v => !v)} />
+diff --git a/src/screens/systemManager/GroupBrowsePane.tsx b/src/screens/systemManager/GroupBrowsePane.tsx
+index a6ab488..4cc58b6 100644
+--- a/src/screens/systemManager/GroupBrowsePane.tsx
++++ b/src/screens/systemManager/GroupBrowsePane.tsx
+@@ -161,7 +161,7 @@ export const GroupBrowsePane = ({header, hideRootTitle, onViewMember, onEdit}: {
+   ) : undefined;
+ 
+   return (
+-    <KeyboardAwareScrollView style={{flex: 1, backgroundColor: T.bg}} contentContainerStyle={{padding: 16, paddingBottom: 120}} bottomOffset={24}>
++    <KeyboardAwareScrollView style={{flex: 1, backgroundColor: T.canvas}} contentContainerStyle={{padding: 16, paddingBottom: 120}} bottomOffset={24}>
+       {header}
+       <GroupBrowser
+         groups={groups}
+diff --git a/src/screens/systemManager/GroupTreeEditor.tsx b/src/screens/systemManager/GroupTreeEditor.tsx
+index 8117d5d..3588ebf 100644
+--- a/src/screens/systemManager/GroupTreeEditor.tsx
++++ b/src/screens/systemManager/GroupTreeEditor.tsx
+@@ -242,7 +242,7 @@ export const GroupTreeEditor = ({header, onBrowse}: {header?: React.ReactNode; o
+   const noSelection = selectedIds.length === 0;
+ 
+   return (
+-    <KeyboardAwareScrollView style={{flex: 1, backgroundColor: T.bg}} contentContainerStyle={{padding: 16, paddingBottom: 120}} keyboardShouldPersistTaps="handled" scrollEnabled={!dragging} bottomOffset={24}>
++    <KeyboardAwareScrollView style={{flex: 1, backgroundColor: T.canvas}} contentContainerStyle={{padding: 16, paddingBottom: 120}} keyboardShouldPersistTaps="handled" scrollEnabled={!dragging} bottomOffset={24}>
+       {header}
+       <Text style={{fontSize: fs(11), color: T.dim, marginBottom: 14, lineHeight: fs(18)}}>{t('systemManager.desc')}</Text>
+       <View style={{flexDirection: 'row', marginBottom: 12}}>
+diff --git a/src/store/actions.ts b/src/store/actions.ts
+index 0c69c65..f0c3aa1 100644
+--- a/src/store/actions.ts
++++ b/src/store/actions.ts
+@@ -12,6 +12,8 @@ import {migrateInlineChatMedia, rebaseChatMessageMedia} from '../utils/mediaMigr
+ import {reschedulePlannerNotifications} from '../services/reminders';
+ import {mailCountsFor} from '../mailbox/mailbox';
+ import {useAppStore} from './appStore';
++import {commitAppSettings} from './settings';
++import {removeBackgroundImage, saveBackgroundImageFromUri} from '../utils/backgroundImage';
+ 
+ export const loadChatMessages = async (channels: ChatChannel[]) => {
+   const {setAllChatMessages} = useAppStore.getState();
+@@ -120,11 +122,8 @@ export const savePlanner = async (d: PlannerData) => {
+ };
+ 
+ export const selectPalette = async (id: string) => {
+-  const {appSettings, setActivePaletteId, setAppSettings} = useAppStore.getState();
+-  setActivePaletteId(id);
+-  const updated = {...appSettings, activePaletteId: id, lightMode: id === LIGHT_PALETTE.id};
+-  setAppSettings(updated);
+-  await store.set(KEYS.settings, updated);
++  await commitAppSettings(current => ({...current, activePaletteId: id, lightMode: id === LIGHT_PALETTE.id}));
++  useAppStore.getState().setActivePaletteId(id);
+   await store.set(KEYS.lightMode, id === LIGHT_PALETTE.id);
+ };
+ 
+@@ -304,16 +303,32 @@ export const addJournalEntry = async (e: JournalEntry) => {
+ };
+ 
+ export const saveAppSettings = async (d: AppSettings) => {
+-  const {appSettings, setAppSettings} = useAppStore.getState();
++  const {appSettings} = useAppStore.getState();
+   const gpsJustEnabled = d.gpsEnabled && !appSettings.gpsEnabled;
+   const filesJustEnabled = d.filesEnabled && !appSettings.filesEnabled;
+-  setAppSettings(d);
+-  await store.set(KEYS.settings, d);
++  // The background is saved independently, like the palette controls. A settings
++  // draft opened before an image change must not restore a deleted filename.
++  await commitAppSettings(current => ({...d, backgroundImage: current.backgroundImage}));
+   if (d.language) { changeLanguage(d.language); await store.set(KEYS.language, d.language); }
+   if (gpsJustEnabled) { await requestGPSPermission(); }
+   if (filesJustEnabled) { await requestFilesPermission(); }
+ };
+ 
++export const changeBackgroundImage = async (sourceUri?: string) => {
++  const next = sourceUri ? await saveBackgroundImageFromUri(sourceUri) : undefined;
++  let previous: string | undefined;
++  try {
++    await commitAppSettings(current => {
++      previous = current.backgroundImage;
++      return {...current, backgroundImage: next};
++    });
++  } catch (e) {
++    await removeBackgroundImage(next);
++    throw e;
++  }
++  await removeBackgroundImage(previous);
++};
++
+ const resolveSelfMember = async (selfMemberId: string | undefined): Promise<Member> => {
+   const {members, system} = useAppStore.getState();
+   const existing = findSelfMember(members, selfMemberId);
+@@ -358,10 +373,8 @@ export const applyFrontState = async (f: FrontState | null, since?: number) => {
+   await store.set(KEYS.front, next);
+ };
+ 
+-const patchAppSettings = async (patch: Partial<AppSettings>) => {
+-  const {appSettings, setAppSettings} = useAppStore.getState();
+-  const next = {...appSettings, ...patch}; setAppSettings(next); await store.set(KEYS.settings, next);
+-};
++const patchAppSettings = (patch: Partial<AppSettings>) =>
++  commitAppSettings(current => ({...current, ...patch}));
+ 
+ export const saveMemberListFields = (next: NonNullable<AppSettings['memberListFields']>) => patchAppSettings({memberListFields: next});
+ 
+diff --git a/src/store/settings.ts b/src/store/settings.ts
+new file mode 100644
+index 0000000..a942c40
+--- /dev/null
++++ b/src/store/settings.ts
+@@ -0,0 +1,17 @@
++import type {AppSettings} from '../model/types';
++import {KEYS, store} from '../storage';
++import {useAppStore} from './appStore';
++
++let pending: Promise<void> = Promise.resolve();
++
++// Read live settings when each write starts, and publish only after it succeeds.
++// A failed save must neither delete the current image nor block later changes.
++export const commitAppSettings = (update: (current: AppSettings) => AppSettings): Promise<void> => {
++  const save = pending.then(async () => {
++    const next = update(useAppStore.getState().appSettings);
++    await store.set(KEYS.settings, next);
++    useAppStore.getState().setAppSettings(next);
++  });
++  pending = save.catch(() => {});
++  return save;
++};
+diff --git a/src/themeColors.ts b/src/themeColors.ts
+index ce21ac2..c27ca81 100644
+--- a/src/themeColors.ts
++++ b/src/themeColors.ts
+@@ -1,5 +1,6 @@
+ export interface ThemeColorSet {
+   bg: string;
++  canvas: string;
+   surface: string;
+   card: string;
+   border: string;
+@@ -107,6 +108,7 @@ export const deriveColors = (bg: string, accent: string, text: string, mid: stri
+   const opacity = isLight ? 0.15 : 0.12;
+   return {
+     bg,
++    canvas: bg,
+     surface: mix(bg, mid, isLight ? 0.04 : 0.08),
+     card: mix(bg, mid, isLight ? 0.07 : 0.14),
+     border: mix(bg, mid, isLight ? 0.12 : 0.20),
+@@ -133,6 +135,7 @@ export const profileColors = (base: Pick<ThemeColorSet, 'accent' | 'danger' | 's
+   const readable = (c: string, min: number) => ensureReadable(ensureReadable(c, surface, min), color, min);
+   return {
+     bg: color,
++    canvas: color,
+     surface,
+     card: color,
+     border: mix(color, ink, 0.3),
+diff --git a/src/utils/backgroundImage.ts b/src/utils/backgroundImage.ts
+new file mode 100644
+index 0000000..302f622
+--- /dev/null
++++ b/src/utils/backgroundImage.ts
+@@ -0,0 +1,25 @@
++import {BACKGROUND_DIR, downscaleOrCopy, ensureDir, removeIfExists} from './mediaFiles';
++
++export const backgroundImageUri = (filename?: string): string | undefined =>
++  typeof filename === 'string' && /^background-[a-z0-9-]+\.png$/.test(filename)
++    ? `file://${BACKGROUND_DIR}/${filename}`
++    : undefined;
++
++export const removeBackgroundImage = async (filename?: string): Promise<void> => {
++  const uri = backgroundImageUri(filename);
++  if (!uri) return;
++  await removeIfExists(uri.slice('file://'.length));
++};
++
++export const saveBackgroundImageFromUri = async (sourceUri: string): Promise<string> => {
++  if (!sourceUri.startsWith('file://') && !sourceUri.startsWith('content://')) throw new Error('Invalid background image');
++  await ensureDir(BACKGROUND_DIR);
++  const filename = `background-${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
++  try {
++    await downscaleOrCopy(sourceUri, `${BACKGROUND_DIR}/${filename}`, 1920);
++    return filename;
++  } catch (e) {
++    await removeBackgroundImage(filename);
++    throw e;
++  }
++};
+diff --git a/src/utils/mediaFiles.ts b/src/utils/mediaFiles.ts
+index 673fe9a..cd4cad0 100644
+--- a/src/utils/mediaFiles.ts
++++ b/src/utils/mediaFiles.ts
+@@ -12,6 +12,8 @@ export const BIO_IMAGE_DIR = `${DOCUMENT_DIR}/ps_bio_images`;
+ export const CHAT_MEDIA_DIR = `${DOCUMENT_DIR}/ps_chat_media`;
+ export const MIRROR_GIF_DIR = `${DOCUMENT_DIR}/ps_mirror_gifs`;
+ 
++export const BACKGROUND_DIR = `${DOCUMENT_DIR}/ps_backgrounds`;
++
+ export const AVATAR_MAX = 256;
+ 
+ type ImageExt = 'jpg' | 'png' | 'gif' | 'webp';
+@@ -84,11 +86,11 @@ export const writeBase64 = async (dir: string, name: string, data: string): Prom
+ export const safeExt = (ext: string): string => ext.replace(/[^a-zA-Z0-9]/g, '') || 'bin';
+ 
+ export const downscaleOrCopy = async (sourceUri: string, destPath: string, max = AVATAR_MAX): Promise<string> => {
+-  const readPath = filePathOf(sourceUri);
++  const readPath = sourceUri.startsWith('content://') ? sourceUri : filePathOf(sourceUri);
+   let bytes = await fs.readFile(readPath, 'base64');
+   if (sniffImageExt(bytes) !== 'gif') {
+     try {
+-      const resized = await ImageResizer.createResizedImage(`file://${readPath}`, max, max, 'PNG', 100, 0);
++      const resized = await ImageResizer.createResizedImage(readPath.startsWith('content://') ? readPath : `file://${readPath}`, max, max, 'PNG', 100, 0);
+       const resizedPath = filePathOf(resized.uri);
+       bytes = await fs.readFile(resizedPath, 'base64');
+       await removeIfExists(resizedPath);
+@@ -101,5 +103,5 @@ export const downscaleOrCopy = async (sourceUri: string, destPath: string, max =
+ };
+ 
+ export const clearAllMedia = async (): Promise<void> => {
+-  for (const dir of [AVATAR_DIR, AVATAR_FULL_DIR, CHAT_MEDIA_DIR, BIO_IMAGE_DIR, BANNER_DIR, MIRROR_GIF_DIR]) await removeIfExists(dir);
++  for (const dir of [AVATAR_DIR, AVATAR_FULL_DIR, CHAT_MEDIA_DIR, BIO_IMAGE_DIR, BANNER_DIR, MIRROR_GIF_DIR, BACKGROUND_DIR]) await removeIfExists(dir);
+ };
+diff --git a/src/utils/mediaUtils.ts b/src/utils/mediaUtils.ts
+index 826e075..5a34f39 100644
+--- a/src/utils/mediaUtils.ts
++++ b/src/utils/mediaUtils.ts
+@@ -195,4 +195,3 @@ export const saveAvatarFromUri = async (memberId: string, sourceUri: string): Pr
+   }
+   return downscaleOrCopy(sourceUri, `${AVATAR_DIR}/${memberId}.png`);
+ };
+-

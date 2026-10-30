@@ -1,0 +1,10 @@
+.gradle/
+**/build/
+local.properties
+.work/
+app/src/main/assets/payloads/
+*.apk
+*.jks
+*.keystore
+node_modules/
+__pycache__/

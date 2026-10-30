@@ -1,0 +1,29 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'dev.sparklecat.pluralmods'
+    compileSdk 36
+    buildToolsVersion '36.0.0'
+    defaultConfig {
+        applicationId 'dev.sparklecat.pluralmods'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '0.1.0'
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildTypes { release { minifyEnabled false } }
+    lint { abortOnError true }
+}
+dependencies {
+    implementation 'com.android.tools.build:apksig:8.12.0'
+    testImplementation 'junit:junit:4.13.2'
+}
+tasks.register('verifyPayloads') {
+    doLast {
+        ['wallpaper', 'storage', 'wallpaper-storage'].each {
+            if (!file("src/main/assets/payloads/${it}.bundle").exists())
+                throw new GradleException('Missing mod payloads. Run python3 scripts/build-payloads.py first.')
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn 'verifyPayloads' }

@@ -1,0 +1,4 @@
+* text=auto
+*.bat text eol=crlf
+*.patch whitespace=-blank-at-eol
+*.jar binary
