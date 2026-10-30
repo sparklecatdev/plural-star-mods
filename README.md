@@ -1,8 +1,22 @@
+<div align="center">
+
+<img src=".github/assets/logo.svg" width="112" height="112" alt="Lilac cat with a gold sparkle, the app logo" />
+
 # sparklecat's plural star mods
+
+**Custom features and community additions for Plural Star on Android.**
+
+[Download the patcher](https://github.com/sparklecatdev/plural-star-mods/releases) · [Suggest a feature](https://github.com/sparklecatdev/plural-star-mods/issues/new) · [AGPL-3.0](LICENSE)
+
+</div>
 
 An Android patcher with offline APK patching for [ByHanyou/Plural-Star](https://github.com/ByHanyou/Plural-Star), with wallpaper backgrounds, an encrypted app storage saver/restorer, and optional PluralKit front sync.
 
+Alongside custom features, this project includes adaptations of features that were rejected or have not been added to the official app, such as PluralKit front sync from the closed PR linked below.
+
 The repository is **plural-star-mods**. The Android launcher name is **sparklecat's plural star mods**.
+
+> **Unofficial project:** this project is not officially supported or endorsed by the Plural Star team. Please do not contact them about issues related to these mods or the patcher. Report those issues [here](https://github.com/sparklecatdev/plural-star-mods/issues). We will comply with any takedown requests from the Plural Star team.
 
 ## Features
 
@@ -17,6 +31,10 @@ The repository is **plural-star-mods**. The Android launcher name is **sparkleca
 - **Independent patch updates:** a themed notice at app startup opens the patcher, which downloads verified compatible patches and rebuilds the installed app. Patch releases do not require a new patcher release. The patcher also has its own APK updater.
 - **Mod sync:** mod preferences and patch versions travel with the existing cloud save and linked-device sync. Preferences restore automatically; the patcher installs patch updates.
 - **No root or account required.** Included patches work offline; app downloads and update checks use GitHub over HTTPS. The patched Plural Star retains its original networking behavior.
+
+## Suggestions
+
+Have a feature in mind? Message **sparklecatdev** directly or [open a GitHub issue](https://github.com/sparklecatdev/plural-star-mods/issues/new). Suggestions for custom features and features missing from the official app are welcome.
 
 ## Supported versions
 
@@ -140,4 +158,4 @@ The release workflow accepts a successful main CI run, a matching draft release,
 
 Plural Star by TheHanyou, SPARKLECATDEV, and contributors. PluralKit front sync adapted from [PR #11](https://github.com/ByHanyou/Plural-Star/pull/11) at `c1bd5e2f7a5fbb7934733e331154307948424cb0` for the current store and Settings architecture; the full adaptation is in `payload/pluralkit-pr-11.patch` and `payload/mods/pluralKit*`. Wallpaper adapted from sparklecatdev's PR #24 at `72aa97e443a313016d07c9dfec4f09a06edea304`, applied as a feature diff onto the pinned release so newer release fixes remain present.
 
-This project and its upstream-derived payloads are licensed under **AGPL-3.0**; see [LICENSE](LICENSE). Independent modification project; it does not use the original publisher's signing key. Android apksig is provided under Apache-2.0; React Native and other payload dependencies retain their respective licenses in the upstream source and npm packages.
+This project and its upstream-derived payloads are licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**; see [LICENSE](LICENSE). Independent modification project; it does not use the original publisher's signing key. Android apksig is provided under Apache-2.0; React Native and other payload dependencies retain their respective licenses in the upstream source and npm packages.
