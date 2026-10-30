@@ -15,6 +15,7 @@ The repository is **plural-star-mods**. The Android launcher name is **sparkleca
 - **PluralKit front sync:** opt in under Settings → sparklecat's mods and enter your PluralKit token to mirror primary front changes using imported PluralKit member IDs. Adapted from the closed [PR #11](https://github.com/ByHanyou/Plural-Star/pull/11).
 - **Offline source access:** save the complete patcher source ZIP from inside the patcher, including the pinned wallpaper patch and payload build scripts.
 - **Independent patch updates:** check and download patches inside Plural Star under Settings → sparklecat's mods. Verified patches apply on a full restart, with rollback if a new patch cannot start. The patcher has its own APK updater.
+- **Mod sync:** mod preferences and patch versions travel with the existing cloud save and linked-device sync. A patched installation can restore compatible patches automatically.
 - **No root or account required.** Patching works offline; app downloads and optional update checks use GitHub over HTTPS. The patched Plural Star retains its original networking behavior.
 
 ## Supported versions
@@ -56,6 +57,14 @@ With automatic updates disabled, choose **Download and install update** in the p
 
 Use the patcher to create the app or rebuild it for native changes. Choose **Update installed mods** to rebuild from the cached original APK and open Android's installer. If the original APK is missing, download a fresh copy first. Keep the patcher installed and retain its app data so its per-device signing key stays available for future APK rebuilds.
 
+## Mod sync
+
+Connect Plural Star's existing cloud storage or linked-device sync. Mod switches, PluralKit front sync, update preferences, and installed patch versions are saved with your app data. Controls are under **Settings → sparklecat's mods → Mod sync**.
+
+After restoring your save on a patched installation, preferences apply automatically. Newer compatible saved patches download through the verified release updater and apply on the next full app start. Offline restores retry when you reopen the app; use **Restore mod preferences and patches** to retry manually, including when automatic patch restore is disabled.
+
+The save contains preferences and release identifiers, never executable code or download URLs. Each device still needs a patched APK installed once; an official unpatched app cannot load mods from a save. Wallpaper image files are not synced by this feature. Native changes still require a rebuilt APK.
+
 ## PluralKit front sync
 
 Import your PluralKit members, then open Plural Star **Settings → sparklecat's mods**, enable **PluralKit Front Sync**, and paste your system token (get it with `pk;token`). Changes save automatically. Sync is off by default. Subsequent primary front changes send the imported members' PluralKit IDs to your system; co-front and co-conscious tiers are excluded. An empty or entirely unmapped primary front sends a switch-out. Rapid changes are coalesced with a five-second cooldown; failed requests do not interrupt local saves and are retried on a subsequent front change. The [PluralKit API](https://pluralkit.me/api/endpoints/#create-switch) supports five- and six-character IDs and UUIDs.
@@ -75,7 +84,7 @@ ps_avatars       ps_avatars_full   ps_banners      ps_bio_images
 ps_chat_media    ps_mirror_gifs    ps_backgrounds  ps_backup
 ```
 
-Cache, Android permissions, system notification schedules, local mod switch preferences, and files outside these managed directories are excluded. Notification schedules are managed by the app after startup; confirm reminders after moving devices. Snapshots support **32 MiB of encoded payload** and up to 10,000 media files; use Plural Star's standard export for larger libraries. If data or media change during saving, the operation asks you to retry.
+Cache, Android permissions, system notification schedules, and files outside these managed directories are excluded. Device-local mod preference files are excluded; the mod sync record carries those choices and restores them after startup. Notification schedules are managed by the app after startup; confirm reminders after moving devices. Snapshots support **32 MiB of encoded payload** and up to 10,000 media files; use Plural Star's standard export for larger libraries. If data or media change during saving, the operation asks you to retry.
 
 Format v1 uses scrypt (`N=32768, r=8, p=1`, 16-byte random salt) and XSalsa20-Poly1305 secretbox (32-byte key, 24-byte random nonce). Ciphertext is authenticated before any restore writes. Paths, storage keys, format, and size are validated. Media is staged and old directories/records are retained in a private recovery journal until commit. An interrupted restore is rolled back before opening Plural Star. Device-local media paths are rebased during restore.
 

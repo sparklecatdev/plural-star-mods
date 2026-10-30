@@ -26,6 +26,30 @@ function load(name, imports = {}, generated = false) {
 const theme = {bg: '#14101F', text: '#ffffff', surface: '#241b33', accent: '#e5b5ff', dim: '#c5b9d4', muted: '#9889a8', danger: '#ffb4c8', border: '#51465e'};
 const host = name => ({children, ...props}) => React.createElement(name, props, children);
 
+test('mod sync controls support manual restore and show failures inside the mod settings', async () => {
+  const calls = [];
+  const state = {ready: true, automaticRestore: false, restoring: false, error: 'Restore failed', message: ''};
+  const {CloudModSettings} = load('CloudModSettings.tsx', {
+    'react-native': {View: 'View'}, '../components/AppText': {Text: 'Text'},
+    '../components/controls': {ToggleRow: host('Toggle'), Btn: host('Button')},
+    '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n},
+    './cloudMods': {useCloudMods: () => state, cloudMods: {
+      sync: async force => { calls.push(['restore', force]); },
+      setAutomaticRestore: async value => { calls.push(['automatic', value]); },
+    }},
+  });
+  let renderer;
+  await act(async () => { renderer = create(React.createElement(CloudModSettings, {disabled: false})); });
+  assert.equal(renderer.root.findByProps({accessibilityRole: 'alert'}).props.children, 'Restore failed');
+  await act(async () => renderer.root.findByType('Button').props.onPress());
+  await act(async () => renderer.root.findByType('Toggle').props.onToggle());
+  assert.deepEqual(calls, [['restore', true], ['automatic', true]]);
+  await act(async () => renderer.update(React.createElement(CloudModSettings, {disabled: true})));
+  assert.equal(renderer.root.findByType('Button').props.disabled, true);
+  assert.equal(renderer.root.findByType('Toggle').props.disabled, true);
+  await act(async () => renderer.unmount());
+});
+
 function pluralKitHarness(save) {
   let settings = {language: 'en', pkToken: 'secret'};
   const listeners = new Set();
@@ -171,6 +195,7 @@ test('Settings opens the mod menu; both switches persist and hide disabled contr
     './WallpaperControls': {WallpaperControls: host('WallpaperControls')}, './BackupTools': {BackupTools: host('BackupTools')},
     './UpdateEntry': {UpdateEntry: host('UpdateEntry')},
     './PluralKitSettings': {PluralKitSettings: host('PluralKitSettings')},
+    './CloudModSettings': {CloudModSettings: host('CloudModSettings')},
   });
   let renderer;
   await act(async () => { renderer = create(React.createElement(ModSettingsButton)); });

@@ -2,8 +2,7 @@ export type ModId = 'wallpaper' | 'storage';
 export type ModPreferences = Record<ModId, boolean>;
 export const MOD_PREFERENCES_KEY = 'sparklecat:mods';
 
-// Separate from app settings so ordinary settings drafts and imported backups
-// cannot switch a mod back on. Disabled mods keep their saved data.
+// Separate from ordinary settings drafts. Cloud restore applies these explicitly.
 export function createModPreferences(available: ModPreferences, io: {
   read(): Promise<string | null>; write(value: string): Promise<unknown>;
   beforeDisable?(id: ModId): Promise<unknown>;
@@ -21,17 +20,22 @@ export function createModPreferences(available: ModPreferences, io: {
       storage: available.storage && saved?.storage !== false,
     });
   }).catch(error => { loaded = undefined; throw error; });
-  const setEnabled = (id: ModId, enabled: boolean): Promise<void> => {
+  const setPreferences = (values: Partial<ModPreferences>): Promise<void> => {
     const save = pending.then(async () => {
       await load();
-      const next = {...state, [id]: available[id] && enabled};
-      if (!next[id]) await io.beforeDisable?.(id);
+      const next = {...state};
+      for (const id of ['wallpaper', 'storage'] as ModId[]) {
+        if (typeof values[id] !== 'boolean') continue;
+        next[id] = available[id] && values[id]!;
+        if (!next[id]) await io.beforeDisable?.(id);
+      }
       await io.write(JSON.stringify(next));
       publish(next);
     });
     pending = save.catch(() => {});
     return save;
   };
-  return {getSnapshot: () => state, load, setEnabled,
+  const setEnabled = (id: ModId, enabled: boolean) => setPreferences({[id]: enabled});
+  return {getSnapshot: () => state, load, setEnabled, setPreferences,
     subscribe: (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; }};
 }

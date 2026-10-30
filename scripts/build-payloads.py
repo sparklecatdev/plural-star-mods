@@ -76,6 +76,13 @@ def main():
         else:
             (SOURCE / 'src/mods/WallpaperControls.tsx').write_text('export const WallpaperControls = () => null;\n')
         settings.write_text(settings_text)
+        app = SOURCE / 'App.tsx'
+        app_text = app.read_text()
+        app_text = "import {useModCloudSync} from './src/mods/cloudMods';\n" + app_text
+        target = '  useBackToFront(locked, loaded);'
+        assert app_text.count(target) == 1
+        app_text = app_text.replace(target, target + '\n  useModCloudSync(loaded && !firstRun && !locked);')
+        app.write_text(app_text)
         entry = SOURCE / 'index.js'
         text = entry.read_text()
         assert "import App from './App';" in text
@@ -92,6 +99,7 @@ def main():
             run('node', '--test', 'scripts/background-settings.test.js', 'scripts/restore-settings.test.js')
         run('node', str(ROOT / 'tests/storage.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/mods.test.cjs'), str(SOURCE))
+        run('node', str(ROOT / 'tests/cloud-mods.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/ui.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/updates.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/pluralkit.test.cjs'), str(SOURCE))
