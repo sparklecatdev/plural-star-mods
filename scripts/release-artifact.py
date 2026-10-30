@@ -82,7 +82,7 @@ def main():
         apk = args.apk or ROOT / 'app/build/outputs/apk/release/app-release-unsigned.apk'
         args.output.parent.mkdir(parents=True, exist_ok=True)
         command(sdk_tool('apksigner'), 'sign', '--ks', args.keystore, '--ks-key-alias', 'sparklecat-release',
-                '--ks-pass', 'file:' + str(args.password_file), '--key-pass', 'file:' + str(args.password_file),
+                '--ks-pass', 'file:' + str(args.password_file),
                 '--v1-signing-enabled', 'false', '--v2-signing-enabled', 'true', '--v3-signing-enabled', 'true',
                 '--out', args.output, apk)
         metadata = verify(args.output, source)
