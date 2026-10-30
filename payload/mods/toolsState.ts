@@ -1,5 +1,5 @@
-// Headless notification tasks do not mount the React root. They can recover
-// storage normally; callbacks pause once the foreground tools are mounted.
+// Headless notifications and foreground startup share one recovery gate.
+// Settings tools never restore over the running app; they queue a cold restore.
 let toolsOpen = false;
 let active = 0;
 const waiters: (() => void)[] = [];

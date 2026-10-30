@@ -7,6 +7,7 @@ import {scryptAsync} from '@noble/hashes/scrypt.js';
 import {encodeBase64, decodeBase64} from '../network/bytes';
 import {appKey, MAX_BYTES, MEDIA_DIRS, restorer, validateSnapshot} from './snapshotCore';
 import type {Snapshot} from './snapshotCore';
+import {createRestoreQueue} from './restoreQueue';
 const fs = Blob.fs;
 const docs = fs.dirs.DocumentDir;
 const kdf = (password: string, salt: Uint8Array) => scryptAsync(password, salt, {N: 32768, r: 8, p: 1, dkLen: 32, maxmem: 64 * 1024 * 1024});
@@ -20,9 +21,17 @@ export const recovery = restorer({
   writeMedia: (p, v) => fs.writeFile(p, v, 'base64'), move: fs.mv, remove: fs.unlink,
   keys: AsyncStorage.getAllKeys, get: AsyncStorage.getMany, set: AsyncStorage.setMany, removeKeys: AsyncStorage.removeMany,
 }, docs);
+export const restoreQueue = createRestoreQueue({
+  exists: fs.exists, read: p => fs.readFile(p, 'utf8'), write: (p, value) => fs.writeFile(p, value, 'utf8'),
+  move: fs.mv, remove: fs.unlink,
+}, docs, recovery);
 let startupRecovery: Promise<void> | undefined;
 // Share one recovery between the foreground root and headless notifications.
-export const recoverBeforeStart = (): Promise<void> => startupRecovery ??= recovery.recover();
+export const recoverBeforeStart = (): Promise<void> => startupRecovery ??= restoreQueue.apply();
+export const retryStoragePreparation = (): Promise<void> => {
+  startupRecovery = undefined;
+  return recoverBeforeStart();
+};
 
 export async function saveSnapshot(password: string): Promise<string> {
   if (password.length < 12) throw Error('Use a password with at least 12 characters.');
@@ -47,11 +56,20 @@ export async function saveSnapshot(password: string): Promise<string> {
   for (const dir of MEDIA_DIRS) if (await fs.exists(docs + '/' + dir)) await walk(dir);
   const s = validateSnapshot({format: 'sparklecat-storage', version: 1, created: new Date().toISOString(), documentDir: docs, records, files});
   const keysAfter = (await AsyncStorage.getAllKeys()).filter(appKey).sort();
-  if (JSON.stringify(keysAfter) !== JSON.stringify(keys) || JSON.stringify(await AsyncStorage.getMany(keys)) !== JSON.stringify(raw)) throw Error('Storage changed during backup. Close background activity and retry.');
-  for (const [name, mtime, size] of checks) {
-    const stat = await fs.stat(docs + '/' + name);
-    if (String(stat.lastModified) !== mtime || Number(stat.size) !== size) throw Error('Media changed during backup. Retry.');
-  }
+  const after = await AsyncStorage.getMany(keys);
+  if (JSON.stringify(keysAfter) !== JSON.stringify(keys) || keys.some(key => raw[key] !== after[key])) throw Error('App data changed while saving. Please try again.');
+  const currentFiles: [string, string, number][] = [];
+  const inspect = async (relative: string): Promise<void> => {
+    for (const entry of await fs.lstat(docs + '/' + relative)) {
+      const name = relative + '/' + entry.filename;
+      if (entry.type === 'directory') await inspect(name);
+      else if (entry.type === 'file') currentFiles.push([name, String(entry.lastModified), Number(entry.size)]);
+      else throw Error('Unsupported media file type.');
+    }
+  };
+  for (const dir of MEDIA_DIRS) if (await fs.exists(docs + '/' + dir)) await inspect(dir);
+  const sortFiles = (a: [string, string, number], b: [string, string, number]) => a[0].localeCompare(b[0]);
+  if (JSON.stringify(checks.sort(sortFiles)) !== JSON.stringify(currentFiles.sort(sortFiles))) throw Error('App media changed while saving. Please try again.');
   const salt = random(16), nonce = random(24);
   const plaintext = strToU8(JSON.stringify(s));
   if (plaintext.length > MAX_BYTES) throw Error('Encoded snapshot exceeds the 32 MiB limit. Use standard export.');

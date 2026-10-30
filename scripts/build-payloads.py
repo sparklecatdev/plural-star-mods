@@ -25,6 +25,7 @@ def main():
     run('git', 'reset', '--hard', COMMIT)
     if not (SOURCE / 'node_modules').exists():
         run('npm', 'ci', '--no-audit', '--no-fund')
+    run('npm', 'ci', '--no-audit', '--no-fund', cwd=ROOT / 'tests')
     destination = ROOT / 'app/src/main/assets/payloads'
     destination.mkdir(parents=True, exist_ok=True)
     variants = [args.variant] if args.variant else ['wallpaper', 'storage', 'wallpaper-storage']
@@ -38,6 +39,32 @@ def main():
             run('git', 'apply', str(ROOT / 'payload/wallpaper-pr-24.patch'))
         shutil.copytree(ROOT / 'payload/mods', SOURCE / 'src/mods', dirs_exist_ok=True)
         (SOURCE / 'src/mods/modOptions.ts').write_text('export const options = ' + json.dumps({'wallpaper': wallpaper, 'storage': storage}) + ';\n')
+        # Install the entry point into Settings for every payload combination.
+        settings = SOURCE / 'src/modals/SystemModal.tsx'
+        settings_text = settings.read_text()
+        settings_text = "import {ModSettingsButton} from '../mods/ModMenu';\n" + settings_text
+        sheet = 'footer={<Btn instant onPress={save}>{t(\'common.save\')}</Btn>}>'
+        assert settings_text.count(sheet) == 1
+        settings_text = settings_text.replace(sheet, sheet + '\n      <ModSettingsButton />')
+        if wallpaper:
+            settings_text = settings_text.replace("import {BackgroundSection} from './system/BackgroundSection';\n", '')
+            settings_text = settings_text.replace('      <BackgroundSection filename={settings.backgroundImage} onChange={onChangeBackground} />\n', '')
+            settings_text = settings_text.replace('onSelectPalette, onChangeBackground, onOpenProfile', 'onSelectPalette, onOpenProfile')
+            background = SOURCE / 'src/app/AppBackground.tsx'
+            background_text = background.read_text()
+            background_text = "import {useModPreferences} from '../mods/modPreferences';\n" + background_text
+            target = '  const filename = useAppStore(s => s.appSettings.backgroundImage);'
+            assert target in background_text
+            background_text = background_text.replace(target, '  const enabled = useModPreferences();\n  const selected = useAppStore(s => s.appSettings.backgroundImage);\n  const filename = enabled.wallpaper ? selected : undefined;')
+            background.write_text(background_text)
+            translations = SOURCE / 'src/i18n/en.json'
+            en = json.loads(translations.read_text())
+            en['modal']['backgroundImage'] = 'Wallpaper'
+            en['modal']['backgroundImageDesc'] = 'Choose a background that feels like you.'
+            translations.write_text(json.dumps(en, ensure_ascii=False, indent=2) + '\n')
+        else:
+            (SOURCE / 'src/mods/WallpaperControls.tsx').write_text('export const WallpaperControls = () => null;\n')
+        settings.write_text(settings_text)
         entry = SOURCE / 'index.js'
         text = entry.read_text()
         assert "import App from './App';" in text
@@ -53,6 +80,8 @@ def main():
         if wallpaper:
             run('node', '--test', 'scripts/background-settings.test.js', 'scripts/restore-settings.test.js')
         run('node', str(ROOT / 'tests/storage.test.cjs'), str(SOURCE))
+        run('node', str(ROOT / 'tests/mods.test.cjs'), str(SOURCE))
+        run('node', str(ROOT / 'tests/ui.test.cjs'), str(SOURCE))
         run('npx', '--no-install', 'react-native', 'bundle', '--platform', 'android', '--dev', 'false',
             '--entry-file', 'index.js', '--bundle-output', str(destination / (variant + '.bundle')),
             '--assets-dest', str(ROOT / '.work' / 'bundle-assets'), '--max-workers', '2', '--reset-cache')

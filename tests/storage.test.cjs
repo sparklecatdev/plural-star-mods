@@ -125,6 +125,7 @@ test('snapshot encryption round trip authenticates password and ciphertext befor
     }},
     '../network/bytes': {encodeBase64: b => Buffer.from(b).toString('base64'), decodeBase64: s => new Uint8Array(Buffer.from(s, 'base64'))},
     './snapshotCore': mod.exports,
+    './restoreQueue': {createRestoreQueue: () => ({apply: async () => {}})},
     // Normalize the options object's realm; noble intentionally rejects cross-realm plain objects.
     '@noble/hashes/scrypt.js': {scryptAsync: (password, salt, opts) => require(require.resolve('@noble/hashes/scrypt.js', {paths: [upstream]})).scryptAsync(password, salt, {...opts})},
   };

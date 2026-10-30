@@ -57,9 +57,9 @@ public final class MainActivity extends Activity {
         selected = text(first, source.exists() ? "Original APK selected" : "No APK selected", 13, ACCENT, false);
 
         LinearLayout mods = card("02", "Make it yours");
-        wallpaper = check(mods, "Wallpaper backgrounds", "Choose, replace, or remove a palette-tinted image in Settings. Adapted from upstream PR #24.", "wallpaper");
-        storage = check(mods, "Storage saver & restorer", "Password-encrypted snapshots of records, managed media, wallpaper, and identity. Restore before app sync starts.", "storage");
-        text(mods, "Storage tools appear when the patched app launches. Fully close and reopen it to return to the tools. Snapshots have a 32 MiB encoded-data limit.", 14, MUTED, false);
+        wallpaper = check(mods, "Include wallpaper", "Personalize your app background.", "wallpaper");
+        storage = check(mods, "Include storage tools", "Back up and restore your app data.", "storage");
+        text(mods, "Manage included features in Plural Star under Settings → sparklecat's mods. Turn them on or off whenever you like.", 14, MUTED, false);
 
         LinearLayout build = card("03", "Create your patched APK");
         patch = button(build, "✦  Patch APK", this::build);
@@ -77,8 +77,8 @@ public final class MainActivity extends Activity {
         button(data, "Open Plural Star", this::openPluralStar);
         button(content, "Save patcher source code", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE).setType("application/zip").putExtra(Intent.EXTRA_TITLE, "plural-star-mods-source.zip"), SAVE_SOURCE));
-        button(content, "Wallpaper PR #24 ↗", () -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ByHanyou/Plural-Star/pull/24"))));
-        text(content, "Independent mods · AGPL-3.0\nPlural Star by ByHanyou and contributors\nWallpaper feature from PR #24 by sparklecatdev", 12, MUTED, false);
+        button(content, "Plural Star project ↗", () -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ByHanyou/Plural-Star"))));
+        text(content, "Independent mods · AGPL-3.0\nPlural Star by ByHanyou and contributors", 12, MUTED, false);
         refresh();
     }
     private LinearLayout column() { LinearLayout l = new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); return l; }

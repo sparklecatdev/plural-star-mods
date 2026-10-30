@@ -3,9 +3,14 @@ on:
   workflow_dispatch:
     inputs:
       build_run_id:
-        description: 'Successful Android patcher run on main to publish as v0.1.0'
+        description: 'Successful Android patcher run on main to publish'
         required: true
         type: string
+      release_tag:
+        description: 'Draft release tag matching the checked app version'
+        required: true
+        type: string
+        default: v0.2.0
 permissions:
   contents: write
   actions: read
@@ -16,15 +21,17 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
       - name: Wait for checks and validate source
         id: build
         shell: bash
         run: |
           [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           gh run watch "$BUILD_RUN_ID" --exit-status --interval 30
           gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID" > "$RUNNER_TEMP/build.json"
-          gh release view v0.1.0 --json isDraft,targetCommitish > "$RUNNER_TEMP/release.json"
+          gh release view "$RELEASE_TAG" --json isDraft,targetCommitish > "$RUNNER_TEMP/release.json"
           python3 - <<'PY'
           import json, os, pathlib
           root = pathlib.Path(os.environ['RUNNER_TEMP'])
@@ -56,14 +63,21 @@ jobs:
         run: |
           mkdir dist
           gh run download "$BUILD_RUN_ID" --name sparklecat-plural-star-mods-debug --dir dist
-          mv dist/app-debug.apk dist/sparklecat-plural-star-mods-0.1.0-debug.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose dist/sparklecat-plural-star-mods-0.1.0-debug.apk
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 dist/sparklecat-plural-star-mods-0.1.0-debug.apk
-          git archive --format=zip --output=dist/plural-star-mods-0.1.0-source.zip HEAD
+          python3 - <<'PY'
+          import os, pathlib, re
+          version = re.search(r"versionName '([^']+)'", pathlib.Path('app/build.gradle').read_text()).group(1)
+          assert os.environ['RELEASE_TAG'] == 'v' + version, 'Release tag must match the checked app version'
+          PY
+          version="${RELEASE_TAG#v}"
+          mv dist/app-debug.apk "dist/sparklecat-plural-star-mods-$version-debug.apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "dist/sparklecat-plural-star-mods-$version-debug.apk"
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "dist/sparklecat-plural-star-mods-$version-debug.apk"
+          git archive --format=zip --output="dist/plural-star-mods-$version-source.zip" HEAD
       - name: Upload assets and publish development preview
         working-directory: dist
         shell: bash
         run: |
-          sha256sum sparklecat-plural-star-mods-0.1.0-debug.apk plural-star-mods-0.1.0-source.zip > SHA256SUMS
-          gh release upload v0.1.0 sparklecat-plural-star-mods-0.1.0-debug.apk plural-star-mods-0.1.0-source.zip SHA256SUMS --clobber
-          gh release edit v0.1.0 --draft=false --prerelease
+          version="${RELEASE_TAG#v}"
+          sha256sum "sparklecat-plural-star-mods-$version-debug.apk" "plural-star-mods-$version-source.zip" > SHA256SUMS
+          gh release upload "$RELEASE_TAG" "sparklecat-plural-star-mods-$version-debug.apk" "plural-star-mods-$version-source.zip" SHA256SUMS --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease
