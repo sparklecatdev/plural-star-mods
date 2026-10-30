@@ -78,10 +78,13 @@ def main():
         settings.write_text(settings_text)
         app = SOURCE / 'App.tsx'
         app_text = app.read_text()
-        app_text = "import {useModCloudSync} from './src/mods/cloudMods';\n" + app_text
+        app_text = "import {PatchUpdatePrompt} from './src/mods/PatchUpdatePrompt';\nimport {useModCloudSync} from './src/mods/cloudMods';\n" + app_text
         target = '  useBackToFront(locked, loaded);'
         assert app_text.count(target) == 1
         app_text = app_text.replace(target, target + '\n  useModCloudSync(loaded && !firstRun && !locked);')
+        target = '        <AppModals isSinglet={isSinglet} selfMember={selfMember} />'
+        assert app_text.count(target) == 1
+        app_text = app_text.replace(target, target + '\n        <PatchUpdatePrompt enabled={loaded && !firstRun && !locked} />')
         app.write_text(app_text)
         entry = SOURCE / 'index.js'
         text = entry.read_text()

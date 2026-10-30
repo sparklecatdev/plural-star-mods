@@ -10,17 +10,17 @@ The repository is **plural-star-mods**. The Android launcher name is **sparkleca
 - **Storage tools:** save and restore password-protected backups of your app data and local media.
 - **Settings mod menu:** open **Settings → sparklecat's mods** to enable or disable included features. Switches save automatically; turning wallpaper off keeps the selected image, and turning storage tools off cancels a pending restore.
 - **Quick launch:** a short sparkle animation leads straight into Plural Star. Reduced-motion settings are respected. There is no mod menu or extra button to press on boot.
-- **Real APK patching:** verify the official APK, install the mod bundle and patch update loader, align stored ZIP entries, sign with a persistent device key, verify the generated signature, then save or install the result.
+- **Real APK patching:** verify the official APK, install the mod bundle and compatibility loader, align stored ZIP entries, sign with a persistent device key, verify the generated signature, then save or install the result.
 - **All patches included:** every patched APK includes wallpaper, storage tools, and PluralKit front sync. Enable features in Settings.
 - **PluralKit front sync:** opt in under Settings → sparklecat's mods and enter your PluralKit token to mirror primary front changes using imported PluralKit member IDs. Adapted from the closed [PR #11](https://github.com/ByHanyou/Plural-Star/pull/11).
 - **Offline source access:** save the complete patcher source ZIP from inside the patcher, including the pinned wallpaper patch and payload build scripts.
-- **Independent patch updates:** check and download patches inside Plural Star under Settings → sparklecat's mods. Verified patches apply on a full restart, with rollback if a new patch cannot start. The patcher has its own APK updater.
-- **Mod sync:** mod preferences and patch versions travel with the existing cloud save and linked-device sync. A patched installation can restore compatible patches automatically.
-- **No root or account required.** Patching works offline; app downloads and optional update checks use GitHub over HTTPS. The patched Plural Star retains its original networking behavior.
+- **Independent patch updates:** a themed notice at app startup opens the patcher, which downloads verified compatible patches and rebuilds the installed app. Patch releases do not require a new patcher release. The patcher also has its own APK updater.
+- **Mod sync:** mod preferences and patch versions travel with the existing cloud save and linked-device sync. Preferences restore automatically; the patcher installs patch updates.
+- **No root or account required.** Included patches work offline; app downloads and update checks use GitHub over HTTPS. The patched Plural Star retains its original networking behavior.
 
 ## Supported versions
 
-The patcher requires Android 8.0 or later. The patched app keeps the original package ID, minimum SDK, resources, permissions, version name, and version code. A small native loader is added to select verified patch bundles; other native classes are preserved.
+The patcher requires Android 8.0 or later. The patched app keeps the original package ID, minimum SDK, resources, permissions, version name, and version code. A small compatibility loader is added. Patcher-managed installations always use their embedded bundle, so old downloaded patches cannot override a new installation; other native classes are preserved.
 
 Only the original standalone **Plural Star 1.23.3** [`app-release.apk`](https://github.com/ByHanyou/Plural-Star/releases/tag/v1.23.3) is accepted:
 
@@ -35,7 +35,7 @@ Other versions, split APKs, and already patched APKs are deliberately rejected. 
 
 1. In the official Plural Star app, export a complete backup with media. Verify the file is saved outside the app before uninstalling anything.
 2. In this patcher, tap **Download Plural Star**, choose an APK file, or use the installed official app. The download comes directly from the supported official release and must match its pinned SHA-256 before use.
-3. Tap **Prepare and install**. The patcher applies all mods and opens Android's installer. Grant install permission if prompted; installation continues when you return. You can also save the APK or install a previously prepared copy.
+3. Tap **Prepare and install**. The patcher checks for newer compatible patches, verifies the download, applies all mods, and opens Android's installer. Grant install permission if prompted; installation continues when you return. You can also save the APK or install a previously prepared copy.
 4. If the existing app uses a different signing key, the patcher offers shortcuts to Plural Star and Android app settings. After checking your backup, manually uninstall the existing app, return, and tap **Install prepared app**. The patcher never uninstalls apps automatically.
 5. Open Plural Star, complete setup if needed, then use its standard Import screen to import the official JSON/ZIP backup.
 
@@ -45,23 +45,23 @@ Android prevents a separate patcher from reading the official app's private stor
 
 ## Updates
 
-In Plural Star, open **Settings → sparklecat's mods**, tap **Check for updates**, then **Download patches**. The app downloads its own patches; updating or opening the patcher is unnecessary. Once ready, tap **Open app settings**, use Android's **Force stop**, and reopen Plural Star. A full restart is required because notification services can keep the process alive after swiping it away. Saved data stays in place.
+Plural Star checks for compatible patch releases at startup, at most once per day. When updates are available, a small popup in the patcher's purple/lilac theme offers **Open patcher** or **Later**. It waits until setup and the app lock are complete and appears at most once per launch. Update controls and downloads are managed by the patcher.
 
-Patch releases have their own version in `payload/release.json` and tags such as `patches-v0.4.2`. Only stable releases matching the installed native runtime and feature variant are accepted. GitHub's release API supplies the asset URL, exact byte size, and SHA-256 digest over HTTPS. The app checks size and SHA-256 before staging, and the native loader checks again before execution. A failed first launch restores the previous bundle (or the embedded bundle) on the next full start and skips that failed patch in future checks. Patch files are private and excluded from storage snapshots. Patches can change JavaScript and use already bundled resources/native modules; changes to native modules, Android permissions, or packaged assets need a newly created APK and a new runtime identifier.
+In the patcher, choose **Check for patch updates**, then **Update installed mods**. The patcher downloads the newest compatible stable patch, verifies its exact size and SHA-256 from GitHub's release metadata, rebuilds from the cached original APK using the existing device signing key, and opens Android's installer. Saved data stays in place. If the original APK is missing, download a fresh copy first. Offline checks offer the included patches only when this would not downgrade a previously prepared patch.
 
-Apps created with the older placeholder updater need one rebuild/install with patcher v0.5.0 or later to gain the native update loader. After that, compatible patch updates install directly inside Plural Star.
+Patch releases have their own version in `payload/release.json` and tags such as `patches-v0.4.3`. Only releases matching the native runtime and feature variant are accepted. JavaScript updates can ship independently of the patcher APK; native modules, permissions, or packaged asset changes require a new runtime and rebuilt patcher. Apps using the older direct downloader can receive the new notice as a compatible patch, then use patcher v0.5.1 or later to rebuild into a patcher-managed installation.
 
-The patcher has its own update card. Both apps can check once per day when opened; automatic checks can be disabled independently, and manual checks remain available. With **Update patcher automatically** enabled (the default), the patcher downloads and verifies new releases, then opens Android's installer while the patcher is visible. If patching is in progress or the patcher is in the background, installation waits for you to tap **Install downloaded update**. The patcher includes preview releases by default; turn that option off to check stable releases only. Patch releases do not appear as patcher updates.
+The patcher has its own update card. It can check once per day when opened; automatic patcher checks can be disabled, and manual checks remain available. With **Update patcher automatically** enabled (the default), the patcher downloads and verifies new releases, then opens Android's installer while the patcher is visible. If patching is in progress or the patcher is in the background, installation waits for you to tap **Install downloaded update**. The patcher includes preview releases by default; turn that option off to check stable releases only. Patch releases do not appear as patcher updates.
 
 With automatic updates disabled, choose **Download and install update** in the patcher. The updater downloads the APK and `SHA256SUMS` from this repository, checks the exact size and SHA-256, verifies the APK signature against the installed patcher's certificate, and requires the same package plus a newer version and version code. Downloads remain private until verified. Android asks for installation permission and confirmation; installation is never silent. Offline or rate-limited checks do not interrupt app launch or patching.
 
-Use the patcher to create the app or rebuild it for native changes. Choose **Update installed mods** to rebuild from the cached original APK and open Android's installer. If the original APK is missing, download a fresh copy first. Keep the patcher installed and retain its app data so its per-device signing key stays available for future APK rebuilds.
+Keep the patcher installed and retain its app data so its per-device signing key stays available for future updates.
 
 ## Mod sync
 
-Connect Plural Star's existing cloud storage or linked-device sync. Mod switches, PluralKit front sync, update preferences, and installed patch versions are saved with your app data. Controls are under **Settings → sparklecat's mods → Mod sync**.
+Connect Plural Star's existing cloud storage or linked-device sync. Mod switches, PluralKit front sync, and installed patch versions are saved with your app data. Controls are under **Settings → sparklecat's mods → Mod sync**.
 
-After restoring your save on a patched installation, preferences apply automatically. Newer compatible saved patches download through the verified release updater and apply on the next full app start. Offline restores retry when you reopen the app; use **Restore mod preferences and patches** to retry manually, including when automatic patch restore is disabled.
+After restoring your save on a patched installation, preferences apply automatically. A newer saved patch version directs you to the patcher to update that device. Use **Restore mod preferences** to retry preference restoration manually.
 
 The save contains preferences and release identifiers, never executable code or download URLs. Each device still needs a patched APK installed once; an official unpatched app cannot load mods from a save. Wallpaper image files are not synced by this feature. Native changes still require a rebuilt APK.
 
@@ -122,7 +122,7 @@ To run real-release signing tests as well:
 PLURAL_STAR_APK=/path/to/original/app-release.apk bash gradlew testDebugUnitTest
 ```
 
-These tests generate a temporary test key, patch all three bundles, verify their signatures, and compare every unchanged APK entry with the official original. Update tests cover compatibility, download verification, interrupted installs, and rollback after a failed launch. Storage tests cover interrupted restore recovery, queued cold restores, path/size validation, and password/tamper rejection. Component tests check automatic launch, reduced-motion behavior, app-lock protection, Settings navigation, feature switches, and wallpaper retention.
+These tests generate a temporary test key, patch all three bundles, verify their signatures, and compare every unchanged APK entry with the official original. Update tests cover compatible release selection, download verification, patcher-managed bundle selection, and legacy rollback after a failed launch. Storage tests cover interrupted restore recovery, queued cold restores, path/size validation, and password/tamper rejection. Component tests check automatic launch, reduced-motion behavior, app-lock protection, Settings navigation, feature switches, wallpaper retention, and the themed boot notice and patcher handoff.
 
 The included CI builds development APKs and unsigned release APKs. Distributed releases use a separate persistent publisher key; its public certificate SHA-256 is pinned in `release-signing.sha256`. Never replace that pin for an existing installation. The separate per-device key used to sign patched Plural Star APKs is generated on the phone.
 

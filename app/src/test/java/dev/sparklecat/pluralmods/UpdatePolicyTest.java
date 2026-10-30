@@ -51,6 +51,38 @@ public class UpdatePolicyTest {
         JSONObject duplicate = release("v0.4.0", false, false); duplicate.getJSONArray("assets").put(asset("v0.4.0", "SHA256SUMS", 200));
         for (JSONObject row : Arrays.asList(missing, oversized, duplicate)) assertNull(UpdatePolicy.select(new JSONArray().put(row).toString(), "0.3.0", true));
     }
+    private static final String RUNTIME = "plural-star-1.23.3-mods-1", VARIANT = "wallpaper-storage";
+    private JSONObject patchRelease(String version) throws Exception {
+        String tag = "patches-v" + version;
+        return new JSONObject().put("tag_name", tag).put("draft", false).put("prerelease", false)
+            .put("assets", new JSONArray().put(asset(tag, "patches-" + RUNTIME + "-" + VARIANT + "-" + version + ".bundle", 1000)
+                .put("digest", "sha256:" + String.join("", Collections.nCopies(64, "a")))));
+    }
+    @Test public void selectsNewestCompatibleStablePatchIndependentlyOfPatcherReleases() throws Exception {
+        JSONArray rows = new JSONArray().put(patchRelease("0.4.3")).put(release("v9.0.0", false, false))
+            .put(patchRelease("0.10.0")).put(patchRelease("0.5.0"))
+            .put(patchRelease("8.0.0").put("prerelease", true)).put(patchRelease("9.0.0").put("draft", true));
+        assertEquals("0.10.0", UpdatePolicy.selectPatch(rows.toString(), "0.4.2", RUNTIME, VARIANT).version.name);
+        assertNull(UpdatePolicy.selectPatch(rows.toString(), "1.0.0", RUNTIME, VARIANT));
+        assertNull(UpdatePolicy.selectPatch(rows.toString(), "0.4.2", RUNTIME, "storage"));
+        assertNull(UpdatePolicy.selectPatch(rows.toString(), "0.4.2", "other-runtime", VARIANT));
+        assertThrows(IOException.class, () -> UpdatePolicy.selectPatch("[]", "invalid", RUNTIME, VARIANT));
+        assertThrows(IOException.class, () -> UpdatePolicy.selectPatch("[]", "0.4.2", null, VARIANT));
+        assertThrows(IOException.class, () -> UpdatePolicy.selectPatch("[]", "0.4.2", RUNTIME, "unknown"));
+    }
+    @Test public void patchAssetsRequireExactUrlDigestSizeAndUniqueUploadedFile() throws Exception {
+        for (Object bad : Arrays.asList(0, -1, UpdatePolicy.MAX_PATCH + 1, 1.5, "1000")) {
+            JSONObject row = patchRelease("0.4.3"); row.getJSONArray("assets").getJSONObject(0).put("size", bad);
+            assertNull(UpdatePolicy.selectPatch(new JSONArray().put(row).toString(), "0.4.2", RUNTIME, VARIANT));
+        }
+        for (String field : Arrays.asList("digest", "state", "browser_download_url")) {
+            JSONObject row = patchRelease("0.4.3"); row.getJSONArray("assets").getJSONObject(0).put(field, "invalid");
+            assertNull(UpdatePolicy.selectPatch(new JSONArray().put(row).toString(), "0.4.2", RUNTIME, VARIANT));
+        }
+        JSONObject duplicate = patchRelease("0.4.3");
+        duplicate.getJSONArray("assets").put(duplicate.getJSONArray("assets").getJSONObject(0));
+        assertNull(UpdatePolicy.selectPatch(new JSONArray().put(duplicate).toString(), "0.4.2", RUNTIME, VARIANT));
+    }
     @Test public void checksumsMustBeUnambiguousAndMatchTheExactFilename() throws Exception {
         String hash = String.join("", Collections.nCopies(64, "a"));
         assertEquals(hash, UpdatePolicy.checksum(hash.toUpperCase(Locale.ROOT) + " *update.apk\r\n", "update.apk"));

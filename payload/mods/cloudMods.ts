@@ -6,8 +6,7 @@ import {useAppStore} from '../store/appStore';
 import {saveAppSettings} from '../store/actions';
 import {NetworkManager} from '../network/NetworkManager';
 import {modPreferences} from './modPreferences';
-import {updateChecker, patchInstaller} from './updateCheck';
-import {compareVersions} from './updateCheckCore';
+import {updateChecker} from './updateCheck';
 import {options, payloadVersion, patchRuntime, patchVariant} from './modOptions';
 import {CLOUD_MODS_KEY, createCloudMods} from './cloudModsCore';
 
@@ -17,26 +16,15 @@ export const cloudMods = createCloudMods({version: payloadVersion, runtime: patc
   write: text => store.setRaw(CLOUD_MODS_KEY, text),
   local: () => ({enabled: {...modPreferences.getSnapshot()},
     pkFrontSyncEnabled: useAppStore.getState().appSettings.pkFrontSyncEnabled === true,
-    automaticUpdates: updateChecker.getSnapshot().automatic}),
+    automaticUpdates: true}),
   apply: async settings => {
     await modPreferences.setPreferences(settings.enabled);
-    if (updateChecker.getSnapshot().automatic !== settings.automaticUpdates) await updateChecker.setAutomatic(settings.automaticUpdates);
     if ((useAppStore.getState().appSettings.pkFrontSyncEnabled === true) !== settings.pkFrontSyncEnabled) {
       await saveAppSettings({...useAppStore.getState().appSettings, pkFrontSyncEnabled: settings.pkFrontSyncEnabled});
     }
   },
-  restore: async target => {
-    await patchInstaller.load();
-    const ready = patchInstaller.getSnapshot().ready;
-    if (ready && compareVersions(ready, target.version) >= 0) return;
-    // Resolve identifiers through GitHub; cloud data never supplies executable URLs.
-    await updateChecker.check(true);
-    const {release, error} = updateChecker.getSnapshot();
-    if (error || !release || compareVersions(release.version, target.version) < 0) throw Error('Saved patch is unavailable.');
-    await patchInstaller.install(release);
-    const result = patchInstaller.getSnapshot();
-    if (result.error || !result.ready || compareVersions(result.ready, target.version) < 0) throw Error('Patch restore failed.');
-  },
+  // Cloud saves retain version identifiers; the patcher owns executable updates.
+  restore: async () => {},
 });
 
 export const useCloudMods = () => useSyncExternalStore(cloudMods.subscribe, cloudMods.getSnapshot, cloudMods.getSnapshot);

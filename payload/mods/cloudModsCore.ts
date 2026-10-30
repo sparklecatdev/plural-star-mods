@@ -67,11 +67,11 @@ export function createCloudMods(current: PatchTarget, available: ModPreferences,
       publish({message: 'Saved patches match this installation.'});
       return Promise.resolve();
     }
-    publish({restoring: true, error: '', message: `Restoring patch ${target.version}…`});
+    publish({restoring: true, error: '', message: `Checking saved patch ${target.version}…`});
     active = io.restore({...target}).then(() => {
-      publish({message: 'Patches downloaded. Fully restart Plural Star to apply them.'});
+      publish({message: 'A newer patch is saved. Open the patcher to update this installation.'});
     }).catch(() => {
-      publish({message: '', error: 'Could not restore saved patches. Check your connection and retry. A compatible patched APK may be needed.'});
+      publish({message: '', error: 'Could not check saved patches. Try restoring mod preferences again.'});
     }).finally(() => { active = undefined; publish({restoring: false}); });
     return active;
   };

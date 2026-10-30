@@ -6,5 +6,12 @@
         <item name="android:statusBarColor">#14101F</item>
         <item name="android:navigationBarColor">#14101F</item>
         <item name="android:windowBackground">#14101F</item>
+        <item name="android:alertDialogTheme">@style/ModDialogTheme</item>
+    </style>
+    <style name="ModDialogTheme" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">#241B33</item>
+        <item name="android:colorAccent">#E5B5FF</item>
+        <item name="android:textColorPrimary">#FFF6FF</item>
+        <item name="android:textColorSecondary">#C5B9D4</item>
     </style>
 </resources>

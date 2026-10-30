@@ -87,6 +87,7 @@ public class ApkPatcherTest {
                 }
                 assertArrayEquals(Files.readAllBytes(bundle.toPath()), after.getInputStream(after.getEntry(ApkPatcher.BUNDLE)).readAllBytes());
                 assertArrayEquals(Files.readAllBytes(nativeCode.toPath()), after.getInputStream(after.getEntry("classes2.dex")).readAllBytes());
+                assertArrayEquals(new byte[]{1}, after.getInputStream(after.getEntry(ApkPatcher.PATCHER_MANAGED)).readAllBytes());
             }
         }
     }

@@ -8,7 +8,7 @@ import org.json.*;
 
 public final class UpdatePolicy {
     public static final String REPO = "sparklecatdev/plural-star-mods";
-    public static final String API = "https://api.github.com/repos/" + REPO + "/releases?per_page=30";
+    public static final String API = "https://api.github.com/repos/" + REPO + "/releases?per_page=100";
     public static final String RELEASES = "https://github.com/" + REPO + "/releases";
     public static final long MAX_APK = 128L * 1024 * 1024;
     public static final class Release {
@@ -52,6 +52,50 @@ public final class UpdatePolicy {
             }
             if (duplicate || apk == null || sums == null || size < 1 || size > MAX_APK) continue;
             if (best == null || version.compareTo(best.version) > 0) best = new Release(version, tag, filename, apk, sums, size);
+        }
+        return best;
+    }
+    public static final long MAX_PATCH = 32L * 1024 * 1024;
+    public static final class PatchRelease {
+        public final ReleaseVersion version;
+        public final String url, sha256;
+        public final long bytes;
+        PatchRelease(ReleaseVersion version, String url, String sha256, long bytes) {
+            this.version = version; this.url = url; this.sha256 = sha256; this.bytes = bytes;
+        }
+    }
+    public static PatchRelease selectPatch(String json, String installed, String runtime, String variant) throws Exception {
+        ReleaseVersion current = ReleaseVersion.parse(installed);
+        if (current == null || runtime == null || !runtime.matches("[a-z0-9.-]{1,80}") ||
+            !Arrays.asList("wallpaper", "storage", "wallpaper-storage").contains(variant)) throw new IOException("Invalid patch compatibility information.");
+        JSONArray list = new JSONArray(json);
+        PatchRelease best = null;
+        for (int i = 0; i < list.length(); i++) {
+            JSONObject row = list.optJSONObject(i);
+            if (row == null || row.optBoolean("draft", true) || row.optBoolean("prerelease", false)) continue;
+            String tag = row.optString("tag_name", "");
+            if (!tag.matches("patches-v[0-9]+\\.[0-9]+\\.[0-9]+")) continue;
+            ReleaseVersion version = ReleaseVersion.parse(tag.substring(9));
+            if (version == null || version.compareTo(current) <= 0) continue;
+            String name = "patches-" + runtime + "-" + variant + "-" + version.name + ".bundle";
+            JSONArray assets = row.optJSONArray("assets");
+            if (assets == null) continue;
+            PatchRelease candidate = null;
+            int matches = 0;
+            for (int j = 0; j < assets.length(); j++) {
+                JSONObject asset = assets.optJSONObject(j);
+                if (asset == null || !name.equals(asset.optString("name", ""))) continue;
+                matches++;
+                String url = trustedAsset(asset.optString("browser_download_url", ""), tag, name);
+                String digest = asset.optString("digest", "");
+                Object size = asset.opt("size");
+                if (url == null || !"uploaded".equals(asset.optString("state", "")) ||
+                    !digest.matches("sha256:[0-9a-f]{64}") || !(size instanceof Number)) continue;
+                long bytes = ((Number) size).longValue();
+                if (((Number) size).doubleValue() != bytes || bytes < 1 || bytes > MAX_PATCH) continue;
+                candidate = new PatchRelease(version, url, digest.substring(7), bytes);
+            }
+            if (matches == 1 && candidate != null && (best == null || version.compareTo(best.version) > 0)) best = candidate;
         }
         return best;
     }

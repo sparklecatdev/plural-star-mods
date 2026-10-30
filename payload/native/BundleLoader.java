@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.util.Locale;
+import java.util.zip.ZipFile;
 import org.json.JSONObject;
 
 /** Private, version-locked OTA bundles. A failed launch falls back before JS starts. */
@@ -20,6 +21,12 @@ public final class BundleLoader {
         selected = true;
         File root = new File(context.getFilesDir(), "sparklecat-updates");
         try {
+            // Patcher-managed APKs always use their verified embedded payload.
+            // Old OTA files must never override a newly installed patch bundle.
+            String apk = context.getPackageCodePath();
+            if (apk != null) try (ZipFile zip = new ZipFile(apk)) {
+                if (zip.getEntry("assets/sparklecat-patcher-managed") != null) return null;
+            }
             if (!root.isDirectory() && !root.mkdirs()) return null;
             JSONObject attempt = read(root, "attempt.json");
             JSONObject healthy = read(root, "healthy.json");

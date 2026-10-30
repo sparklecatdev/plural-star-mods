@@ -77,6 +77,23 @@ public class BundleLoaderTest {
         JSONObject next = patch("0.4.2"); write("pending.json", next);
         coldStart(); assertEquals(path(next), BundleLoader.getBundleFile(context));
     }
+    @Test public void patcherManagedInstallAlwaysUsesItsEmbeddedBundle() throws Exception {
+        JSONObject active = patch("0.9.0"), pending = patch("1.0.0");
+        write("active.json", active); write("pending.json", pending);
+        File apk = temp.newFile("managed.apk");
+        try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(apk.toPath()))) {
+            zip.putNextEntry(new java.util.zip.ZipEntry("assets/sparklecat-patcher-managed"));
+            zip.write(1); zip.closeEntry();
+        }
+        context = new Context() {
+            public File getFilesDir() { return temp.getRoot(); }
+            public String getPackageCodePath() { return apk.getAbsolutePath(); }
+        };
+        assertNull(BundleLoader.getBundleFile(context));
+        assertFalse(new File(root, "attempt.json").exists());
+        assertEquals(active.toString(), Files.readString(new File(root, "active.json").toPath()));
+        assertEquals(pending.toString(), Files.readString(new File(root, "pending.json").toPath()));
+    }
     @Test public void newerEmbeddedAppIgnoresOlderDownloadedPatches() throws Exception {
         write("active.json", patch("0.3.9")); assertNull(BundleLoader.getBundleFile(context));
     }

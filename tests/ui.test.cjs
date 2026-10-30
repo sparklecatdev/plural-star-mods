@@ -31,22 +31,21 @@ test('mod sync controls support manual restore and show failures inside the mod 
   const state = {ready: true, automaticRestore: false, restoring: false, error: 'Restore failed', message: ''};
   const {CloudModSettings} = load('CloudModSettings.tsx', {
     'react-native': {View: 'View'}, '../components/AppText': {Text: 'Text'},
-    '../components/controls': {ToggleRow: host('Toggle'), Btn: host('Button')},
+    '../components/controls': {Btn: host('Button')},
     '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n},
     './cloudMods': {useCloudMods: () => state, cloudMods: {
       sync: async force => { calls.push(['restore', force]); },
-      setAutomaticRestore: async value => { calls.push(['automatic', value]); },
     }},
   });
   let renderer;
   await act(async () => { renderer = create(React.createElement(CloudModSettings, {disabled: false})); });
   assert.equal(renderer.root.findByProps({accessibilityRole: 'alert'}).props.children, 'Restore failed');
   await act(async () => renderer.root.findByType('Button').props.onPress());
-  await act(async () => renderer.root.findByType('Toggle').props.onToggle());
-  assert.deepEqual(calls, [['restore', true], ['automatic', true]]);
+  assert.equal(renderer.root.findAllByType('Toggle').length, 0);
+  assert.equal(renderer.root.findByType('Button').props.children, 'Restore mod preferences');
+  assert.deepEqual(calls, [['restore', true]]);
   await act(async () => renderer.update(React.createElement(CloudModSettings, {disabled: true})));
   assert.equal(renderer.root.findByType('Button').props.disabled, true);
-  assert.equal(renderer.root.findByType('Toggle').props.disabled, true);
   await act(async () => renderer.unmount());
 });
 
@@ -193,7 +192,6 @@ test('Settings opens the mod menu; both switches persist and hide disabled contr
     './modPreferences': {modPreferences: prefs, useModPreferences: () => React.useSyncExternalStore(prefs.subscribe, prefs.getSnapshot)},
     './modOptions': {options: {wallpaper: true, storage: true}},
     './WallpaperControls': {WallpaperControls: host('WallpaperControls')}, './BackupTools': {BackupTools: host('BackupTools')},
-    './UpdateEntry': {UpdateEntry: host('UpdateEntry')},
     './PluralKitSettings': {PluralKitSettings: host('PluralKitSettings')},
     './CloudModSettings': {CloudModSettings: host('CloudModSettings')},
   });
@@ -312,34 +310,58 @@ test('Settings restore confirms and queues the backup without restoring over the
   await act(async () => renderer.unmount());
 });
 
-test('update settings download patches directly and show cold restart instructions', async () => {
-  const calls = [], state = {automatic: true, available: '0.4.2', checking: false, error: ''};
-  const install = {busy: false, ready: null, error: null};
-  const {UpdateEntry} = load('UpdateEntry.tsx', {
-    'react-native': {View: 'View', Linking: {openSettings: async () => calls.push('settings')}}, '../components/AppText': {Text: 'Text'},
-    '../components/controls': {Btn: host('Button'), ToggleRow: host('Toggle')},
-    '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n},
-    './modOptions': {payloadVersion: '0.4.1'},
-    './updateCheck': {useUpdateCheck: () => state, usePatchInstall: () => install,
-      patchInstaller: {load: async () => {}}, installLatestPatch: async () => calls.push('download'),
-      updateChecker: {setAutomatic: async value => calls.push(value), check: async force => calls.push(['check', force])}},
+function promptHarness({foreground = 'active', fail = false} = {}) {
+  const calls = [], state = {available: '0.4.3', checking: false, error: ''};
+  let listener, removed = false;
+  const {PatchUpdatePrompt} = load('PatchUpdatePrompt.tsx', {
+    'react-native': {View: 'View', Text: 'Text', Modal: 'Modal', Pressable: 'Pressable',
+      AppState: {currentState: foreground, addEventListener: (_, callback) => {
+        listener = callback; return {remove: () => { removed = true; }};
+      }}, Linking: {openURL: async url => { calls.push(url); if (fail) throw Error('not installed'); }}},
+    './updateCheck': {useUpdateCheck: () => state},
   });
-  let renderer;
-  await act(async () => { renderer = create(React.createElement(UpdateEntry)); });
-  const button = label => renderer.root.findAllByType('Button').find(n => n.props.children === label);
-  assert.ok(renderer.root.findAllByType('Text').some(n => n.props.children === 'Patch 0.4.2 is available.'));
-  await act(async () => renderer.root.findByType('Toggle').props.onToggle());
-  await act(async () => button('Check for updates').props.onPress());
-  await act(async () => button('Download patches').props.onPress());
-  assert.deepEqual(calls, [false, ['check', true], 'download']);
-  install.busy = true;
-  await act(async () => renderer.update(React.createElement(UpdateEntry)));
-  assert.equal(button('Download patches').props.disabled, true);
-  install.busy = false; install.ready = '0.4.2';
-  await act(async () => renderer.update(React.createElement(UpdateEntry)));
-  assert.equal(button('Download patches'), undefined);
-  assert.ok(renderer.root.findAllByType('Text').some(n => String(n.props.children).includes('Force stop')));
-  await act(async () => button('Open app settings').props.onPress());
-  assert.equal(calls.at(-1), 'settings');
+  return {PatchUpdatePrompt, state, calls, foreground: value => listener(value), removed: () => removed};
+}
+
+test('boot notice waits for unlocked foreground, matches the patcher theme, and dismisses once', async () => {
+  const h = promptHarness({foreground: 'background'}); let renderer;
+  await act(async () => { renderer = create(React.createElement(h.PatchUpdatePrompt, {enabled: false})); });
+  assert.equal(renderer.root.findAllByType('Modal').length, 0);
+  await act(async () => renderer.update(React.createElement(h.PatchUpdatePrompt, {enabled: true})));
+  assert.equal(renderer.root.findAllByType('Modal').length, 0);
+  await act(async () => h.foreground('active'));
+  assert.equal(renderer.root.findByProps({accessibilityViewIsModal: true}).props.style.backgroundColor, '#241B33');
+  assert.equal(renderer.root.findByProps({accessibilityRole: 'header'}).props.style.color, '#E5B5FF');
+  assert.equal(renderer.root.findAllByType('Pressable')[0].props.style.backgroundColor, '#5C417D');
+  await act(async () => renderer.root.findAllByType('Pressable')[1].props.onPress());
+  h.state.available = '0.4.4';
+  await act(async () => renderer.update(React.createElement(h.PatchUpdatePrompt, {enabled: true})));
+  assert.equal(renderer.root.findAllByType('Modal').length, 0);
   await act(async () => renderer.unmount());
+  assert.equal(h.removed(), true);
+});
+
+test('boot notice opens the patcher and handles a missing patcher without downloading code', async () => {
+  for (const fail of [false, true]) {
+    const h = promptHarness({fail}); let renderer;
+    h.state.checking = true;
+    await act(async () => { renderer = create(React.createElement(h.PatchUpdatePrompt, {enabled: true})); });
+    assert.equal(renderer.root.findAllByType('Modal').length, 0);
+    h.state.checking = false; h.state.error = 'offline';
+    await act(async () => renderer.update(React.createElement(h.PatchUpdatePrompt, {enabled: true})));
+    assert.equal(renderer.root.findAllByType('Modal').length, 0);
+    h.state.error = ''; h.state.available = null;
+    await act(async () => renderer.update(React.createElement(h.PatchUpdatePrompt, {enabled: true})));
+    assert.equal(renderer.root.findAllByType('Modal').length, 0);
+    h.state.available = '0.4.3';
+    await act(async () => renderer.update(React.createElement(h.PatchUpdatePrompt, {enabled: true})));
+    await act(async () => renderer.root.findAllByType('Pressable')[0].props.onPress());
+    assert.deepEqual(h.calls, ['sparklecatmods://patches']);
+    if (fail) {
+      assert.match(renderer.root.findByProps({accessibilityRole: 'alert'}).props.children, /Could not open the patcher/);
+      await act(async () => renderer.root.findByType('Modal').props.onRequestClose());
+    }
+    assert.equal(renderer.root.findAllByType('Modal').length, 0);
+    await act(async () => renderer.unmount());
+  }
 });

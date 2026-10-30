@@ -33,7 +33,8 @@ public final class MainActivity extends Activity {
     private Button checkUpdate, downloadUpdate, installUpdate;
     private CheckBox automaticUpdates, previewUpdates;
     private ProgressBar updateProgress;
-    private LinearLayout updateCard;
+    private LinearLayout updateCard, patchCard;
+    private TextView patchStatus;
     private ScrollView mainScroll;
     private String downloadedVersion;
     private boolean updateBusy, resumed;
@@ -68,8 +69,11 @@ public final class MainActivity extends Activity {
         button(first, "Use installed Plural Star", this::useInstalled);
         selected = text(first, source.exists() ? "Plural Star is ready" : "Choose an option above to get started", 13, ACCENT, false);
 
-        LinearLayout build = card("02", "Install mods");
+        LinearLayout build = card("02", "Install and update mods");
+        patchCard = build;
         text(build, "Includes wallpaper, storage tools, and PluralKit front sync. Manage them in Settings → sparklecat's mods after installing.", 15, MUTED, false);
+        patchStatus = text(build, "New patches are fetched here without updating the patcher.", 14, ACCENT, false);
+        button(build, "Check for patch updates", this::checkPatchUpdates);
         patch = button(build, "Prepare and install", this::build);
         progress = new ProgressBar(this); progress.setVisibility(View.GONE); build.addView(progress);
         status = text(build, output.exists() ? "Your previous build is ready to install." : "Mods are applied on your device. Android will ask you to confirm installation.", 14, MUTED, false);
@@ -224,6 +228,10 @@ public final class MainActivity extends Activity {
     }
     private void handleUpdateLink(Intent intent) {
         Uri data = intent == null ? null : intent.getData();
+        if (data != null && "sparklecatmods".equals(data.getScheme()) && "patches".equals(data.getHost())) {
+            mainScroll.post(() -> mainScroll.smoothScrollTo(0, patchCard.getTop()));
+            checkPatchUpdates();
+        }
         if (data != null && "sparklecatmods".equals(data.getScheme()) && "updates".equals(data.getHost())) {
             mainScroll.post(() -> mainScroll.smoothScrollTo(0, updateCard.getTop()));
             checkForUpdates(true);
@@ -269,12 +277,62 @@ public final class MainActivity extends Activity {
             importApk(new FileInputStream(app.sourceDir));
         });
     }
-    private void build() {
-        work("Preparing mods…", () -> {
-            ApkPatcher.patch(source, output, () -> getAssets().open("payloads/wallpaper-storage.bundle"), () -> getAssets().open("payloads/wallpaper-storage.dex"), SigningIdentity.load(),
-                note -> runOnUiThread(() -> status.setText(note)));
-            getPreferences(0).edit().putInt("last_patch_version", BuildConfig.VERSION_CODE).apply();
-            updateUi(() -> patch.setText("Prepare and install"));
+    private org.json.JSONObject payloadInfo() throws Exception {
+        try (InputStream in = getAssets().open("payloads/provenance.json"); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            ApkPatcher.copy(in, out, 16384);
+            return new org.json.JSONObject(out.toString("UTF-8"));
+        }
+    }
+    private void checkPatchUpdates() {
+        work("Checking patches…", () -> {
+            org.json.JSONObject info = payloadInfo();
+            String embedded = info.getString("version");
+            String prepared = getPreferences(0).getString("prepared_patch", embedded);
+            boolean includedUpdate = ReleaseVersion.parse(embedded).compareTo(ReleaseVersion.parse(prepared)) > 0;
+            String current = includedUpdate ? embedded : prepared;
+            UpdatePolicy.PatchRelease release = updater.checkPatch(current, info.getString("runtime"), "wallpaper-storage");
+            updateUi(() -> {
+                patchStatus.setText(release != null || includedUpdate ? "Patches " + (release == null ? embedded : release.version.name) + " are available. Prepare and install to update." : "Patches " + current + " are up to date.");
+                if (release != null || includedUpdate) patch.setText("Update installed mods");
+                if (!source.exists()) status.setText("Get Plural Star above, then prepare and install the update.");
+            });
+        });
+    }
+    private void build() { build(false); }
+    private void build(boolean included) {
+        work("Checking patches…", () -> {
+            org.json.JSONObject info = payloadInfo();
+            String version = info.getString("version");
+            File downloaded = null;
+            if (!included) {
+                try {
+                    UpdatePolicy.PatchRelease release = updater.checkPatch(version, info.getString("runtime"), "wallpaper-storage");
+                    if (release != null) {
+                        downloaded = updater.downloadPatch(release, note -> updateUi(() -> status.setText(note)));
+                        version = release.version.name;
+                    }
+                } catch (Exception e) {
+                    String prepared = getPreferences(0).getString("prepared_patch", version);
+                    boolean safeFallback = ReleaseVersion.parse(version).compareTo(ReleaseVersion.parse(prepared)) >= 0;
+                    updateUi(() -> {
+                        AlertDialog.Builder dialog = new AlertDialog.Builder(this).setTitle("Patch check unavailable")
+                            .setMessage("Could not fetch the latest patches. " + (safeFallback ? "Retry when connected, or use the patches included in this patcher." : "Reconnect and try again to keep your newer patches."))
+                            .setNegativeButton("Cancel", null);
+                        if (safeFallback) dialog.setPositiveButton("Use included patches", (d, w) -> build(true));
+                        dialog.show();
+                    });
+                    throw e;
+                }
+            }
+            String previous = getPreferences(0).getString("prepared_patch", version);
+            if (ReleaseVersion.parse(version).compareTo(ReleaseVersion.parse(previous)) < 0)
+                throw new IOException("Newer patches were prepared before. Reconnect and try again to keep them.");
+            final File bundle = downloaded;
+            ApkPatcher.patch(source, output, () -> bundle == null ? getAssets().open("payloads/wallpaper-storage.bundle") : new FileInputStream(bundle),
+                () -> getAssets().open("payloads/wallpaper-storage.dex"), SigningIdentity.load(), note -> updateUi(() -> status.setText(note)));
+            getPreferences(0).edit().putInt("last_patch_version", BuildConfig.VERSION_CODE).putString("prepared_patch", version).apply();
+            final String prepared = version;
+            updateUi(() -> { patch.setText("Update installed mods"); patchStatus.setText("Prepared patches " + prepared + " · verified"); });
         }, this::install);
     }
     private void openPluralStar() {

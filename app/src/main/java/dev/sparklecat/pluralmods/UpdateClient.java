@@ -28,6 +28,31 @@ public final class UpdateClient {
     public UpdatePolicy.Release check(boolean previews) throws Exception {
         return UpdatePolicy.select(readText(UpdatePolicy.API, 1024 * 1024, true), BuildConfig.VERSION_NAME, previews);
     }
+    public UpdatePolicy.PatchRelease checkPatch(String version, String runtime, String variant) throws Exception {
+        return UpdatePolicy.selectPatch(readText(UpdatePolicy.API, 1024 * 1024, true), version, runtime, variant);
+    }
+    public File downloadPatch(UpdatePolicy.PatchRelease release, Progress progress) throws Exception {
+        File target = new File(context.getFilesDir(), "patch-" + release.sha256 + ".bundle");
+        if (target.isFile()) {
+            try { UpdateTrust.checkDownload(target, release.bytes, release.sha256); return target; }
+            catch (IOException invalid) { if (!target.delete()) throw invalid; }
+        }
+        File temporary = new File(context.getFilesDir(), "patch-download.part");
+        try {
+            progress.update("Downloading patches " + release.version.name + "…");
+            HttpsURLConnection connection = connect(release.url, false);
+            try (InputStream in = connection.getInputStream(); OutputStream out = new FileOutputStream(temporary)) {
+                ApkPatcher.copy(in, out, release.bytes);
+            } finally { connection.disconnect(); }
+            UpdateTrust.checkDownload(temporary, release.bytes, release.sha256);
+            if (!temporary.renameTo(target)) throw new IOException("Could not save verified patches.");
+            File[] files = context.getFilesDir().listFiles();
+            if (files != null) for (File file : files) {
+                if (file.getName().matches("patch-[0-9a-f]{64}\\.bundle") && !file.equals(target)) file.delete();
+            }
+            return target;
+        } finally { temporary.delete(); }
+    }
     public File download(UpdatePolicy.Release release, Progress progress) throws Exception {
         String hash = UpdatePolicy.checksum(readText(release.checksumsUrl, 64 * 1024, false), release.filename);
         File temporary = new File(context.getFilesDir(), "self-update.part.apk");

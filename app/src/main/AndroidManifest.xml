@@ -10,6 +10,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="sparklecatmods" android:host="updates" />
+                <data android:scheme="sparklecatmods" android:host="patches" />
             </intent-filter>
         </activity>
         <provider android:name=".ApkProvider" android:authorities="dev.sparklecat.pluralmods.apk" android:exported="false" android:grantUriPermissions="true" />

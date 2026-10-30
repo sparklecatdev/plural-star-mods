@@ -101,12 +101,12 @@ test('only newer patches for this runtime and variant restore; disabled restore 
 test('offline restore keeps settings and target intact, reports failure, and retries successfully', async () => {
   const saved = record(); saved.patches[0].version = '0.4.9'; saved.settings.enabled.wallpaper = false;
   const h = harness(saved); h.failRestore(true); await h.controller.sync(); await h.controller.retry();
-  assert.match(h.controller.getSnapshot().error, /Could not restore/);
+  assert.match(h.controller.getSnapshot().error, /Could not check/);
   assert.equal(h.local().enabled.wallpaper, false);
   assert.deepEqual(JSON.parse(h.disk()), saved);
   h.failRestore(false); await h.controller.retry();
   assert.equal(h.controller.getSnapshot().error, '');
-  assert.match(h.controller.getSnapshot().message, /restart/);
+  assert.match(h.controller.getSnapshot().message, /patcher/);
 });
 
 test('storage failures preserve existing cloud records and allow retry', async () => {
@@ -156,39 +156,27 @@ test('upstream cloud and linked-device snapshots include the dedicated mod recor
   assert.deepEqual(plain(snap), {[CLOUD_MODS_KEY]: text});
 });
 
-test('runtime restore resolves trusted releases, preserves credentials, and checks installer results', async () => {
-  for (const scenario of ['download', 'already-staged', 'unavailable', 'offline', 'install-failed']) {
-    const saved = record(); saved.patches[0].version = '0.4.9'; saved.settings.pkFrontSyncEnabled = true;
-    let disk = JSON.stringify(saved), appSettings = {pkToken: 'private', language: 'de'};
-    let enabled = settings().enabled, automatic = true, checks = 0, ready = scenario === 'already-staged' ? '0.4.9' : null;
-    const installs = [];
-    const release = {...current, version: scenario === 'unavailable' ? '0.4.8' : '0.5.0',
-      url: 'verified-release-url', bytes: 10, sha256: 'verified-digest'};
-    const {cloudMods} = load('cloudMods.ts', {
-      react: {}, 'react-native': {},
-      '@react-native-async-storage/async-storage': {getItem: async () => disk},
-      '../storage': {store: {setRaw: async (key, text) => { assert.equal(key, CLOUD_MODS_KEY); disk = text; }}},
-      '../store/appStore': {useAppStore: {getState: () => ({appSettings})}},
-      '../store/actions': {saveAppSettings: async next => { appSettings = next; }},
-      '../network/NetworkManager': {},
-      './modPreferences': {modPreferences: {load: async () => {}, getSnapshot: () => enabled,
-        setPreferences: async next => { enabled = next; }}},
-      './updateCheck': {
-        updateChecker: {load: async () => {}, getSnapshot: () => ({automatic, release, error: scenario === 'offline' ? 'offline' : null}),
-          setAutomatic: async next => { automatic = next; }, check: async force => { assert.equal(force, true); checks++; }},
-        patchInstaller: {load: async () => {}, getSnapshot: () => ({ready, error: scenario === 'install-failed' ? 'disk full' : null}),
-          install: async value => { installs.push(value); ready = value.version; }},
-      },
-      './updateCheckCore': versions,
-      './modOptions': {options: settings().enabled, payloadVersion: current.version, patchRuntime: current.runtime, patchVariant: current.variant},
-      './cloudModsCore': {CLOUD_MODS_KEY, createCloudMods},
-    });
-    await cloudMods.sync(); await cloudMods.retry();
-    assert.deepEqual(plain(appSettings), {pkToken: 'private', language: 'de', pkFrontSyncEnabled: true});
-    assert.equal(checks, scenario === 'already-staged' ? 0 : 1);
-    assert.equal(installs.length, ['download', 'install-failed'].includes(scenario) ? 1 : 0);
-    if (installs.length) assert.equal(installs[0], release, 'installer receives only updater metadata');
-    assert.equal(!!cloudMods.getSnapshot().error, ['unavailable', 'offline', 'install-failed'].includes(scenario));
-    assert.equal(JSON.parse(disk).patches[0].version, '0.4.9', 'failed restores retain the saved target');
-  }
+test('runtime restore preserves credentials and preferences while leaving executable updates to the patcher', async () => {
+  const saved = record(); saved.patches[0].version = '0.4.9'; saved.settings.pkFrontSyncEnabled = true;
+  saved.settings.automaticUpdates = false;
+  let disk = JSON.stringify(saved), appSettings = {pkToken: 'private', language: 'de'}, enabled = settings().enabled;
+  const {cloudMods} = load('cloudMods.ts', {
+    react: {}, 'react-native': {},
+    '@react-native-async-storage/async-storage': {getItem: async () => disk},
+    '../storage': {store: {setRaw: async (key, text) => { assert.equal(key, CLOUD_MODS_KEY); disk = text; }}},
+    '../store/appStore': {useAppStore: {getState: () => ({appSettings})}},
+    '../store/actions': {saveAppSettings: async next => { appSettings = next; }},
+    '../network/NetworkManager': {},
+    './modPreferences': {modPreferences: {load: async () => {}, getSnapshot: () => enabled,
+      setPreferences: async next => { enabled = next; }}},
+    './updateCheck': {updateChecker: {load: async () => {}}},
+    './modOptions': {options: settings().enabled, payloadVersion: current.version, patchRuntime: current.runtime, patchVariant: current.variant},
+    './cloudModsCore': {CLOUD_MODS_KEY, createCloudMods},
+  });
+  await cloudMods.sync(); await cloudMods.retry();
+  assert.deepEqual(plain(appSettings), {pkToken: 'private', language: 'de', pkFrontSyncEnabled: true});
+  assert.deepEqual(plain(enabled), saved.settings.enabled);
+  assert.equal(!!cloudMods.getSnapshot().error, false);
+  assert.match(cloudMods.getSnapshot().message, /patcher/);
+  assert.equal(JSON.parse(disk).patches[0].version, '0.4.9');
 });

@@ -8,10 +8,11 @@ import java.security.MessageDigest;
 import java.util.*;
 import java.util.zip.*;
 
-/** Offline, version-locked bundles with a private OTA loader. Package identity is preserved. */
+/** Version-locked bundles installed by the patcher. Package identity is preserved. */
 public final class ApkPatcher {
     public static final String SOURCE_SHA256 = "0357111d02c6e6bb0ce4946e2aeb7e216e96d23aa4ae7ef29017c4fd1dc19e6f";
     public static final String BUNDLE = "assets/index.android.bundle";
+    public static final String PATCHER_MANAGED = "assets/sparklecat-patcher-managed";
     private static final long MAX_APK = 160L * 1024 * 1024;
     public interface Progress { void update(String message); }
     public interface Payload { InputStream open() throws IOException; }
@@ -93,6 +94,11 @@ public final class ApkPatcher {
                     zip.putNextEntry(next);
                     try (InputStream in = input.getInputStream(entry)) { copy(in, zip, MAX_APK); }
                 }
+                zip.closeEntry();
+            }
+            if (nativeCode != null) {
+                zip.putNextEntry(new ZipEntry(PATCHER_MANAGED));
+                zip.write(1);
                 zip.closeEntry();
             }
             if (!found) throw new IOException("The original APK has no React Native bundle.");
