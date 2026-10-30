@@ -132,8 +132,11 @@ def publish():
         raise ValueError('Never replace a published compatibility pack; increase the patch version')
     if not existing:
         subprocess.run(['gh', 'release', 'create', name, '--draft', '--target', subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(), '--title', f"Plural Star {base['version']} compatibility · patches {release['version']}", '--notes', 'Automatically built and checked against the official standalone release. Download matching patches through the patcher.'], cwd=ROOT, check=True)
+    else:
+        subprocess.run(['gh', 'release', 'edit', name, '--target', commit], cwd=ROOT, check=True)
     subprocess.run(['gh', 'release', 'upload', name, '--clobber', *map(str, sorted(DEST.iterdir()))], cwd=ROOT, check=True)
-    assets = {a['name']: a for a in gh(f'repos/sparklecatdev/plural-star-mods/releases/tags/{name}')['assets']}
+    published = next(r for r in gh('repos/sparklecatdev/plural-star-mods/releases?per_page=100') if r['tag_name'] == name)
+    assets = {a['name']: a for a in published['assets']}
     for file in DEST.iterdir():
         asset = assets[file.name]
         if asset['size'] != file.stat().st_size or asset['digest'] != 'sha256:' + hashlib.sha256(file.read_bytes()).hexdigest():
