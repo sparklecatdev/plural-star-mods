@@ -194,6 +194,7 @@ test('Settings opens the mod menu; both switches persist and hide disabled contr
     './WallpaperControls': {WallpaperControls: host('WallpaperControls')}, './BackupTools': {BackupTools: host('BackupTools')},
     './PluralKitSettings': {PluralKitSettings: host('PluralKitSettings')},
     './CloudModSettings': {CloudModSettings: host('CloudModSettings')},
+    './ModSupport': {ModSupport: host('ModSupport')},
   });
   let renderer;
   await act(async () => { renderer = create(React.createElement(ModSettingsButton)); });
@@ -310,17 +311,19 @@ test('Settings restore confirms and queues the backup without restoring over the
   await act(async () => renderer.unmount());
 });
 
-function promptHarness({foreground = 'active', fail = false} = {}) {
+function promptHarness({foreground = 'active', fail = false, seen = '0.4.5'} = {}) {
   const calls = [], state = {available: '0.4.3', checking: false, error: ''};
   let listener, removed = false;
   const {PatchUpdatePrompt} = load('PatchUpdatePrompt.tsx', {
-    'react-native': {View: 'View', Text: 'Text', Modal: 'Modal', Pressable: 'Pressable',
+    'react-native': {View: 'View', Text: 'Text', Modal: 'Modal', Pressable: 'Pressable', ScrollView: 'ScrollView',
       AppState: {currentState: foreground, addEventListener: (_, callback) => {
         listener = callback; return {remove: () => { removed = true; }};
       }}, Linking: {openURL: async url => { calls.push(url); if (fail) throw Error('not installed'); }}},
     './updateCheck': {useUpdateCheck: () => state},
+    '@react-native-async-storage/async-storage': {getItem: async () => seen, setItem: async (_, value) => { seen = value; }},
+    './modOptions': {payloadVersion: '0.4.5'}, './changelog': {changelog: 'New patch features'},
   });
-  return {PatchUpdatePrompt, state, calls, foreground: value => listener(value), removed: () => removed};
+  return {PatchUpdatePrompt, state, calls, foreground: value => listener(value), removed: () => removed, seen: () => seen};
 }
 
 test('boot notice waits for unlocked foreground, matches the patcher theme, and dismisses once', async () => {
@@ -364,4 +367,77 @@ test('boot notice opens the patcher and handles a missing patcher without downlo
     assert.equal(renderer.root.findAllByType('Modal').length, 0);
     await act(async () => renderer.unmount());
   }
+});
+
+
+test('installed patch notes work offline, wait for unlock, and appear once per version', async () => {
+  const h = promptHarness({seen: '0.4.4', foreground: 'background'}); let renderer;
+  h.state.error = 'offline';
+  await act(async () => { renderer = create(React.createElement(h.PatchUpdatePrompt, {enabled: false})); });
+  await act(async () => h.foreground('active'));
+  assert.equal(renderer.root.findAllByType('Modal').length, 0);
+  await act(async () => renderer.update(React.createElement(h.PatchUpdatePrompt, {enabled: true})));
+  assert.match(renderer.root.findByProps({accessibilityRole: 'header'}).props.children, /What's new.*0.4.5/);
+  assert.equal(renderer.root.findAllByType('Pressable').length, 1);
+  await act(async () => renderer.root.findByType('Pressable').props.onPress());
+  assert.equal(h.seen(), '0.4.5');
+  assert.equal(renderer.root.findAllByType('Modal').length, 0);
+  await act(async () => renderer.unmount());
+  await act(async () => { renderer = create(React.createElement(h.PatchUpdatePrompt, {enabled: true})); });
+  assert.equal(renderer.root.findAllByType('Modal').length, 0);
+  await act(async () => renderer.unmount());
+});
+
+test('available update notice follows installed notes and includes release details', async () => {
+  const h = promptHarness({seen: null}); let renderer;
+  h.state.release = {notes: 'Fixes and improvements'};
+  await act(async () => { renderer = create(React.createElement(h.PatchUpdatePrompt, {enabled: true})); });
+  await act(async () => renderer.root.findByType('Modal').props.onRequestClose());
+  assert.equal(renderer.root.findByProps({accessibilityRole: 'header'}).props.children, 'Patches available');
+  assert.ok(renderer.root.findAllByType('Text').some(n => String(n.props.children).includes('Fixes and improvements')));
+  await act(async () => renderer.unmount());
+});
+
+test('diagnostics allowlist excludes private settings and validates report fields', () => {
+  const {diagnosticReport} = load('diagnosticsCore.ts');
+  const report = JSON.parse(diagnosticReport({appVersion: '1.23.3', patchVersion: '0.4.5', runtime: 'runtime', variant: 'wallpaper-storage',
+    platform: 'android', platformVersion: 36, wallpaper: true, storage: false, pkFrontSync: true,
+    lastChecked: -1, available: null, checking: false, updateError: true, cloudReady: true, cloudRestoring: false, cloudError: false,
+    pkToken: 'secret-token', error: '/private/account', members: ['private-name']}));
+  assert.equal(report.appVersion, '1.23.3');
+  assert.equal(report.updates.lastChecked, 0);
+  assert.equal(report.updates.failed, true);
+  assert.equal(report.mods.pkFrontSync, true);
+  assert.doesNotMatch(JSON.stringify(report), /secret-token|private-name|private\/account|pkToken/);
+  assert.equal(JSON.parse(diagnosticReport({...report, appVersion: '/private/account', lastChecked: Infinity})).appVersion, 'unknown');
+});
+
+test('mod support previews before sharing and opens the patches community', async () => {
+  const calls = []; const {diagnosticReport} = load('diagnosticsCore.ts');
+  const {ModSupport} = load('ModSupport.tsx', {
+    'react-native': {View: 'View', Platform: {OS: 'android', Version: 36},
+      Linking: {openURL: async url => { calls.push(url); }}, Share: {share: async value => { calls.push(value); }}},
+    '../components/AppText': {Text: 'Text'}, '../components/controls': {Btn: host('Button')},
+    '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n},
+    '../store/appStore': {useAppStore: {getState: () => ({appSettings: {pkToken: 'private-token', pkFrontSyncEnabled: true}})}},
+    '../../package.json': {version: '1.23.3'}, './modOptions': {payloadVersion: '0.4.5', patchRuntime: 'runtime', patchVariant: 'wallpaper-storage'},
+    './modPreferences': {modPreferences: {getSnapshot: () => ({wallpaper: true, storage: true})}},
+    './updateCheck': {updateChecker: {getSnapshot: () => ({lastChecked: 123, available: null, checking: false, error: '/private/path'})}},
+    './cloudMods': {cloudMods: {getSnapshot: () => ({ready: true, restoring: false, error: ''})}},
+    './changelog': {changelog: 'New features'}, './diagnosticsCore': {diagnosticReport},
+  });
+  let renderer;
+  await act(async () => { renderer = create(React.createElement(ModSupport, {disabled: false})); });
+  const press = label => renderer.root.findAllByType('Button').find(n => n.props.children === label).props.onPress();
+  assert.equal(calls.length, 0);
+  await act(async () => press('Preview diagnostics'));
+  assert.equal(calls.length, 0);
+  await act(async () => press('Share diagnostics'));
+  assert.equal(JSON.parse(calls[0].message).mods.pkFrontSync, true);
+  assert.doesNotMatch(calls[0].message, /private-token|private\/path/);
+  await act(async () => press('Patches Discord'));
+  assert.equal(calls[1], 'https://discord.gg/Pf2F2BawKV');
+  await act(async () => renderer.update(React.createElement(ModSupport, {disabled: true})));
+  assert.ok(renderer.root.findAllByType('Button').filter(n => n.props.children !== 'Close diagnostics').every(n => n.props.disabled));
+  await act(async () => renderer.unmount());
 });

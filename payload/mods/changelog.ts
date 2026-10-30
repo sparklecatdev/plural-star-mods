@@ -1,0 +1,1 @@
+export const changelog = '• See what changed after each patch update, with release notes in update notices.\n\n• Join the patches Discord from sparklecat’s mods.\n\n• Preview and share diagnostics to help troubleshoot versions, compatibility, update checks, and mod sync.';

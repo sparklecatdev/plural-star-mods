@@ -6,7 +6,7 @@
 
 **Custom features and community additions for Plural Star on Android.**
 
-[Download the patcher](https://github.com/sparklecatdev/plural-star-mods/releases) · [Suggest a feature](https://github.com/sparklecatdev/plural-star-mods/issues/new) · [AGPL-3.0](LICENSE)
+[Download the patcher](https://github.com/sparklecatdev/plural-star-mods/releases) · [Patches Discord](https://discord.gg/Pf2F2BawKV) · [Suggest a feature](https://github.com/sparklecatdev/plural-star-mods/issues/new) · [AGPL-3.0](LICENSE)
 
 </div>
 
@@ -23,19 +23,20 @@ The repository is **plural-star-mods**. The Android launcher name is **sparkleca
 - **Wallpaper:** personalize your app background and change it whenever you like.
 - **Storage tools:** save and restore password-protected backups of your app data and local media.
 - **Settings mod menu:** open **Settings → sparklecat's mods** to enable or disable included features. Switches save automatically; turning wallpaper off keeps the selected image, and turning storage tools off cancels a pending restore.
-- **Quick launch:** a short sparkle animation leads straight into Plural Star. Reduced-motion settings are respected. There is no mod menu or extra button to press on boot.
+- **Quick launch:** a short sparkle animation leads straight into Plural Star. Reduced-motion settings are respected. Release notes appear after updates; mod controls stay in Settings.
 - **Real APK patching:** verify the official APK, install the mod bundle and compatibility loader, align stored ZIP entries, sign with a persistent device key, verify the generated signature, then save or install the result.
 - **All patches included:** every patched APK includes wallpaper, storage tools, and PluralKit front sync. Enable features in Settings.
 - **PluralKit front sync:** opt in under Settings → sparklecat's mods and enter your PluralKit token to mirror primary front changes using imported PluralKit member IDs. Adapted from the closed [PR #11](https://github.com/ByHanyou/Plural-Star/pull/11).
 - **Offline source access:** save the complete patcher source ZIP from inside the patcher, including the wallpaper patch, payload build scripts, and exact upstream inputs.
 - **Latest upstream support:** the download resolves the newest stable official release. A scheduled build checks new releases every six hours and publishes matching compatibility packs when the mods and APK checks pass. No patcher update is needed for a compatible upstream release.
 - **Independent patch updates:** a themed notice at app startup opens the patcher, which downloads verified compatible patches and rebuilds the installed app. Patch releases do not require a new patcher release. The patcher also has its own APK updater.
+- **Changelogs and support:** themed release notes appear once after each installed update and can be reopened from **What's new**. Update notices include published release notes. Join the patches Discord or preview and share diagnostics under **Settings → sparklecat's mods → Help and community**, or in the patcher's **Help and community** section. Reports include versions and feature/update status; patcher reports also include device details, compatibility, and the last 20 operation outcomes. No tokens, account data, private paths, or raw error messages are included. Reports are only sent when you choose to share them.
 - **Mod sync:** mod preferences and patch versions travel with the existing cloud save and linked-device sync. Preferences restore automatically; the patcher installs patch updates.
 - **No root or account required.** Included patches work offline; app downloads and update checks use GitHub over HTTPS. The patched Plural Star retains its original networking behavior.
 
 ## Suggestions
 
-Have a feature in mind? Message **sparklecatdev** directly or [open a GitHub issue](https://github.com/sparklecatdev/plural-star-mods/issues/new). Suggestions for custom features and features missing from the official app are welcome.
+Have a feature in mind? Message **sparklecatdev** directly, join the [patches Discord](https://discord.gg/Pf2F2BawKV), or [open a GitHub issue](https://github.com/sparklecatdev/plural-star-mods/issues/new). Suggestions for custom features and features missing from the official app are welcome.
 
 ## Supported versions
 

@@ -20,6 +20,18 @@ const release = (tag, draft = false) => {
 };
 const latest = (rows, current = '0.3.0') => latestPatch(rows, current, runtime, variant);
 
+test('release notes follow the selected patch and remain bounded plain text', () => {
+  const row = release('patches-v0.4.5');
+  row.body = 'New features\u0000\nMore details';
+  assert.equal(latest([row]).notes, 'New features\nMore details');
+  row.body = 'x'.repeat(7000);
+  assert.equal(latest([row]).notes.length, 6000);
+  for (const body of [null, {}, '', 42]) {
+    row.body = body;
+    assert.equal(latest([row]).notes, 'No release notes were provided.');
+  }
+});
+
 test('semantic version ordering agrees with release and preview ordering', () => {
   const versions = ['1.0.0-alpha', '1.0.0-alpha.1', '1.0.0-alpha.beta', '1.0.0-beta', '1.0.0-beta.2', '1.0.0-beta.11', '1.0.0-rc.1', '1.0.0', '1.9.0', '1.10.0', '2.0.0'];
   for (let i = 0; i < versions.length - 1; i++) assert.ok(compareVersions(versions[i], versions[i+1]) < 0, versions[i]);

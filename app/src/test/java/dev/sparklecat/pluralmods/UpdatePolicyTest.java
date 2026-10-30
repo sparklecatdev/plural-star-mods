@@ -10,6 +10,15 @@ import java.nio.file.Files;
 import java.util.*;
 
 public class UpdatePolicyTest {
+    @Test public void releaseNotesAreBoundedAndFollowSelectedRelease() throws Exception {
+        JSONObject app = release("v0.6.0", false, false).put("body", "App notes" + (char)0 + "\nDetails");
+        assertEquals("App notes\nDetails", UpdatePolicy.select(new JSONArray().put(app).toString(), "0.5.3", true).notes);
+        JSONObject patch = patchRelease("0.4.5").put("body", "Patch notes");
+        assertEquals("Patch notes", UpdatePolicy.selectPatch(new JSONArray().put(patch).toString(), "0.4.4", RUNTIME, VARIANT).notes);
+        assertEquals(6000, UpdatePolicy.releaseNotes(String.join("", Collections.nCopies(7000, "x"))).length());
+        for (Object body : Arrays.asList(JSONObject.NULL, new JSONObject(), "", 42))
+            assertEquals("No release notes were provided.", UpdatePolicy.releaseNotes(body));
+    }
     private JSONObject release(String tag, boolean preview, boolean draft) throws Exception {
         String name = "sparklecat-plural-star-mods-" + tag.substring(1) + ".apk";
         return new JSONObject().put("tag_name", tag).put("draft", draft).put("prerelease", preview).put("assets", new JSONArray()

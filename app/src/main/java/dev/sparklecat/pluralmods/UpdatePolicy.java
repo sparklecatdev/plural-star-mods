@@ -13,10 +13,11 @@ public final class UpdatePolicy {
     public static final long MAX_APK = 128L * 1024 * 1024;
     public static final class Release {
         public final ReleaseVersion version;
-        public final String tag, filename, apkUrl, checksumsUrl;
+        public final String tag, filename, apkUrl, checksumsUrl, notes;
         public final long bytes;
-        Release(ReleaseVersion version, String tag, String filename, String apkUrl, String checksumsUrl, long bytes) {
+        Release(ReleaseVersion version, String tag, String filename, String apkUrl, String checksumsUrl, long bytes, String notes) {
             this.version = version; this.tag = tag; this.filename = filename; this.apkUrl = apkUrl; this.checksumsUrl = checksumsUrl; this.bytes = bytes;
+            this.notes = notes;
         }
     }
     public static Release select(String json, String installed, boolean previews) throws Exception {
@@ -51,17 +52,18 @@ public final class UpdatePolicy {
                 }
             }
             if (duplicate || apk == null || sums == null || size < 1 || size > MAX_APK) continue;
-            if (best == null || version.compareTo(best.version) > 0) best = new Release(version, tag, filename, apk, sums, size);
+            if (best == null || version.compareTo(best.version) > 0) best = new Release(version, tag, filename, apk, sums, size, releaseNotes(row.opt("body")));
         }
         return best;
     }
     public static final long MAX_PATCH = 32L * 1024 * 1024;
     public static final class PatchRelease {
         public final ReleaseVersion version;
-        public final String url, sha256;
+        public final String url, sha256, notes;
         public final long bytes;
-        PatchRelease(ReleaseVersion version, String url, String sha256, long bytes) {
+        PatchRelease(ReleaseVersion version, String url, String sha256, long bytes, String notes) {
             this.version = version; this.url = url; this.sha256 = sha256; this.bytes = bytes;
+            this.notes = notes;
         }
     }
     public static PatchRelease selectPatch(String json, String installed, String runtime, String variant) throws Exception {
@@ -94,11 +96,17 @@ public final class UpdatePolicy {
                     !digest.matches("sha256:[0-9a-f]{64}") || !(size instanceof Number)) continue;
                 long bytes = ((Number) size).longValue();
                 if (((Number) size).doubleValue() != bytes || bytes < 1 || bytes > MAX_PATCH) continue;
-                candidate = new PatchRelease(version, url, digest.substring(7), bytes);
+                candidate = new PatchRelease(version, url, digest.substring(7), bytes, releaseNotes(row.opt("body")));
             }
             if (matches == 1 && candidate != null && (best == null || version.compareTo(best.version) > 0)) best = candidate;
         }
         return best;
+    }
+    static String releaseNotes(Object body) {
+        if (!(body instanceof String)) return "No release notes were provided.";
+        String notes = ((String) body).substring(0, Math.min(((String) body).length(), 6000))
+            .replaceAll("[\\p{Cntrl}&&[^\\n\\t]]", "").trim();
+        return notes.isEmpty() ? "No release notes were provided." : notes;
     }
     static String trustedAsset(String url, String tag, String name) {
         return trustedAsset(url, REPO, tag, name);

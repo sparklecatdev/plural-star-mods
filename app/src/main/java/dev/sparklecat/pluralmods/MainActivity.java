@@ -16,7 +16,7 @@ import java.util.Arrays;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_APK = 10, SAVE_APK = 11, SAVE_SOURCE = 12, ALLOW_SELF_UPDATE = 13, ALLOW_INSTALL = 14;
+    private static final int PICK_APK = 10, SAVE_APK = 11, SAVE_SOURCE = 12, ALLOW_SELF_UPDATE = 13, ALLOW_INSTALL = 14, SAVE_DIAGNOSTICS = 15;
     private static final int BG = Color.rgb(20,16,31), CARD = Color.rgb(36,27,51), INK = Color.rgb(255,246,255), MUTED = Color.rgb(197,185,212), ACCENT = Color.rgb(229,181,255);
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final ExecutorService updateWorker = Executors.newSingleThreadExecutor();
@@ -35,6 +35,8 @@ public final class MainActivity extends Activity {
     private TextView patchStatus;
     private ScrollView mainScroll;
     private String downloadedVersion, promptedVersion;
+    private String downloadedNotes = "", diagnostics;
+    private boolean promptVisible;
     private long lastUpdateCheck;
     private boolean updateBusy, checkingPatches, resumed;
     private volatile boolean destroyed;
@@ -104,6 +106,11 @@ public final class MainActivity extends Activity {
         });
         text(updateCard, "Checks for patcher and mod updates.", 13, MUTED, false);
         updateProgress = new ProgressBar(this); updateProgress.setVisibility(View.GONE); updateCard.addView(updateProgress);
+        LinearLayout support = card("", "Help and community");
+        button(support, "What's new", this::showChangelog);
+        button(support, "Patches Discord", () -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/Pf2F2BawKV"))));
+        text(support, "Preview a report with app versions, compatibility, device details, and recent operation results. Share it when reporting a problem.", 14, MUTED, false);
+        button(support, "Diagnostics", () -> work("Preparing diagnostics…", () -> diagnostics = diagnosticReport(), this::showDiagnostics));
         button(content, "Save mod source code", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE).setType("application/zip").putExtra(Intent.EXTRA_TITLE, "plural-star-mods-source.zip"), SAVE_SOURCE));
         button(content, "Plural Star project ↗", () -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ByHanyou/Plural-Star"))));
@@ -132,6 +139,72 @@ public final class MainActivity extends Activity {
         parent.addView(b, new LinearLayout.LayoutParams(-1,-2)); controls.add(b); return b;
     }
     private void message(String s) { new AlertDialog.Builder(this).setTitle("sparklecat's mods").setMessage(s == null ? "Operation failed." : s).setPositiveButton("OK", null).show(); }
+    private ScrollView scrollText(String value) {
+        ScrollView scroll = new ScrollView(this); LinearLayout body = column();
+        body.setPadding(dp(24), dp(12), dp(24), dp(12)); scroll.addView(body);
+        text(body, value, 15, INK, false).setTextIsSelectable(true);
+        return scroll;
+    }
+    private void showChangelog() {
+        if (promptVisible) return;
+        String notes;
+        try (InputStream in = getResources().openRawResource(dev.sparklecat.pluralmods.R.raw.changelog); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            ApkPatcher.copy(in, out, 16384); notes = out.toString("UTF-8");
+        } catch (Exception e) { notes = "Release notes are unavailable."; }
+        promptVisible = true;
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("What's new · " + BuildConfig.VERSION_NAME)
+            .setView(scrollText(notes)).setPositiveButton("Done", null).create();
+        dialog.setOnDismissListener(d -> {
+            getPreferences(0).edit().putInt("changelog_seen", BuildConfig.VERSION_CODE).apply();
+            promptVisible = false; maybePromptUpdate();
+        });
+        dialog.show();
+    }
+    private synchronized void recordEvent(String stage, Exception error) {
+        try {
+            org.json.JSONArray previous = new org.json.JSONArray(getPreferences(0).getString("diagnostic_events", "[]"));
+            org.json.JSONArray events = new org.json.JSONArray();
+            for (int i = Math.max(0, previous.length() - 19); i < previous.length(); i++) events.put(previous.get(i));
+            events.put(new org.json.JSONObject().put("time", System.currentTimeMillis()).put("stage", stage)
+                .put("result", error == null ? "success" : error.getClass().getSimpleName()));
+            getPreferences(0).edit().putString("diagnostic_events", events.toString()).apply();
+        } catch (org.json.JSONException ignored) { /* Diagnostics must never interrupt an operation. */ }
+    }
+    private String diagnosticReport() throws Exception {
+        org.json.JSONObject report = new org.json.JSONObject().put("format", 1).put("patcher", BuildConfig.VERSION_NAME)
+            .put("patcherCode", BuildConfig.VERSION_CODE).put("androidApi", android.os.Build.VERSION.SDK_INT)
+            .put("manufacturer", android.os.Build.MANUFACTURER).put("model", android.os.Build.MODEL)
+            .put("abis", new org.json.JSONArray(Arrays.asList(android.os.Build.SUPPORTED_ABIS)))
+            .put("freeBytes", getFilesDir().getUsableSpace()).put("installPermission", getPackageManager().canRequestPackageInstalls())
+            .put("sourcePresent", source.isFile()).put("preparedApkPresent", output.isFile())
+            .put("preparedPatch", getPreferences(0).getString("prepared_patch", "none"))
+            .put("previewReleases", getPreferences(0).getBoolean("preview_updates", true));
+        try { report.put("installedPluralStar", getPackageManager().getPackageInfo("com.pluralspace.app", 0).versionName); }
+        catch (PackageManager.NameNotFoundException e) { report.put("installedPluralStar", "not installed"); }
+        if (source.isFile()) report.put("sourceSha256", ApkPatcher.sha256(source));
+        try {
+            org.json.JSONObject info = payloadInfo();
+            report.put("payloadVersion", info.getString("version")).put("runtime", info.getString("runtime"));
+        } catch (Exception e) { report.put("compatibilityError", e.getClass().getSimpleName()); }
+        report.put("recentOperations", new org.json.JSONArray(getPreferences(0).getString("diagnostic_events", "[]")));
+        return report.toString(2);
+    }
+    private void showDiagnostics() {
+        if (promptVisible) return;
+        promptVisible = true;
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Diagnostics preview")
+            .setView(scrollText("Review before sharing. Contains device and app details; no account data, tokens, or private file paths.\n\n" + diagnostics))
+            .setNegativeButton("Close", null)
+            .setNeutralButton("Save", (d, w) -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE).setType("application/json").putExtra(Intent.EXTRA_TITLE, "sparklecat-diagnostics.json"), SAVE_DIAGNOSTICS))
+            .setPositiveButton("Share", (d, w) -> {
+                try { startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain")
+                    .putExtra(Intent.EXTRA_TEXT, diagnostics), "Share diagnostics")); }
+                catch (ActivityNotFoundException e) { message("No sharing app is available. Use Save instead."); }
+            }).create();
+        dialog.setOnDismissListener(d -> { promptVisible = false; });
+        dialog.show();
+    }
     private void refresh() {
         for (View c : controls) c.setEnabled(!busy);
         patch.setEnabled(!busy && source.exists());
@@ -161,8 +234,8 @@ public final class MainActivity extends Activity {
         if (destroyed || updateBusy) return;
         updateBusy = true; updateStatus.setText(label); refresh();
         updateWorker.execute(() -> {
-            try { action.run(); }
-            catch (Exception e) { updateUi(() -> updateStatus.setText("Update unavailable: " + e.getMessage())); }
+            try { action.run(); recordEvent("patcher-update", null); }
+            catch (Exception e) { recordEvent("patcher-update", e); updateUi(() -> updateStatus.setText("Update unavailable: " + e.getMessage())); }
             finally { updateUi(() -> { updateBusy = false; refresh(); maybePromptUpdate(); }); }
         });
     }
@@ -188,18 +261,24 @@ public final class MainActivity extends Activity {
             }
             updateUi(() -> {
                 downloadedVersion = release.version.name;
+                downloadedNotes = release.notes;
                 updateStatus.setText("Update v" + downloadedVersion + " verified. Installation will be offered when you're ready.");
             });
         });
     }
     private void maybePromptUpdate() {
-        if (destroyed || !resumed || busy || updateBusy || downloadedVersion == null
+        if (destroyed || !resumed || busy || updateBusy || promptVisible || !getWindow().getDecorView().hasWindowFocus()) return;
+        if (getPreferences(0).getInt("changelog_seen", 0) != BuildConfig.VERSION_CODE) { showChangelog(); return; }
+        if (downloadedVersion == null
                 || downloadedVersion.equals(promptedVersion) || !getWindow().getDecorView().hasWindowFocus()) return;
         promptedVersion = downloadedVersion;
-        new AlertDialog.Builder(this).setTitle("Patcher update ready")
-            .setMessage("Version " + downloadedVersion + " has been downloaded and verified. Install it now?")
+        promptVisible = true;
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Patcher update ready")
+            .setView(scrollText("Version " + downloadedVersion + " has been downloaded and verified.\n\n" + downloadedNotes))
             .setNegativeButton("Later", null)
-            .setPositiveButton("Install", (dialog, which) -> installSelfUpdate()).show();
+            .setPositiveButton("Install", (d, which) -> installSelfUpdate()).create();
+        dialog.setOnDismissListener(d -> { promptVisible = false; });
+        dialog.show();
     }
     private void installSelfUpdate() {
         updateWork("Verifying downloaded update…", () -> {
@@ -243,8 +322,8 @@ public final class MainActivity extends Activity {
         busy = true; status.setText(label); refresh();
         worker.execute(() -> {
             boolean success = false;
-            try { action.run(); success = true; }
-            catch (Exception e) { updateUi(() -> status.setText("Could not finish: " + e.getMessage())); }
+            try { action.run(); success = true; recordEvent(label, null); }
+            catch (Exception e) { recordEvent(label, e); updateUi(() -> status.setText("Could not finish: " + e.getMessage())); }
             finally {
                 boolean ready = success;
                 updateUi(() -> { busy = false; refresh(); if (ready && resumed) completed.run(); else maybePromptUpdate(); });
@@ -300,10 +379,13 @@ public final class MainActivity extends Activity {
                 UpdatePolicy.PatchRelease release = updater.checkPatch(current, info.getString("runtime"), "wallpaper-storage");
                 updateUi(() -> {
                     patchStatus.setText(release != null || includedUpdate ? "Patches " + (release == null ? embedded : release.version.name) + " are available. Prepare and install to update." : "Patches " + current + " are up to date.");
+                    if (release != null) patchStatus.append("\n\n" + release.notes);
                     if (release != null || includedUpdate) patch.setText("Update installed mods");
                     if (!busy && !source.exists()) status.setText("Get Plural Star above, then prepare and install the update.");
                 });
+                recordEvent("patch-check", null);
             } catch (Exception e) {
+                recordEvent("patch-check", e);
                 updateUi(() -> patchStatus.setText("Could not check patches. Updates will be checked again when preparing the app."));
             } finally { updateUi(() -> { checkingPatches = false; refreshUpdates(); }); }
         });
@@ -388,6 +470,17 @@ public final class MainActivity extends Activity {
         if (request == ALLOW_INSTALL) { if (getPackageManager().canRequestPackageInstalls()) install(); return; }
         if (result != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
+        if (request == SAVE_DIAGNOSTICS) {
+            final String report = diagnostics;
+            if (report == null) { message("Open Diagnostics again to create a report."); return; }
+            work("Saving diagnostics…", () -> {
+                try (OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
+                    if (out == null) throw new IOException("Destination is not writable.");
+                    out.write(report.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                }
+                updateUi(() -> status.setText("Diagnostics saved."));
+            });
+        }
         if (request == PICK_APK) work("Checking selected APK…", () -> importApk(getContentResolver().openInputStream(uri)));
         if (request == SAVE_APK) work("Saving APK…", () -> {
             try (InputStream in = new FileInputStream(output); OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {

@@ -1,8 +1,11 @@
-export type PatchRelease = {version: string; runtime: string; variant: string; url: string; sha256: string; bytes: number};
+export type PatchRelease = {version: string; runtime: string; variant: string; url: string; sha256: string; bytes: number; notes?: string};
 export type UpdateState = {automatic: boolean; lastChecked: number; available: string | null; release: PatchRelease | null; checking: boolean; error: string | null};
 type Preferences = Pick<UpdateState, 'automatic' | 'lastChecked' | 'available'>;
 export const UPDATE_API = 'https://api.github.com/repos/sparklecatdev/plural-star-mods/releases?per_page=100';
 const DAY = 24 * 60 * 60 * 1000;
+export function releaseNotes(body: unknown): string {
+  return typeof body === 'string' && body.trim() ? body.slice(0, 6000).replace(/[\x00-\x08\x0B-\x1F\x7F]/g, '').trim() || 'No release notes were provided.' : 'No release notes were provided.';
+}
 
 export function parseVersion(value: string): {numbers: number[]; preview: string[]} | null {
   if (typeof value !== 'string' || value.length > 96) return null;
@@ -42,7 +45,7 @@ export function latestPatch(data: unknown, current: string, runtime: string, var
     if (!asset || asset.state !== 'uploaded' || asset.browser_download_url !== url ||
       !Number.isSafeInteger(asset.size) || asset.size < 1 || asset.size > 32 * 1024 * 1024 ||
       typeof asset.digest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(asset.digest)) continue;
-    if (best === null || compareVersions(version, best.version) > 0) best = {version, runtime, variant, url, sha256: asset.digest.slice(7), bytes: asset.size};
+    if (best === null || compareVersions(version, best.version) > 0) best = {version, runtime, variant, url, sha256: asset.digest.slice(7), bytes: asset.size, notes: releaseNotes(row.body)};
   }
   return best;
 }

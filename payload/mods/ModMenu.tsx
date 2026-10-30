@@ -12,6 +12,7 @@ import {WallpaperControls} from './WallpaperControls';
 import {BackupTools} from './BackupTools';
 import {PluralKitSettings} from './PluralKitSettings';
 import {CloudModSettings} from './CloudModSettings';
+import {ModSupport} from './ModSupport';
 
 export function ModSettingsButton() {
   const [open, setOpen] = useState(false);
@@ -54,6 +55,7 @@ function ModMenu({onClose}: {onClose: () => void}) {
         </View>}
         <PluralKitSettings disabled={busy || saving} onBusy={setPkBusy} />
         <CloudModSettings disabled={busy || saving || pkBusy} />
+        <ModSupport disabled={busy || saving || pkBusy} />
         {!!error && <Text accessibilityRole="alert" style={{color: T.danger, fontSize: fs(14)}}>{error}</Text>}
         <Text style={{color: T.muted, fontSize: fs(12)}}>Your choices are saved automatically. Turning a feature off keeps its saved data.</Text>
       </ScrollView>
