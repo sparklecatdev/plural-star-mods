@@ -6,7 +6,9 @@
 
 **Custom features and community additions for Plural Star on Android.**
 
-[Download the patcher](https://github.com/sparklecatdev/plural-star-mods/releases) · [Patches Discord](https://discord.gg/Pf2F2BawKV) · [Suggest a feature](https://github.com/sparklecatdev/plural-star-mods/issues/new) · [AGPL-3.0](LICENSE)
+[![Join the patches Discord](https://img.shields.io/badge/Discord-Join%20the%20patches%20community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/Pf2F2BawKV)
+
+[Download the patcher](https://github.com/sparklecatdev/plural-star-mods/releases) · [Suggest a feature](https://github.com/sparklecatdev/plural-star-mods/issues/new) · [AGPL-3.0](LICENSE)
 
 </div>
 
