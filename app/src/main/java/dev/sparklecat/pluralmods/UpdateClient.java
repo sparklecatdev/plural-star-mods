@@ -14,6 +14,16 @@ public final class UpdateClient {
     private final Context context;
     public interface Progress { void update(String message); }
     public UpdateClient(Context context) { this.context = context.getApplicationContext(); }
+    public static InputStream openOriginalApk() throws Exception {
+        HttpsURLConnection connection = connect("https://github.com/ByHanyou/Plural-Star/releases/download/v1.23.3/app-release.apk", false);
+        try {
+            return new FilterInputStream(connection.getInputStream()) {
+                @Override public void close() throws IOException {
+                    try { super.close(); } finally { connection.disconnect(); }
+                }
+            };
+        } catch (Exception e) { connection.disconnect(); throw e; }
+    }
     public File updateFile() { return new File(context.getFilesDir(), "self-update.apk"); }
     public UpdatePolicy.Release check(boolean previews) throws Exception {
         return UpdatePolicy.select(readText(UpdatePolicy.API, 1024 * 1024, true), BuildConfig.VERSION_NAME, previews);
@@ -66,12 +76,12 @@ public final class UpdateClient {
             return new String(out.toByteArray(), StandardCharsets.UTF_8);
         } finally { connection.disconnect(); }
     }
-    private HttpsURLConnection connect(String value, boolean api) throws Exception {
+    private static HttpsURLConnection connect(String value, boolean api) throws Exception {
         URI uri = URI.create(value);
         for (int redirects = 0; redirects <= 5; redirects++) {
             boolean allowed = api ? "https".equals(uri.getScheme()) && "api.github.com".equals(uri.getHost()) && uri.getUserInfo() == null && (uri.getPort() == -1 || uri.getPort() == 443)
                 : UpdatePolicy.downloadUrlAllowed(uri);
-            if (!allowed) throw new IOException("An update redirected outside the trusted HTTPS hosts.");
+            if (!allowed) throw new IOException("Download redirected outside the trusted HTTPS hosts.");
             HttpsURLConnection c = (HttpsURLConnection) uri.toURL().openConnection();
             c.setConnectTimeout(15000); c.setReadTimeout(30000); c.setInstanceFollowRedirects(false);
             c.setRequestProperty("User-Agent", "sparklecat-plural-star-mods/" + BuildConfig.VERSION_NAME);
@@ -82,13 +92,13 @@ public final class UpdateClient {
             if (status == 200) return c;
             if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
                 String location = c.getHeaderField("Location"); c.disconnect();
-                if (location == null) throw new IOException("Update redirect has no destination.");
+                if (location == null) throw new IOException("Download redirect has no destination.");
                 uri = uri.resolve(location); continue;
             }
             c.disconnect();
-            if (status == 403 || status == 429) throw new IOException("GitHub is limiting update checks. Try again later.");
-            throw new IOException("Update server returned HTTP " + status + ". Try again later.");
+            if (status == 403 || status == 429) throw new IOException("GitHub is limiting requests. Try again later.");
+            throw new IOException("Download server returned HTTP " + status + ". Try again later.");
         }
-        throw new IOException("Too many update redirects.");
+        throw new IOException("Too many download redirects.");
     }
 }

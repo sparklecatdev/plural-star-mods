@@ -8,7 +8,7 @@ import {useTheme} from '../themeContext';
 import {fontScale} from '../theme';
 import {openSnapshot, restoreQueue, saveSnapshot} from './storageSnapshot';
 
-export function BackupTools({onBusy}: {onBusy: (value: boolean) => void}) {
+export function BackupTools({onBusy, disabled = false}: {onBusy: (value: boolean) => void; disabled?: boolean}) {
   const T = useTheme(); const fs = fontScale(T);
   const [password, setPassword] = useState('');
   const [repeat, setRepeat] = useState('');
@@ -63,15 +63,15 @@ export function BackupTools({onBusy}: {onBusy: (value: boolean) => void}) {
     <Text style={{color: T.dim, fontSize: fs(13), lineHeight: fs(19)}}>Save your app data and local media in a password-protected backup. Up to 32 MiB; system settings and external files are excluded.</Text>
     {queued && <View style={{gap: 10}}>
       <Text accessibilityLiveRegion="polite" style={{color: T.accent, fontSize: fs(14)}}>A restore is ready. Force stop Plural Star in Android app settings, then reopen it to apply your backup.</Text>
-      <Btn variant="ghost" disabled={!!busy} onPress={() => { Linking.openSettings().catch(e => setError(String(e))); }}>Open app settings</Btn>
-      <Btn variant="ghost" disabled={!!busy} onPress={() => { void run('Canceling restore…', async () => { await restoreQueue.cancel(); setQueued(false); }); }}>Cancel pending restore</Btn>
+      <Btn variant="ghost" disabled={disabled || !!busy} onPress={() => { Linking.openSettings().catch(e => setError(String(e))); }}>Open app settings</Btn>
+      <Btn variant="ghost" disabled={disabled || !!busy} onPress={() => { void run('Canceling restore…', async () => { await restoreQueue.cancel(); setQueued(false); }); }}>Cancel pending restore</Btn>
     </View>}
-    <TextInput accessibilityLabel="Backup password" secureTextEntry autoCapitalize="none" autoCorrect={false} editable={!busy}
+    <TextInput accessibilityLabel="Backup password" secureTextEntry autoCapitalize="none" autoCorrect={false} editable={!disabled && !busy}
       placeholder="Password · at least 12 characters" placeholderTextColor={T.muted} style={input} value={password} onChangeText={setPassword} />
-    <TextInput accessibilityLabel="Repeat password to save a backup" secureTextEntry autoCapitalize="none" autoCorrect={false} editable={!busy}
+    <TextInput accessibilityLabel="Repeat password to save a backup" secureTextEntry autoCapitalize="none" autoCorrect={false} editable={!disabled && !busy}
       placeholder="Repeat password to save a backup" placeholderTextColor={T.muted} style={input} value={repeat} onChangeText={setRepeat} />
-    <Btn disabled={!!busy} onPress={save}>Backup app data</Btn>
-    <Btn variant="ghost" disabled={!!busy || queued} onPress={restore}>Restore app data</Btn>
+    <Btn disabled={disabled || !!busy} onPress={save}>Backup app data</Btn>
+    <Btn variant="ghost" disabled={disabled || !!busy || queued} onPress={restore}>Restore app data</Btn>
     <Text style={{color: T.muted, fontSize: fs(12), lineHeight: fs(18)}}>Your password protects private content and account keys. Standard JSON/ZIP backups can still be restored through the app's Import screen.</Text>
     {!!busy && <View accessibilityLiveRegion="polite" style={{gap: 8}}><ActivityIndicator color={T.accent} /><Text style={{color: T.dim}}>{busy}</Text></View>}
     {!!error && <Text accessibilityRole="alert" style={{color: T.danger, fontSize: fs(14)}}>{error}</Text>}

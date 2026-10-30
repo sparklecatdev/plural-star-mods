@@ -1,0 +1,15 @@
+plugins { id 'application' }
+java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
+dependencies {
+    implementation 'org.smali:dexlib2:2.5.2'
+    compileOnly 'com.google.guava:guava:27.1-android' // dexlib2 exposes its runtime types in public signatures.
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
+}
+application { mainClass = 'dev.sparklecat.tools.PatchHost' }
+def loaderTests = tasks.register('loaderTestSource', Copy) {
+    from('../payload/native')
+    into(layout.buildDirectory.dir('generated/loader-test'))
+    filter { line -> line.replace('@RUNTIME@', 'plural-star-1.23.3-mods-1').replace('@VARIANT@', 'wallpaper-storage').replace('@VERSION@', '0.4.1') }
+}
+sourceSets.test.java.srcDir(loaderTests)

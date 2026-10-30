@@ -7,8 +7,8 @@ android {
         applicationId 'dev.sparklecat.pluralmods'
         minSdk 26
         targetSdk 36
-        versionCode 4
-        versionName '0.4.0'
+        versionCode 5
+        versionName '0.5.0'
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     buildFeatures { buildConfig true }
@@ -25,13 +25,15 @@ tasks.register('verifyPayloads') {
         ['wallpaper', 'storage', 'wallpaper-storage'].each {
             if (!file("src/main/assets/payloads/${it}.bundle").exists())
                 throw new GradleException('Missing mod payloads. Run python3 scripts/build-payloads.py first.')
+            if (!file("src/main/assets/payloads/${it}.dex").exists())
+                throw new GradleException('Missing patch update loader. Run python3 scripts/build-payloads.py first.')
         }
     }
 }
 tasks.register('packageSource', Zip) {
     from(rootProject.projectDir) {
-        include '.github/**', '.gitattributes', '.gitignore', 'LICENSE', 'LICENSES/**', 'THIRD_PARTY_NOTICES.md', 'README.md', 'release-signing.sha256'
-        include 'app/build.gradle', 'app/src/**', 'build.gradle', 'settings.gradle', 'gradle.properties', 'gradlew', 'gradlew.bat', 'gradle/**', 'payload/**', 'scripts/**', 'tests/**'
+        include '.github/**', '.gitattributes', '.gitignore', 'LICENSE', 'LICENSES/**', 'THIRD_PARTY_NOTICES.md', 'README.md', 'AGENTS.md', 'release-signing.sha256'
+        include 'app/build.gradle', 'app/src/**', 'native-tools/build.gradle', 'native-tools/src/**', 'build.gradle', 'settings.gradle', 'gradle.properties', 'gradlew', 'gradlew.bat', 'gradle/**', 'payload/**', 'scripts/**', 'tests/**'
         exclude 'app/src/main/assets/**', '**/__pycache__/**', '**/node_modules/**'
     }
     destinationDirectory = file('src/main/assets/source')
@@ -41,7 +43,7 @@ tasks.register('packageSource', Zip) {
 }
 tasks.named('preBuild').configure { dependsOn 'verifyPayloads', 'packageSource' }
 tasks.withType(Test).configureEach {
-    inputs.files(fileTree('src/main/assets/payloads') { include '*.bundle' })
+    inputs.files(fileTree('src/main/assets/payloads') { include '*.bundle', '*.dex' })
     inputs.property('officialApkConfigured', System.getenv('PLURAL_STAR_APK') != null)
     if (System.getenv('PLURAL_STAR_APK')) inputs.file(System.getenv('PLURAL_STAR_APK'))
 }

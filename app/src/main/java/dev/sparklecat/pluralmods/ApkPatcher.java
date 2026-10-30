@@ -8,7 +8,7 @@ import java.security.MessageDigest;
 import java.util.*;
 import java.util.zip.*;
 
-/** Offline, version-locked bundle replacement. No native code or package identity is changed. */
+/** Offline, version-locked bundles with a private OTA loader. Package identity is preserved. */
 public final class ApkPatcher {
     public static final String SOURCE_SHA256 = "0357111d02c6e6bb0ce4946e2aeb7e216e96d23aa4ae7ef29017c4fd1dc19e6f";
     public static final String BUNDLE = "assets/index.android.bundle";
@@ -27,16 +27,17 @@ public final class ApkPatcher {
         return hex.toString();
     }
 
-    public static void patch(File source, File output, Payload payload, ApkSigner.SignerConfig signer, Progress progress) throws Exception {
+    public static void patch(File source, File output, Payload payload, Payload nativeCode, ApkSigner.SignerConfig signer, Progress progress) throws Exception {
         progress.update("Verifying the original APK…");
         if (source.length() > MAX_APK || !SOURCE_SHA256.equals(sha256(source)))
-            throw new IOException("Choose the original Plural Star 1.23.3 app-release.apk from ByHanyou/Plural-Star. This APK does not match the supported release. Split APKs and already patched APKs are not supported.");
+            throw new IOException("This APK does not match the supported release. Use Download Plural Star to get a compatible official copy.");
         File unsigned = new File(output.getParentFile(), "unsigned.tmp");
         File signed = new File(output.getParentFile(), "signed.tmp");
         try {
-            progress.update("Applying selected mods…");
-            rewrite(source, unsigned, payload);
-            progress.update("Signing with this patcher's device key…");
+            progress.update("Applying mods…");
+            if (nativeCode == null) throw new IOException("The patch update loader is missing.");
+            rewrite(source, unsigned, payload, nativeCode);
+            progress.update("Preparing the app for installation…");
             new ApkSigner.Builder(Collections.singletonList(signer)).setInputApk(unsigned).setOutputApk(signed)
                 .setMinSdkVersion(24).setV1SigningEnabled(false).setV2SigningEnabled(true).setV3SigningEnabled(false)
                 .setOtherSignersSignaturesPreserved(false).build().sign();
@@ -47,7 +48,7 @@ public final class ApkPatcher {
             }
             if (output.exists() && !output.delete()) throw new IOException("Could not replace previous output.");
             if (!signed.renameTo(output)) throw new IOException("Could not publish generated APK.");
-            progress.update("Patched APK ready · signature verified");
+            progress.update("Ready to install · verified");
         } finally { unsigned.delete(); signed.delete(); }
     }
 
@@ -56,9 +57,12 @@ public final class ApkPatcher {
         return upper.startsWith("META-INF/") && (upper.equals("META-INF/MANIFEST.MF") || upper.endsWith(".SF") || upper.endsWith(".RSA") || upper.endsWith(".DSA") || upper.endsWith(".EC") || upper.startsWith("META-INF/SIG-"));
     }
     static void rewrite(File source, File output, Payload payload) throws IOException {
+        rewrite(source, output, payload, null);
+    }
+    static void rewrite(File source, File output, Payload payload, Payload nativeCode) throws IOException {
         try (ZipFile input = new ZipFile(source); CountingStream count = new CountingStream(new BufferedOutputStream(new FileOutputStream(output))); ZipOutputStream zip = new ZipOutputStream(count)) {
             Set<String> seen = new HashSet<>();
-            boolean found = false;
+            boolean found = false, foundNative = false;
             Enumeration<? extends ZipEntry> entries = input.entries();
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
@@ -67,10 +71,11 @@ public final class ApkPatcher {
                 if (signatureEntry(name)) continue;
                 ZipEntry next = new ZipEntry(name);
                 next.setTime(946684800000L); // Year 2000 stays in the DOS range in every timezone; avoid extended timestamps.
-                if (name.equals(BUNDLE)) {
-                    found = true;
+                if (name.equals(BUNDLE) || name.equals("classes2.dex") && nativeCode != null) {
+                    boolean isBundle = name.equals(BUNDLE);
+                    if (isBundle) found = true; else foundNative = true;
                     zip.putNextEntry(next);
-                    try (InputStream in = payload.open()) { copy(in, zip, 32L * 1024 * 1024); }
+                    try (InputStream in = (isBundle ? payload : nativeCode).open()) { copy(in, zip, 32L * 1024 * 1024); }
                 } else {
                     next.setMethod(entry.getMethod());
                     if (entry.getMethod() == ZipEntry.STORED) {
@@ -91,6 +96,7 @@ public final class ApkPatcher {
                 zip.closeEntry();
             }
             if (!found) throw new IOException("The original APK has no React Native bundle.");
+            if (nativeCode != null && !foundNative) throw new IOException("The original APK has no supported native host.");
         }
     }
     public static long copy(InputStream in, OutputStream out, long max) throws IOException {

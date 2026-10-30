@@ -11,6 +11,7 @@ import {options} from './modOptions';
 import {WallpaperControls} from './WallpaperControls';
 import {BackupTools} from './BackupTools';
 import {UpdateEntry} from './UpdateEntry';
+import {PluralKitSettings} from './PluralKitSettings';
 
 export function ModSettingsButton() {
   const [open, setOpen] = useState(false);
@@ -25,6 +26,7 @@ function ModMenu({onClose}: {onClose: () => void}) {
   const enabled = useModPreferences();
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pkBusy, setPkBusy] = useState(false);
   const [error, setError] = useState('');
   const toggle = async (id: ModId) => {
     setSaving(true); setError('');
@@ -32,25 +34,26 @@ function ModMenu({onClose}: {onClose: () => void}) {
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setSaving(false); }
   };
-  return <Modal visible animationType="slide" onRequestClose={() => { if (!busy && !saving) onClose(); }}>
+  return <Modal visible animationType="slide" onRequestClose={() => { if (!busy && !saving && !pkBusy) onClose(); }}>
     <SafeAreaView style={{flex: 1, backgroundColor: T.bg}}>
       <ScrollView contentContainerStyle={{padding: 24, gap: 20}} keyboardShouldPersistTaps="handled">
         <View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}>
           <Text accessibilityRole="header" style={{flex: 1, color: T.text, fontSize: fs(24), fontWeight: '700'}}>sparklecat's mods</Text>
-          <Btn variant="ghost" disabled={busy || saving} onPress={onClose}>Done</Btn>
+          <Btn variant="ghost" disabled={busy || saving || pkBusy} onPress={onClose}>Done</Btn>
         </View>
         <Text style={{color: T.dim, fontSize: fs(14), lineHeight: fs(21)}}>Make Plural Star your own. Turn features on or off whenever you like.</Text>
         {options.wallpaper && <View>
-          <ToggleRow label="Wallpaper" desc="Personalize your app background." value={enabled.wallpaper} disabled={busy || saving}
+          <ToggleRow label="Wallpaper" desc="Personalize your app background." value={enabled.wallpaper} disabled={busy || saving || pkBusy}
             onToggle={() => { void toggle('wallpaper'); }} />
           {enabled.wallpaper && <WallpaperControls />}
         </View>}
         {options.storage && <View style={{borderTopWidth: 1, borderColor: T.border, paddingTop: 20}}>
-          <ToggleRow label="Storage tools" desc="Back up and restore your app data. Turning this off cancels any pending restore." value={enabled.storage} disabled={busy || saving}
+          <ToggleRow label="Storage tools" desc="Back up and restore your app data. Turning this off cancels any pending restore." value={enabled.storage} disabled={busy || saving || pkBusy}
             onToggle={() => { void toggle('storage'); }} />
-          {enabled.storage && <BackupTools onBusy={setBusy} />}
+          {enabled.storage && <BackupTools disabled={pkBusy} onBusy={setBusy} />}
         </View>}
-        {!busy && <UpdateEntry />}
+        <PluralKitSettings disabled={busy || saving} onBusy={setPkBusy} />
+        {!busy && !pkBusy && <UpdateEntry />}
         {!!error && <Text accessibilityRole="alert" style={{color: T.danger, fontSize: fs(14)}}>{error}</Text>}
         <Text style={{color: T.muted, fontSize: fs(12)}}>Your choices are saved automatically. Turning a feature off keeps its saved data.</Text>
       </ScrollView>

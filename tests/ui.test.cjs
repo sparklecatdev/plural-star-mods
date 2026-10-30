@@ -14,7 +14,7 @@ function load(name, imports = {}, generated = false) {
   const {code} = babel.transformSync(fs.readFileSync(filename, 'utf8'), {filename, babelrc: false, configFile: false,
     presets: [path.join(upstream, 'node_modules/@react-native/babel-preset')]});
   const exports = {};
-  vm.runInNewContext(code, {exports, require: n => {
+  vm.runInNewContext(code, {exports, __DEV__: false, setTimeout, clearTimeout, require: n => {
     if (n === 'react') return React;
     if (n === 'react/jsx-runtime') return require('react/jsx-runtime');
     if (Object.hasOwn(imports, n)) return imports[n];
@@ -26,25 +26,63 @@ function load(name, imports = {}, generated = false) {
 const theme = {bg: '#14101F', text: '#ffffff', surface: '#241b33', accent: '#e5b5ff', dim: '#c5b9d4', muted: '#9889a8', danger: '#ffb4c8', border: '#51465e'};
 const host = name => ({children, ...props}) => React.createElement(name, props, children);
 
-test('PluralKit settings require opt-in and mask the token while editing', async () => {
-  const calls = [];
+function pluralKitHarness(save) {
+  let settings = {language: 'en', pkToken: 'secret'};
+  const listeners = new Set();
+  const publish = next => { settings = next; for (const listener of listeners) listener(); };
+  const useAppStore = selector => React.useSyncExternalStore(listener => { listeners.add(listener); return () => listeners.delete(listener); }, () => selector({appSettings: settings}));
+  useAppStore.getState = () => ({appSettings: settings});
   const {PluralKitSettings} = load('PluralKitSettings.tsx', {
     'react-native': {View: 'View'}, 'react-i18next': {useTranslation: () => ({t: (key, options) => options?.defaultValue || key})},
     '../components/AppText': {Text: 'Text', TextInput: 'TextInput'},
     '../components/controls': {ToggleRow: host('Toggle')},
     '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n},
+    '../store/appStore': {useAppStore},
+    '../store/actions': {saveAppSettings: async next => { await save(next); publish(next); }},
   });
-  const props = {token: 'secret', onToggle: () => calls.push('toggle'), onToken: value => calls.push(value)};
+  return {PluralKitSettings, publish, settings: () => settings};
+}
+
+test('PluralKit settings require opt-in, mask tokens, and save edits without losing other settings', async () => {
+  const calls = []; const busy = [];
+  const h = pluralKitHarness(async next => calls.push(next));
+  const props = {disabled: false, onBusy: value => busy.push(value)};
   let renderer;
-  await act(async () => { renderer = create(React.createElement(PluralKitSettings, {...props, enabled: false})); });
+  await act(async () => { renderer = create(React.createElement(h.PluralKitSettings, props)); });
   assert.equal(renderer.root.findAllByType('TextInput').length, 0);
   await act(async () => renderer.root.findByType('Toggle').props.onToggle());
-  await act(async () => renderer.update(React.createElement(PluralKitSettings, {...props, enabled: true})));
+  assert.equal(h.settings().pkFrontSyncEnabled, true);
   const input = renderer.root.findByType('TextInput');
   assert.equal(input.props.secureTextEntry, true);
   assert.equal(input.props.value, 'secret');
-  await act(async () => input.props.onChangeText('replacement'));
-  assert.deepEqual(calls, ['toggle', 'replacement']);
+  await act(async () => {
+    input.props.onChangeText('re');
+    input.props.onChangeText('replacement ');
+    h.publish({...h.settings(), language: 'de'});
+  });
+  assert.deepEqual(calls.slice(1).map(value => value.pkToken), ['re', 'replacement']);
+  assert.equal(h.settings().language, 'de');
+  assert.equal(input.props.value, 'replacement ');
+  assert.equal(busy.at(-1), false);
+  await act(async () => renderer.update(React.createElement(h.PluralKitSettings, {...props, disabled: true})));
+  assert.equal(input.props.editable, false);
+  assert.equal(renderer.root.findByType('Toggle').props.disabled, true);
+  await act(async () => renderer.unmount());
+});
+
+test('PluralKit save failures are visible and allow a retry', async () => {
+  let fail = true; const busy = [];
+  const h = pluralKitHarness(async () => { if (fail) throw Error('Storage unavailable'); });
+  let renderer;
+  await act(async () => { renderer = create(React.createElement(h.PluralKitSettings, {disabled: false, onBusy: value => busy.push(value)})); });
+  await act(async () => renderer.root.findByType('Toggle').props.onToggle());
+  assert.match(renderer.root.findByProps({accessibilityRole: 'alert'}).props.children, /Storage unavailable/);
+  assert.equal(busy.at(-1), false);
+  assert.equal(renderer.root.findByType('Toggle').props.disabled, false);
+  fail = false;
+  await act(async () => renderer.root.findByType('Toggle').props.onToggle());
+  assert.equal(h.settings().pkFrontSyncEnabled, true);
+  assert.equal(renderer.root.findAllByProps({accessibilityRole: 'alert'}).length, 0);
   await act(async () => renderer.unmount());
 });
 
@@ -59,7 +97,7 @@ function rootHarness({password = null, reduceMotion = false, recoveryError = fal
         sequence: () => ({start: fn => animations.push(fn), stop: () => {}})}},
     '@react-native-async-storage/async-storage': {getItem: async () => password ? JSON.stringify({appLockPassword: password}) : null},
     './modPreferences': {modPreferences: {load: async () => {}}},
-    './updateCheck': {updateChecker: {check: async () => {}}},
+    './updateCheck': {updateChecker: {check: async () => {}}, confirmPatchLaunch: async () => {}},
     './storageSnapshot': {recoverBeforeStart: async () => { await recovered; if (recoveryError) throw Error('restore failed'); },
       retryStoragePreparation: async () => {}, recovery: {recover: async () => {}}, restoreQueue: {cancel: async () => {}}},
     './toolsState': {setToolsOpen: value => gates.push(value), waitForStorageIdle: async () => {}},
@@ -132,6 +170,7 @@ test('Settings opens the mod menu; both switches persist and hide disabled contr
     './modOptions': {options: {wallpaper: true, storage: true}},
     './WallpaperControls': {WallpaperControls: host('WallpaperControls')}, './BackupTools': {BackupTools: host('BackupTools')},
     './UpdateEntry': {UpdateEntry: host('UpdateEntry')},
+    './PluralKitSettings': {PluralKitSettings: host('PluralKitSettings')},
   });
   let renderer;
   await act(async () => { renderer = create(React.createElement(ModSettingsButton)); });
@@ -139,6 +178,13 @@ test('Settings opens the mod menu; both switches persist and hide disabled contr
   await act(async () => renderer.root.findByType('Button').props.onPress());
   assert.equal(renderer.root.findAllByType('Modal').length, 1);
   assert.equal(renderer.root.findAllByType('WallpaperControls').length, 1);
+  assert.equal(renderer.root.findAllByType('PluralKitSettings').length, 1);
+  await act(async () => renderer.root.findByType('PluralKitSettings').props.onBusy(true));
+  assert.equal(renderer.root.findByType('BackupTools').props.disabled, true);
+  assert.equal(renderer.root.findAllByType('Button').find(n => n.props.children === 'Done').props.disabled, true);
+  await act(async () => renderer.root.findByType('Modal').props.onRequestClose());
+  assert.equal(renderer.root.findAllByType('Modal').length, 1);
+  await act(async () => renderer.root.findByType('PluralKitSettings').props.onBusy(false));
   for (const label of ['Wallpaper', 'Storage tools']) {
     await act(async () => {
       renderer.root.findAllByType('Toggle').find(n => n.props.label === label).props.onToggle();
@@ -150,6 +196,40 @@ test('Settings opens the mod menu; both switches persist and hide disabled contr
   assert.equal(renderer.root.findAllByType('BackupTools').length, 0);
   await act(async () => renderer.root.findAllByType('Button').find(n => n.props.children === 'Done').props.onPress());
   assert.equal(renderer.root.findAllByType('Modal').length, 0);
+  await act(async () => renderer.unmount());
+});
+
+test('saving the main settings form preserves changes made in the mod menu', async () => {
+  const original = {language: 'en'};
+  let current = original; let saved;
+  const {SystemModal} = load('src/modals/SystemModal.tsx', {
+    'react-native': {View: 'View', TouchableOpacity: 'TouchableOpacity', Text: 'RawText'},
+    'react-i18next': {useTranslation: () => ({t: key => key})},
+    '../components/AppText': {Text: 'Text', TextInput: 'TextInput'},
+    '../components/Sheet': {Sheet: ({footer, children}) => React.createElement('Sheet', null, children, footer)},
+    '../components/controls': {sectionLabel: () => ({}), ...Object.fromEntries(['Btn', 'Field', 'PasswordSection', 'SectionHead', 'ToggleRow'].map(name => [name, host(name)]))},
+    '../theme': {fontScale: () => n => n, FONT_OPTIONS: []}, '../themeContext': {useTheme: () => theme},
+    '../utils': {TEXT_SCALE_OPTIONS: [], fontChoiceOf: () => 'default'},
+    '../i18n/i18n': {SUPPORTED_LANGUAGES: ['en']}, '../i18n/terminology': {TERMINOLOGY_FIELDS: [], TIER_NAME_FIELDS: []},
+    './system/SettingsControls': {ChipListEditor: host('ChipListEditor'), Dropdown: host('Dropdown')},
+    './system/PaletteSection': {PaletteSection: host('PaletteSection')},
+    './system/BackgroundSection': {BackgroundSection: host('BackgroundSection')},
+    '../components/DevSettings': {DevSettings: host('DevSettings')},
+    '../utils/saveError': {reportSaveError: error => assert.fail(String(error))},
+    '../mods/ModMenu': {ModSettingsButton: host('ModSettingsButton')},
+    '../store/appStore': {useAppStore: {getState: () => ({appSettings: current})}},
+  }, true);
+  let renderer;
+  await act(async () => { renderer = create(React.createElement(SystemModal, {
+    visible: true, system: {}, settings: original, palettes: [], activePaletteId: '',
+    onSave: async () => {}, onSaveSettings: async value => { saved = value; }, onClose: () => {},
+  })); });
+  assert.equal(renderer.root.findAllByType('ModSettingsButton').length, 1);
+  current = {...original, pkFrontSyncEnabled: true, pkToken: 'new token', backgroundImage: 'new.png'};
+  await act(async () => renderer.root.findAllByType('Btn').find(node => node.props.children === 'common.save').props.onPress());
+  assert.equal(saved.pkFrontSyncEnabled, true);
+  assert.equal(saved.pkToken, 'new token');
+  assert.equal(saved.backgroundImage, 'new.png');
   await act(async () => renderer.unmount());
 });
 
@@ -207,35 +287,34 @@ test('Settings restore confirms and queues the backup without restoring over the
   await act(async () => renderer.unmount());
 });
 
-test('update settings display availability, persist opt-out, and retain manual checks', async () => {
-  const calls = [];
-  const state = {automatic: true, available: '0.4.0', checking: false, error: ''};
+test('update settings download patches directly and show cold restart instructions', async () => {
+  const calls = [], state = {automatic: true, available: '0.4.2', checking: false, error: ''};
+  const install = {busy: false, ready: null, error: null};
   const {UpdateEntry} = load('UpdateEntry.tsx', {
-    'react-native': {View: 'View'}, '../components/AppText': {Text: 'Text'},
+    'react-native': {View: 'View', Linking: {openSettings: async () => calls.push('settings')}}, '../components/AppText': {Text: 'Text'},
     '../components/controls': {Btn: host('Button'), ToggleRow: host('Toggle')},
     '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n},
-    './updateCheck': {useUpdateCheck: () => state, openUpdater: async () => calls.push('open'),
+    './modOptions': {payloadVersion: '0.4.1'},
+    './updateCheck': {useUpdateCheck: () => state, usePatchInstall: () => install,
+      patchInstaller: {load: async () => {}}, installLatestPatch: async () => calls.push('download'),
       updateChecker: {setAutomatic: async value => calls.push(value), check: async force => calls.push(['check', force])}},
   });
   let renderer;
   await act(async () => { renderer = create(React.createElement(UpdateEntry)); });
-  assert.ok(renderer.root.findAllByType('Text').some(n => n.props.children === 'Mod pack 0.4.0 is available.'));
+  const button = label => renderer.root.findAllByType('Button').find(n => n.props.children === label);
+  assert.ok(renderer.root.findAllByType('Text').some(n => n.props.children === 'Patch 0.4.2 is available.'));
   await act(async () => renderer.root.findByType('Toggle').props.onToggle());
-  await act(async () => renderer.root.findAllByType('Button').find(n => n.props.children === 'Check for updates').props.onPress());
-  await act(async () => renderer.root.findAllByType('Button').find(n => n.props.children === 'Open updater').props.onPress());
-  assert.deepEqual(calls, [false, ['check', true], 'open']);
+  await act(async () => button('Check for updates').props.onPress());
+  await act(async () => button('Download patches').props.onPress());
+  assert.deepEqual(calls, [false, ['check', true], 'download']);
+  install.busy = true;
+  await act(async () => renderer.update(React.createElement(UpdateEntry)));
+  assert.equal(button('Download patches').props.disabled, true);
+  install.busy = false; install.ready = '0.4.2';
+  await act(async () => renderer.update(React.createElement(UpdateEntry)));
+  assert.equal(button('Download patches'), undefined);
+  assert.ok(renderer.root.findAllByType('Text').some(n => String(n.props.children).includes('Force stop')));
+  await act(async () => button('Open app settings').props.onPress());
+  assert.equal(calls.at(-1), 'settings');
   await act(async () => renderer.unmount());
-});
-
-test('opening updater uses the app link and falls back to the trusted release page', async () => {
-  const urls = []; let installed = true;
-  const {openUpdater} = load('updateCheck.ts', {
-    '@react-native-async-storage/async-storage': {getItem: async () => null, setItem: async () => {}},
-    'react-native': {Linking: {openURL: async url => { urls.push(url); if (!installed && url.startsWith('sparklecatmods:')) throw Error('not installed'); }}},
-    './modOptions': {payloadVersion: '0.3.0'},
-    './updateCheckCore': {createUpdateChecker: () => ({}), UPDATE_API: '',
-      UPDATE_PAGE: 'https://github.com/sparklecatdev/plural-star-mods/releases', UPDATER_LINK: 'sparklecatmods://updates'},
-  });
-  await openUpdater(); installed = false; await openUpdater();
-  assert.deepEqual(urls, ['sparklecatmods://updates', 'sparklecatmods://updates', 'https://github.com/sparklecatdev/plural-star-mods/releases']);
 });

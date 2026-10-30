@@ -1,8 +1,7 @@
-export type UpdateState = {automatic: boolean; lastChecked: number; available: string | null; checking: boolean; error: string | null};
+export type PatchRelease = {version: string; runtime: string; variant: string; url: string; sha256: string; bytes: number};
+export type UpdateState = {automatic: boolean; lastChecked: number; available: string | null; release: PatchRelease | null; checking: boolean; error: string | null};
 type Preferences = Pick<UpdateState, 'automatic' | 'lastChecked' | 'available'>;
-export const UPDATE_API = 'https://api.github.com/repos/sparklecatdev/plural-star-mods/releases?per_page=30';
-export const UPDATE_PAGE = 'https://github.com/sparklecatdev/plural-star-mods/releases';
-export const UPDATER_LINK = 'sparklecatmods://updates';
+export const UPDATE_API = 'https://api.github.com/repos/sparklecatdev/plural-star-mods/releases?per_page=100';
 const DAY = 24 * 60 * 60 * 1000;
 
 export function parseVersion(value: string): {numbers: number[]; preview: string[]} | null {
@@ -28,27 +27,32 @@ export function compareVersions(a: string, b: string): number {
   }
   return Math.sign(x.preview.length - y.preview.length);
 }
-export function latestVersion(data: unknown, current: string): string | null {
+export function latestPatch(data: unknown, current: string, runtime: string, variant: string): PatchRelease | null {
   if (!Array.isArray(data)) throw Error('The update server returned an invalid response.');
-  let best: string | null = null;
+  let best: PatchRelease | null = null;
   for (const row of data) {
     const tag = row?.tag_name;
-    if (row?.draft !== false || typeof tag !== 'string' || !tag.startsWith('v') || !parseVersion(tag) || compareVersions(tag, current) <= 0) continue;
-    const version = tag.slice(1);
-    const names = Array.isArray(row.assets) ? row.assets.filter((a: {state?: string}) => a?.state === 'uploaded').map((a: {name?: string}) => a.name) : [];
-    if (!names.includes(`sparklecat-plural-star-mods-${version}.apk`) || !names.includes('SHA256SUMS')) continue;
-    if (best === null || compareVersions(version, best) > 0) best = version;
+    if (row?.draft !== false || row?.prerelease === true || typeof tag !== 'string' || !/^patches-v\d+\.\d+\.\d+$/.test(tag)) continue;
+    const version = tag.slice(9);
+    if (!parseVersion(version) || compareVersions(version, current) <= 0) continue;
+    const name = `patches-${runtime}-${variant}-${version}.bundle`;
+    const asset = Array.isArray(row.assets) ? row.assets.find((a: {name?: string}) => a?.name === name) : null;
+    const url = `https://github.com/sparklecatdev/plural-star-mods/releases/download/${tag}/${name}`;
+    if (!asset || asset.state !== 'uploaded' || asset.browser_download_url !== url ||
+      !Number.isSafeInteger(asset.size) || asset.size < 1 || asset.size > 32 * 1024 * 1024 ||
+      typeof asset.digest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(asset.digest)) continue;
+    if (best === null || compareVersions(version, best.version) > 0) best = {version, runtime, variant, url, sha256: asset.digest.slice(7), bytes: asset.size};
   }
   return best;
 }
-export function createUpdateChecker(current: string, io: {read(): Promise<string | null>; write(value: string): Promise<unknown>; fetch(): Promise<unknown>}, now = Date.now) {
+export function createUpdateChecker(current: string, io: {read(): Promise<string | null>; write(value: string): Promise<unknown>; fetch(): Promise<unknown>}, now = Date.now, runtime = 'plural-star-1.23.3-mods-1', variant = 'wallpaper-storage') {
   let prefs: Preferences = {automatic: true, lastChecked: 0, available: null};
-  let checking = false, error: string | null = null;
-  let state: UpdateState = {...prefs, checking, error};
+  let checking = false, error: string | null = null, release: PatchRelease | null = null;
+  let state: UpdateState = {...prefs, checking, error, release};
   let loaded: Promise<void> | undefined, active: Promise<void> | undefined;
   let writes: Promise<void> = Promise.resolve();
   const listeners = new Set<() => void>();
-  const publish = () => { state = {...prefs, checking, error}; for (const fn of listeners) fn(); };
+  const publish = () => { state = {...prefs, checking, error, release}; for (const fn of listeners) fn(); };
   const load = (): Promise<void> => loaded ??= io.read().then(raw => {
     let saved: Partial<Preferences> = {};
     try { saved = raw ? JSON.parse(raw) || {} : {}; } catch { /* Use defaults. */ }
@@ -70,7 +74,8 @@ export function createUpdateChecker(current: string, io: {read(): Promise<string
     checking = true; error = null; publish();
     active = (async () => {
       try {
-        const available = latestVersion(await io.fetch(), current);
+        release = latestPatch(await io.fetch(), current, runtime, variant);
+        const available = release?.version ?? null;
         await persist(p => ({...p, available, lastChecked: now()}));
       } catch {
         error = 'Could not check for updates. Try again later.';

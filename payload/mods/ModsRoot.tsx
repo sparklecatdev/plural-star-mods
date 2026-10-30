@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {modPreferences} from './modPreferences';
 import {recovery, recoverBeforeStart, restoreQueue, retryStoragePreparation} from './storageSnapshot';
 import {setToolsOpen, waitForStorageIdle} from './toolsState';
-import {updateChecker} from './updateCheck';
+import {updateChecker, confirmPatchLaunch} from './updateCheck';
 
 function LaunchAnimation({onFinished}: {onFinished: () => void}) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -57,6 +57,11 @@ export default function ModsRoot() {
   }, []);
   useEffect(() => { void prepare(); }, [prepare]);
   useEffect(() => { if (ready && gatePassword === null && !error) void updateChecker.check(); }, [ready, gatePassword, error]);
+  useEffect(() => {
+    if (!ready || error) return;
+    const timer = setTimeout(() => { void confirmPatchLaunch().catch(() => {}); }, 3000);
+    return () => clearTimeout(timer);
+  }, [ready, error]);
   setToolsOpen(!ready || gatePassword !== null || !!error);
 
   let content: React.ReactNode;

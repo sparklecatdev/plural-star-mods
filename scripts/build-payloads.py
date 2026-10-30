@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Build three pinned React Native bundles; native dependencies stay in the original APK."""
+"""Build version-locked React Native bundles and the private OTA bundle loader."""
 import argparse
+import hashlib
 import json
 import pathlib
 import shutil
@@ -17,6 +18,7 @@ def run(*args, cwd=SOURCE):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--variant', choices=['wallpaper', 'storage', 'wallpaper-storage'])
+    parser.add_argument('--patches-only', action='store_true', help='Build patch updates without the APK creation loader or Android SDK.')
     args = parser.parse_args()
     SOURCE.parent.mkdir(exist_ok=True)
     if not SOURCE.exists():
@@ -41,12 +43,17 @@ def main():
             run('git', 'apply', str(ROOT / 'payload/wallpaper-pr-24.patch'))
         run('git', 'apply', str(ROOT / 'payload/pluralkit-pr-11.patch'))
         shutil.copytree(ROOT / 'payload/mods', SOURCE / 'src/mods', dirs_exist_ok=True)
-        version = re.search(r"versionName '([^']+)'", (ROOT / 'app/build.gradle').read_text()).group(1)
-        (SOURCE / 'src/mods/modOptions.ts').write_text('export const options = ' + json.dumps({'wallpaper': wallpaper, 'storage': storage}) + ';\nexport const payloadVersion = ' + json.dumps(version) + ';\n')
+        release = json.loads((ROOT / 'payload/release.json').read_text())
+        assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', release['version'])
+        assert re.fullmatch(r'[a-z0-9.-]{1,80}', release['runtime'])
+        (SOURCE / 'src/mods/modOptions.ts').write_text('export const options = ' + json.dumps({'wallpaper': wallpaper, 'storage': storage}) + ';\nexport const payloadVersion = ' + json.dumps(release['version']) + ';\nexport const patchRuntime = ' + json.dumps(release['runtime']) + ';\nexport const patchVariant = ' + json.dumps(variant) + ';\n')
         # Install the entry point into Settings for every payload combination.
         settings = SOURCE / 'src/modals/SystemModal.tsx'
         settings_text = settings.read_text()
-        settings_text = "import {ModSettingsButton} from '../mods/ModMenu';\n" + settings_text
+        settings_text = "import {useAppStore} from '../store/appStore';\nimport {ModSettingsButton} from '../mods/ModMenu';\n" + settings_text
+        save_settings = 'await onSaveSettings({...settings,'
+        assert settings_text.count(save_settings) == 1
+        settings_text = settings_text.replace(save_settings, 'await onSaveSettings({...useAppStore.getState().appSettings,')
         sheet = 'footer={<Btn instant onPress={save}>{t(\'common.save\')}</Btn>}>'
         assert settings_text.count(sheet) == 1
         settings_text = settings_text.replace(sheet, sheet + '\n      <ModSettingsButton />')
@@ -91,9 +98,13 @@ def main():
         run('npx', '--no-install', 'react-native', 'bundle', '--platform', 'android', '--dev', 'false',
             '--entry-file', 'index.js', '--bundle-output', str(destination / (variant + '.bundle')),
             '--assets-dest', str(ROOT / '.work' / 'bundle-assets'), '--max-workers', '2', '--reset-cache')
+    if not args.patches_only:
+        run('python3', str(ROOT / 'scripts/build-native-updates.py'), cwd=ROOT)
     (destination / 'provenance.json').write_text(json.dumps({'upstream': COMMIT, 'wallpaper_pr': 24,
         'wallpaper_commit': '72aa97e443a313016d07c9dfec4f09a06edea304',
         'pluralkit_pr': 11, 'pluralkit_commit': 'c1bd5e2f7a5fbb7934733e331154307948424cb0', 'bundle_format': 'javascript',
+        'version': release['version'], 'runtime': release['runtime'],
+        'bundles': {v: hashlib.sha256((destination / (v + '.bundle')).read_bytes()).hexdigest() for v in variants},
         'supported_apk_sha256': '0357111d02c6e6bb0ce4946e2aeb7e216e96d23aa4ae7ef29017c4fd1dc19e6f'}, indent=2) + '\n')
 
 if __name__ == '__main__':

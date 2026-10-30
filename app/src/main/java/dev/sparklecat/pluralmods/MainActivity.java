@@ -16,7 +16,7 @@ import java.util.Arrays;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_APK = 10, SAVE_APK = 11, SAVE_SOURCE = 12, ALLOW_SELF_UPDATE = 13;
+    private static final int PICK_APK = 10, SAVE_APK = 11, SAVE_SOURCE = 12, ALLOW_SELF_UPDATE = 13, ALLOW_INSTALL = 14;
     private static final int BG = Color.rgb(20,16,31), CARD = Color.rgb(36,27,51), INK = Color.rgb(255,246,255), MUTED = Color.rgb(197,185,212), ACCENT = Color.rgb(229,181,255);
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final ExecutorService updateWorker = Executors.newSingleThreadExecutor();
@@ -56,52 +56,47 @@ public final class MainActivity extends Activity {
         setContentView(scroll);
         text(content, "✦  ฅ^•ﻌ•^ฅ", 37, ACCENT, true);
         text(content, "sparklecat's\nplural star mods", 31, INK, true);
-        text(content, "A little more you. A little more sparkle.", 16, MUTED, false);
-        text(content, "OFFLINE PATCHER  ·  PLURAL STAR 1.23.3", 11, ACCENT, true);
+        text(content, "Get Plural Star with all mods included.", 16, MUTED, false);
 
-        updateCard = card("↻", "App updates");
-        text(updateCard, "Version " + BuildConfig.VERSION_NAME + " · updates from GitHub", 13, ACCENT, false);
-        updateStatus = text(updateCard, "Updates are verified before Android asks you to install them. Patching still works offline.", 14, MUTED, false);
+        LinearLayout first = card("01", "Get Plural Star");
+        text(first, "Download a compatible copy, choose an APK, or use the app already on your device.", 15, MUTED, false);
+        button(first, "Download Plural Star", () -> work("Downloading Plural Star…", () -> importApk(UpdateClient.openOriginalApk())));
+        button(first, "Choose APK file", () -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
+            startActivityForResult(intent, PICK_APK);
+        });
+        button(first, "Use installed Plural Star", this::useInstalled);
+        selected = text(first, source.exists() ? "Plural Star is ready" : "Choose an option above to get started", 13, ACCENT, false);
+
+        LinearLayout build = card("02", "Install mods");
+        text(build, "Includes wallpaper, storage tools, and PluralKit front sync. Manage them in Settings → sparklecat's mods after installing.", 15, MUTED, false);
+        patch = button(build, "Prepare and install", this::build);
+        progress = new ProgressBar(this); progress.setVisibility(View.GONE); build.addView(progress);
+        status = text(build, output.exists() ? "Your previous build is ready to install." : "Mods are applied on your device. Android will ask you to confirm installation.", 14, MUTED, false);
+        int lastPatch = getPreferences(0).getInt("last_patch_version", 0);
+        if (source.exists() && lastPatch > 0 && lastPatch < BuildConfig.VERSION_CODE) {
+            patch.setText("Update installed mods");
+            status.setText("New mods are available. Prepare and install them using your saved copy of Plural Star.");
+        }
+        install = button(build, "Install prepared app", this::install);
+        save = button(build, "Save patched APK", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE).setType("application/vnd.android.package-archive")
+            .putExtra(Intent.EXTRA_TITLE, "plural-star-sparklecat-mods.apk"), SAVE_APK));
+
+        LinearLayout data = card("", "Your data");
+        text(data, "Already using Plural Star? Export your data and media and check your backup before replacing the official app. Uninstalling it deletes its private data. Import the backup after installing the modded app.", 15, MUTED, false);
+        text(data, "Keep this patcher installed and retain its app data so future mods can update your app with the same signing key.", 14, MUTED, false);
+        button(data, "Open Plural Star", this::openPluralStar);
+
+        updateCard = card("", "Patcher updates");
+        text(updateCard, "Version " + BuildConfig.VERSION_NAME, 13, ACCENT, false);
+        updateStatus = text(updateCard, "Updates are verified before Android asks you to install them.", 14, MUTED, false);
         automaticUpdates = updatePreference(updateCard, "Update patcher automatically", "auto_update", true);
         previewUpdates = updatePreference(updateCard, "Include preview releases", "preview_updates", true);
         checkUpdate = button(updateCard, "Check for updates", () -> checkForUpdates(true));
         downloadUpdate = button(updateCard, "Download and install update", this::downloadSelfUpdate);
         installUpdate = button(updateCard, "Install downloaded update", this::installSelfUpdate);
         updateProgress = new ProgressBar(this); updateProgress.setVisibility(View.GONE); updateCard.addView(updateProgress);
-
-        LinearLayout first = card("01", "Choose Plural Star");
-        text(first, "Select the original 1.23.3 app-release.apk. Its SHA-256 must match the official release; other versions and split APKs are rejected.", 15, MUTED, false);
-        button(first, "Choose APK file", () -> {
-            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
-            startActivityForResult(intent, PICK_APK);
-        });
-        button(first, "Use installed Plural Star", this::useInstalled);
-        button(first, "Get supported release ↗", () -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ByHanyou/Plural-Star/releases/tag/v1.23.3"))));
-        selected = text(first, source.exists() ? "Original APK selected" : "No APK selected", 13, ACCENT, false);
-
-        LinearLayout mods = card("02", "Make it yours");
-        text(mods, "Wallpaper, storage tools, and PluralKit front sync are included in every patch.", 15, INK, false);
-        text(mods, "Manage wallpaper and storage tools under Settings → sparklecat's mods. Enable PluralKit front sync in Settings with your PluralKit token.", 14, MUTED, false);
-
-        LinearLayout build = card("03", "Create your patched APK");
-        patch = button(build, "✦  Patch APK", this::build);
-        progress = new ProgressBar(this); progress.setVisibility(View.GONE); build.addView(progress);
-        status = text(build, output.exists() ? "Your previous patched APK is ready." : "Ready when you are. All patching happens on your device.", 14, MUTED, false);
-        int lastPatch = getPreferences(0).getInt("last_patch_version", 0);
-        if (source.exists() && lastPatch > 0 && lastPatch < BuildConfig.VERSION_CODE) {
-            patch.setText("Update installed mods");
-            status.setText("A new mod pack is ready. Update your installed mods using the saved original APK, then install the result.");
-        }
-        save = button(build, "Save patched APK", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
-            .addCategory(Intent.CATEGORY_OPENABLE).setType("application/vnd.android.package-archive")
-            .putExtra(Intent.EXTRA_TITLE, "plural-star-sparklecat-mods.apk"), SAVE_APK));
-        install = button(build, "Install patched APK", this::install);
-
-        LinearLayout data = card("♡", "Keep your stars safe");
-        text(data, "Before your first install, export your data and media from the official app and verify the backup is saved outside the app. Android requires uninstalling the official app because this APK uses a different signing key. Uninstalling deletes its private data.", 15, MUTED, false);
-        text(data, "After installing, import your standard JSON/ZIP backup inside Plural Star. For future moves, enable the storage mod and save an encrypted .scat snapshot. Android prevents this patcher from reading another app's private storage.", 15, MUTED, false);
-        text(data, "Keep this patcher installed: its signing key stays in Android Keystore so future patches can update your modded app. Clearing patcher data or reinstalling it loses that key. System settings, permissions, and external files are outside snapshots.", 14, MUTED, false);
-        button(data, "Open Plural Star", this::openPluralStar);
         button(content, "Save patcher source code", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE).setType("application/zip").putExtra(Intent.EXTRA_TITLE, "plural-star-mods-source.zip"), SAVE_SOURCE));
         button(content, "Plural Star project ↗", () -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ByHanyou/Plural-Star"))));
@@ -129,7 +124,7 @@ public final class MainActivity extends Activity {
         LinearLayout l = column(); l.setPadding(dp(18),dp(16),dp(18),dp(16));
         GradientDrawable background = new GradientDrawable(); background.setColor(CARD); background.setCornerRadius(dp(20)); l.setBackground(background);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1,-2); p.topMargin = dp(20); content.addView(l,p);
-        text(l, number + "  /  " + title, 21, INK, true); return l;
+        text(l, number.isEmpty() ? title : number + "  /  " + title, 21, INK, true); return l;
     }
     private Button button(LinearLayout parent, String label, Runnable action) {
         Button b = new Button(this); b.setText(label); b.setAllCaps(false); b.setTextColor(INK); b.setTextSize(15); b.setMinHeight(dp(52));
@@ -142,6 +137,7 @@ public final class MainActivity extends Activity {
         for (View c : controls) c.setEnabled(!busy);
         patch.setEnabled(!busy && source.exists());
         save.setEnabled(!busy && output.exists()); install.setEnabled(!busy && output.exists());
+        save.setVisibility(output.exists() ? View.VISIBLE : View.GONE); install.setVisibility(output.exists() ? View.VISIBLE : View.GONE);
         progress.setVisibility(busy ? View.VISIBLE : View.GONE);
         refreshUpdates();
     }
@@ -237,39 +233,49 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() { super.onResume(); resumed = true; maybeCheckAutomatically(); }
     @Override protected void onPause() { resumed = false; super.onPause(); }
     private void work(String label, CheckedAction action) {
+        work(label, action, () -> {});
+    }
+    private void work(String label, CheckedAction action, Runnable completed) {
+        if (busy || destroyed) return;
         busy = true; status.setText(label); refresh();
         worker.execute(() -> {
-            try { action.run(); }
-            catch (Exception e) { runOnUiThread(() -> status.setText("Could not finish: " + e.getMessage())); }
-            finally { runOnUiThread(() -> { busy = false; refresh(); }); }
+            boolean success = false;
+            try { action.run(); success = true; }
+            catch (Exception e) { updateUi(() -> status.setText("Could not finish: " + e.getMessage())); }
+            finally {
+                boolean ready = success;
+                updateUi(() -> { busy = false; refresh(); if (ready && resumed) completed.run(); });
+            }
         });
     }
     interface CheckedAction { void run() throws Exception; }
     private void importApk(InputStream input) throws Exception {
+        if (input == null) throw new IOException("Could not open the selected file.");
         File temporary = new File(getCacheDir(), "import.apk");
         try {
             try (InputStream in = input; OutputStream out = new FileOutputStream(temporary)) { ApkPatcher.copy(in, out, 160L * 1024 * 1024); }
-            if (!ApkPatcher.SOURCE_SHA256.equals(ApkPatcher.sha256(temporary))) throw new IOException("Unsupported APK. Select the original official 1.23.3 release.");
-            if (source.exists() && !source.delete()) throw new IOException("Could not replace input.");
-            if (!temporary.renameTo(source)) throw new IOException("Could not save selected APK.");
+            if (!ApkPatcher.SOURCE_SHA256.equals(ApkPatcher.sha256(temporary))) throw new IOException("This copy is not compatible. Use Download Plural Star to get the supported official release.");
+            java.nio.file.Files.move(temporary.toPath(), source.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             output.delete();
-            runOnUiThread(() -> { selected.setText("✓ Plural Star 1.23.3 · SHA-256 verified"); status.setText("All features are included. Ready to patch."); });
+            updateUi(() -> { selected.setText("Plural Star is ready · verified official copy"); status.setText("Tap Prepare and install to continue."); });
         } finally { temporary.delete(); }
     }
     private void useInstalled() {
         work("Reading installed APK…", () -> {
-            ApplicationInfo app = getPackageManager().getApplicationInfo("com.pluralspace.app", 0);
-            if (app.splitSourceDirs != null && app.splitSourceDirs.length > 0) throw new IOException("Split installations are unsupported. Choose the official standalone APK instead.");
+            ApplicationInfo app;
+            try { app = getPackageManager().getApplicationInfo("com.pluralspace.app", 0); }
+            catch (PackageManager.NameNotFoundException e) { throw new IOException("Plural Star is not installed. Download it or choose an APK file."); }
+            if (app.splitSourceDirs != null && app.splitSourceDirs.length > 0) throw new IOException("This installation uses split APKs. Use Download Plural Star instead.");
             importApk(new FileInputStream(app.sourceDir));
         });
     }
     private void build() {
-        work("Preparing patch…", () -> {
-            ApkPatcher.patch(source, output, () -> getAssets().open("payloads/wallpaper-storage.bundle"), SigningIdentity.load(),
+        work("Preparing mods…", () -> {
+            ApkPatcher.patch(source, output, () -> getAssets().open("payloads/wallpaper-storage.bundle"), () -> getAssets().open("payloads/wallpaper-storage.dex"), SigningIdentity.load(),
                 note -> runOnUiThread(() -> status.setText(note)));
             getPreferences(0).edit().putInt("last_patch_version", BuildConfig.VERSION_CODE).apply();
-            runOnUiThread(() -> patch.setText("✦  Patch APK"));
-        });
+            updateUi(() -> patch.setText("Prepare and install"));
+        }, this::install);
     }
     private void openPluralStar() {
         Intent launch = getPackageManager().getLaunchIntentForPackage("com.pluralspace.app");
@@ -282,27 +288,33 @@ public final class MainActivity extends Activity {
             Signature[] signatures = android.os.Build.VERSION.SDK_INT >= 28 ? app.signingInfo.getApkContentsSigners() : app.signatures;
             boolean matching = signatures != null && Arrays.stream(signatures).anyMatch(s -> Arrays.equals(s.toByteArray(), ours));
             if (!matching) {
-                message("The installed Plural Star uses a different signing key. Export and verify its data/media backup first, then uninstall it yourself in Android Settings. Return here to install the patched APK and import the backup. This patcher never uninstalls apps or accesses their private data."); return;
+                new AlertDialog.Builder(this).setTitle("Back up before replacing Plural Star")
+                    .setMessage("Android cannot update this installation with the modded app. Export your data and media from Plural Star and check the backup is saved outside the app. Then uninstall Plural Star in Android Settings and return here to install. Uninstalling deletes the app's private data.")
+                    .setNegativeButton("Cancel", null)
+                    .setNeutralButton("Open Plural Star", (d, w) -> openPluralStar())
+                    .setPositiveButton("Open app settings", (d, w) -> startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:com.pluralspace.app"))))
+                    .show();
+                return;
             }
         } catch (PackageManager.NameNotFoundException absent) {
             // Fresh install.
         } catch (Exception e) { message(e.getMessage()); return; }
-        new AlertDialog.Builder(this).setTitle("Ready to install?")
-            .setMessage("Make sure you have a verified backup saved outside Plural Star. Keep this patcher installed so its signing key remains available for future updates.")
-            .setNegativeButton("Cancel", null).setPositiveButton("Continue", (d, w) -> {
-                if (!getPackageManager().canRequestPackageInstalls()) {
-                    startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName())));
-                    message("Allow installs from this patcher, then tap Install patched APK again."); return;
-                }
-                Intent intent = new Intent(Intent.ACTION_VIEW).setDataAndType(ApkProvider.URI, "application/vnd.android.package-archive")
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                intent.setClipData(ClipData.newRawUri("Patched APK", ApkProvider.URI));
-                try { startActivity(intent); } catch (ActivityNotFoundException e) { message("No Android package installer is available. Save the APK and open it from Files."); }
-            }).show();
+        if (!output.isFile()) { message("Prepare the app before installing."); return; }
+        if (!getPackageManager().canRequestPackageInstalls()) {
+            status.setText("Allow installs from this app, then return to continue.");
+            startActivityForResult(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName())), ALLOW_INSTALL);
+            return;
+        }
+        Intent intent = new Intent(Intent.ACTION_VIEW).setDataAndType(ApkProvider.URI, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        intent.setClipData(ClipData.newRawUri("Modded Plural Star", ApkProvider.URI));
+        try { startActivity(intent); }
+        catch (ActivityNotFoundException e) { message("No Android package installer is available. Save the APK and open it from Files."); }
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (request == ALLOW_SELF_UPDATE) { if (getPackageManager().canRequestPackageInstalls()) installSelfUpdate(); return; }
+        if (request == ALLOW_INSTALL) { if (getPackageManager().canRequestPackageInstalls()) install(); return; }
         if (result != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         if (request == PICK_APK) work("Checking selected APK…", () -> importApk(getContentResolver().openInputStream(uri)));

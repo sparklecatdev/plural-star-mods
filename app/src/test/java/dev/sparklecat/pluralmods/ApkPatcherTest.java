@@ -20,7 +20,7 @@ public class ApkPatcherTest {
     @Test public void rejectsUnknownApkWithoutPublishingOutput() throws Exception {
         File input = new File(temp, "bad.apk"), output = new File(temp, "out.apk");
         Files.write(input.toPath(), "unknown APK".getBytes(StandardCharsets.UTF_8));
-        try { ApkPatcher.patch(input, output, () -> null, null, note -> {}); fail("must reject"); }
+        try { ApkPatcher.patch(input, output, () -> null, () -> null, null, note -> {}); fail("must reject"); }
         catch (IOException expected) { assertTrue(expected.getMessage().contains("does not match")); }
         assertFalse(output.exists());
     }
@@ -73,18 +73,20 @@ public class ApkPatcherTest {
         for (String variant : List.of("wallpaper", "storage", "wallpaper-storage")) {
             File bundle = new File(assets, variant + ".bundle"), output = new File(temp, variant + ".apk");
             assertTrue(bundle.isFile());
-            ApkPatcher.patch(source, output, () -> new FileInputStream(bundle), signer, note -> {});
+            File nativeCode = new File(assets, variant + ".dex");
+            ApkPatcher.patch(source, output, () -> new FileInputStream(bundle), () -> new FileInputStream(nativeCode), signer, note -> {});
             ApkVerifier.Result verification = new ApkVerifier.Builder(output).setMinCheckedPlatformVersion(24).build().verify();
             assertTrue(verification.getErrors().toString(), verification.isVerified());
             try (ZipFile before = new ZipFile(source); ZipFile after = new ZipFile(output)) {
                 Enumeration<? extends ZipEntry> entries = before.entries();
                 while (entries.hasMoreElements()) {
                     ZipEntry e = entries.nextElement();
-                    if (e.getName().equals(ApkPatcher.BUNDLE) || ApkPatcher.signatureEntry(e.getName())) continue;
+                    if (e.getName().equals(ApkPatcher.BUNDLE) || e.getName().equals("classes2.dex") || ApkPatcher.signatureEntry(e.getName())) continue;
                     assertNotNull(e.getName(), after.getEntry(e.getName()));
                     assertArrayEquals(e.getName(), before.getInputStream(e).readAllBytes(), after.getInputStream(after.getEntry(e.getName())).readAllBytes());
                 }
                 assertArrayEquals(Files.readAllBytes(bundle.toPath()), after.getInputStream(after.getEntry(ApkPatcher.BUNDLE)).readAllBytes());
+                assertArrayEquals(Files.readAllBytes(nativeCode.toPath()), after.getInputStream(after.getEntry("classes2.dex")).readAllBytes());
             }
         }
     }

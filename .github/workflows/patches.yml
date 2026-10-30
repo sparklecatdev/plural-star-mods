@@ -1,0 +1,45 @@
+name: Publish patches
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: Patch release notes
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: publish-patches
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: python3 scripts/build-payloads.py --patches-only
+      - run: python3 scripts/prepare-patch-release.py
+      - name: Publish verified patch assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          VERSION=$(python3 -c 'import json; print(json.load(open("payload/release.json"))["version"])')
+          TAG="patches-v$VERSION"
+          printf '%s\n' "$RELEASE_NOTES" > .work/patch-notes.md
+          gh release create "$TAG" --target "$GITHUB_SHA" --draft --title "Patches $VERSION" --notes-file .work/patch-notes.md .work/patch-release/*
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > .work/patch-assets.json
+          python3 - <<'PY'
+          import hashlib, json, pathlib
+          assets = {a['name']: a for a in json.load(open('.work/patch-assets.json'))['assets']}
+          for file in pathlib.Path('.work/patch-release').glob('*.bundle'):
+              asset = assets[file.name]
+              assert asset['size'] == file.stat().st_size
+              assert asset['digest'] == 'sha256:' + hashlib.sha256(file.read_bytes()).hexdigest()
+          PY
+          gh release edit "$TAG" --draft=false --latest=false

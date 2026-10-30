@@ -33,3 +33,8 @@ AGPL-3.0; the complete feature diff is included in payload/wallpaper-pr-24.patch
 PluralKit front sync is adapted from sparklecatdev's Plural Star PR #11
 (c1bd5e2f7a5fbb7934733e331154307948424cb0) under AGPL-3.0. The adapted
 feature diff is in payload/pluralkit-pr-11.patch with runtime code in payload/mods.
+
+The build-time native-tools utility uses dexlib2 (smali) under BSD-3-Clause.
+Its copyright and license are retained in the dependency JAR. dexlib2 is not
+included in either Android app; the generated DEX contains the upstream classes
+and this project's bundle loader.
