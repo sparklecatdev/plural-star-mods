@@ -38,3 +38,8 @@ tasks.register('packageSource', Zip) {
     reproducibleFileOrder = true
 }
 tasks.named('preBuild').configure { dependsOn 'verifyPayloads', 'packageSource' }
+tasks.withType(Test).configureEach {
+    inputs.files(fileTree('src/main/assets/payloads') { include '*.bundle' })
+    inputs.property('officialApkConfigured', System.getenv('PLURAL_STAR_APK') != null)
+    if (System.getenv('PLURAL_STAR_APK')) inputs.file(System.getenv('PLURAL_STAR_APK'))
+}
