@@ -26,4 +26,15 @@ tasks.register('verifyPayloads') {
         }
     }
 }
-tasks.named('preBuild').configure { dependsOn 'verifyPayloads' }
+tasks.register('packageSource', Zip) {
+    from(rootProject.projectDir) {
+        include '.github/**', '.gitattributes', '.gitignore', 'LICENSE', 'LICENSES/**', 'THIRD_PARTY_NOTICES.md', 'README.md'
+        include 'app/build.gradle', 'app/src/**', 'build.gradle', 'settings.gradle', 'gradle.properties', 'gradlew', 'gradlew.bat', 'gradle/**', 'payload/**', 'scripts/**', 'tests/**'
+        exclude 'app/src/main/assets/**', '**/__pycache__/**'
+    }
+    destinationDirectory = file('src/main/assets/source')
+    archiveFileName = 'plural-star-mods-source.zip'
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+tasks.named('preBuild').configure { dependsOn 'verifyPayloads', 'packageSource' }

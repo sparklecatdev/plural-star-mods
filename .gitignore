@@ -3,6 +3,7 @@
 local.properties
 .work/
 app/src/main/assets/payloads/
+app/src/main/assets/source/
 *.apk
 *.jks
 *.keystore

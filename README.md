@@ -10,6 +10,7 @@ The repository is **plural-star-mods**. The Android launcher name is **sparkleca
 - **Storage saver & restorer:** password-encrypted `.scat` snapshots of Plural Star records, managed local media, wallpaper, internal recovery copies, and network identity. Save and restore through Android's document picker. The existing app password also protects the tools.
 - **Real APK patching:** verify the official APK, replace its JavaScript bundle, align stored ZIP entries, sign with a persistent device key, verify the generated signature, then save or install the result.
 - **Selectable mods:** wallpaper only, storage only, or both. New payload combinations can be added through the source build process.
+- **Offline source access:** save the complete patcher source ZIP from inside the patcher, including the pinned wallpaper patch and payload build scripts.
 - **No root, account, server, or network permission required by the patcher.** The patched Plural Star retains its original networking behavior.
 
 ## Supported versions
