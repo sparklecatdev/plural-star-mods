@@ -1,0 +1,69 @@
+name: Publish checked APK
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: 'Successful Android patcher run on main to publish as v0.1.0'
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+    steps:
+      - name: Wait for checks and validate source
+        id: build
+        shell: bash
+        run: |
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          gh run watch "$BUILD_RUN_ID" --exit-status --interval 30
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID" > "$RUNNER_TEMP/build.json"
+          gh release view v0.1.0 --json isDraft,targetCommitish > "$RUNNER_TEMP/release.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ['RUNNER_TEMP'])
+          run = json.loads((root / 'build.json').read_text())
+          release = json.loads((root / 'release.json').read_text())
+          assert run['conclusion'] == 'success', 'Build must pass'
+          assert run['head_repository']['full_name'] == os.environ['GH_REPO']
+          assert run['path'] == '.github/workflows/android.yml'
+          assert run['head_branch'] == 'main' and run['event'] in ('push', 'workflow_dispatch')
+          assert release['isDraft'], 'Refusing to replace an already published release'
+          assert release['targetCommitish'] == run['head_sha'], 'Draft must target the checked commit'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('commit=' + run['head_sha'] + '\n')
+          PY
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.build.outputs.commit }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 13114758
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          log-accepted-android-sdk-licenses: false
+      - name: Download APK and package matching source
+        shell: bash
+        run: |
+          mkdir dist
+          gh run download "$BUILD_RUN_ID" --name sparklecat-plural-star-mods-debug --dir dist
+          mv dist/app-debug.apk dist/sparklecat-plural-star-mods-0.1.0-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose dist/sparklecat-plural-star-mods-0.1.0-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 dist/sparklecat-plural-star-mods-0.1.0-debug.apk
+          git archive --format=zip --output=dist/plural-star-mods-0.1.0-source.zip HEAD
+      - name: Upload assets and publish development preview
+        working-directory: dist
+        shell: bash
+        run: |
+          sha256sum sparklecat-plural-star-mods-0.1.0-debug.apk plural-star-mods-0.1.0-source.zip > SHA256SUMS
+          gh release upload v0.1.0 sparklecat-plural-star-mods-0.1.0-debug.apk plural-star-mods-0.1.0-source.zip SHA256SUMS --clobber
+          gh release edit v0.1.0 --draft=false --prerelease
