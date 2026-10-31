@@ -33,7 +33,7 @@ const ELEMENT_COLOR_NAMES: Record<ElementColorOption, string> = {header: 'Top ba
 
 function Section({title, children}: {title: string; children: React.ReactNode}) {
   const T = useTheme(); const fs = fontScale(T);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   return <View style={{gap: 10}}>
     <TouchableOpacity accessibilityRole="button" accessibilityState={{expanded}} onPress={() => setExpanded(!expanded)}
       style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderColor: T.border}}>
