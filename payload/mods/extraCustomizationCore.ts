@@ -6,6 +6,9 @@ export type ExtraCustomization = {
   enabled: boolean;
   hiddenTabs: string[];
   hiddenTiles: string[];
+  fullScreenWallpaper: boolean;
+  transparentHeader: boolean;
+  transparentTabBar: boolean;
   hideTabLabels: boolean;
   hideTileLabels: boolean;
   hideSystemName: boolean;
@@ -25,7 +28,7 @@ export type ExtraCustomization = {
   colors: Partial<Record<ColorOption, string>>;
 };
 export const DEFAULT_EXTRA_CUSTOMIZATION: ExtraCustomization = {
-  enabled: false, hiddenTabs: [], hiddenTiles: [], hideTabLabels: false, hideTileLabels: false,
+  enabled: false, fullScreenWallpaper: false, transparentHeader: false, transparentTabBar: false, hiddenTabs: [], hiddenTiles: [], hideTabLabels: false, hideTileLabels: false,
   hideSystemName: false, hideFrontTitle: false, hideFrontSort: false, hideHubTitle: false,
   hideHubReorder: false, hideMemberSort: false, hideMemberGroupFilter: false, hideMemberTagFilter: false,
   hideMemberSearch: false, hideMemberBackToTop: false, hideJournalTitle: false,
@@ -42,6 +45,8 @@ export function sanitizeExtraCustomization(value: unknown): ExtraCustomization {
   }
   return {
     enabled: v.enabled === true,
+    fullScreenWallpaper: v.fullScreenWallpaper === true, transparentHeader: v.transparentHeader === true,
+    transparentTabBar: v.transparentTabBar === true,
     // Keep Front and Hub available so settings and primary navigation remain reachable.
     hiddenTabs: Array.isArray(v.hiddenTabs) ? v.hiddenTabs.filter((id): id is string =>
       (TAB_OPTIONS as readonly string[]).includes(id) && id !== 'front' && id !== 'hub') : [],

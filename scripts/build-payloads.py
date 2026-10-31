@@ -58,6 +58,16 @@ def main():
         run('git', 'apply', str(ROOT / 'payload/device-unlock.patch'))
         run('git', 'apply', str(ROOT / 'payload/extra-customization.patch'))
         run('git', 'apply', str(ROOT / 'payload/lock-icon.patch'))
+        # Keep the controls visible while allowing their backgrounds to be transparent.
+        header = SOURCE / 'src/components/AppHeader.tsx'
+        text = header.read_text()
+        assert text.count('backgroundColor: C.bg') == 2
+        header.write_text(text.replace('backgroundColor: C.bg', "backgroundColor: extra.enabled && extra.transparentHeader ? 'transparent' : C.bg"))
+        tab_bar = SOURCE / 'src/components/TabBar.tsx'
+        text = tab_bar.read_text()
+        target = 'backgroundColor: C.surface, borderTopColor: C.border'
+        assert text.count(target) == 1
+        tab_bar.write_text(text.replace(target, "backgroundColor: extra.enabled && extra.transparentTabBar ? 'transparent' : C.surface, borderTopColor: C.border"))
         group_pane = SOURCE / 'src/screens/systemManager/GroupBrowsePane.tsx'
         classic = group_pane.read_text()
         run('git', 'apply', '--unidiff-zero', str(ROOT / 'payload/group-view.patch'))
@@ -120,10 +130,19 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
             settings_text = settings_text.replace('onSelectPalette, onChangeBackground, onOpenProfile', 'onSelectPalette, onOpenProfile')
             background = SOURCE / 'src/app/AppBackground.tsx'
             background_text = background.read_text()
-            background_text = "import {useModPreferences} from '../mods/modPreferences';\n" + background_text
+            background_text = "import {useExtraCustomization} from '../mods/extraCustomization';\nimport {useModPreferences} from '../mods/modPreferences';\n" + background_text
             target = '  const filename = useAppStore(s => s.appSettings.backgroundImage);'
             assert target in background_text
             background_text = background_text.replace(target, '  const enabled = useModPreferences();\n  const selected = useAppStore(s => s.appSettings.backgroundImage);\n  const filename = enabled.wallpaper ? selected : undefined;')
+            target = '  const hasImage = !!backgroundImageUri(filename);'
+            assert background_text.count(target) == 1
+            background_text = background_text.replace(target, target + "\n  const extra = useExtraCustomization();\n  const fullScreen = hasImage && extra.enabled && extra.fullScreenWallpaper;")
+            target = '<View style={{flex: 1, backgroundColor: theme.bg}}>'
+            assert background_text.count(target) == 1
+            background_text = background_text.replace(target, "<View style={{flex: 1, backgroundColor: fullScreen ? 'transparent' : theme.bg}}>")
+            target = '<BackgroundImage filename={filename} theme={theme} />'
+            assert background_text.count(target) == 1
+            background_text = background_text.replace(target, '{!fullScreen && <BackgroundImage filename={filename} theme={theme} />}')
             background.write_text(background_text)
             translations = SOURCE / 'src/i18n/en.json'
             en = json.loads(translations.read_text())
@@ -136,6 +155,15 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
         app = SOURCE / 'App.tsx'
         app_text = app.read_text()
         app_text = "import {PatchUpdatePrompt} from './src/mods/PatchUpdatePrompt';\nimport {useModCloudSync} from './src/mods/cloudMods';\n" + app_text
+        if wallpaper:
+            app_text = "import {BackgroundImage} from './src/components/BackgroundImage';\nimport {useModPreferences} from './src/mods/modPreferences';\nimport {useExtraCustomization} from './src/mods/extraCustomization';\n" + app_text
+            target = '  const appSettings = useAppStore(s => s.appSettings);'
+            assert app_text.count(target) == 1
+            app_text = app_text.replace(target, target + "\n  const wallpaperEnabled = useModPreferences().wallpaper;\n  const extra = useExtraCustomization();")
+            target = '        <AppHeader systemName='
+            assert app_text.count(target) == 1
+            app_text = app_text.replace(target, "        {wallpaperEnabled && extra.enabled && extra.fullScreenWallpaper && !!appSettings.backgroundImage && <BackgroundImage filename={appSettings.backgroundImage} theme={C} />}\n" + target)
+
         target = '  useBackToFront(locked, loaded);'
         assert app_text.count(target) == 1
         app_text = app_text.replace(target, target + '\n  useModCloudSync(loaded && !firstRun && !locked);')

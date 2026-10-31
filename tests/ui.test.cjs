@@ -282,18 +282,24 @@ test('saving the main settings form preserves changes made in the mod menu', asy
 });
 
 if (fs.existsSync(path.join(upstream, 'src/app/AppBackground.tsx'))) test('disabling wallpaper restores the solid canvas while retaining the chosen image', async () => {
-  let enabled = true;
+  let enabled = true, fullScreen = false;
   const {AppBackground} = load('src/app/AppBackground.tsx', {
     'react-native': {View: 'View'}, '../components/BackgroundImage': {BackgroundImage: host('BackgroundImage')},
     '../store/appStore': {useAppStore: fn => fn({appSettings: {backgroundImage: 'wall.png'}})},
     '../themeContext': {useTheme: () => theme, ThemeProvider: host('ThemeProvider')},
     '../utils/backgroundImage': {backgroundImageUri: name => name && 'file:///media/' + name},
     '../mods/modPreferences': {useModPreferences: () => ({wallpaper: enabled})},
+    '../mods/extraCustomization': {useExtraCustomization: () => ({enabled: true, fullScreenWallpaper: fullScreen})},
   }, true);
   let renderer;
   await act(async () => { renderer = create(React.createElement(AppBackground, null, 'screen')); });
   assert.equal(renderer.root.findByType('BackgroundImage').props.filename, 'wall.png');
   assert.equal(renderer.root.findByType('ThemeProvider').props.value.canvas, 'transparent');
+  fullScreen = true;
+  await act(async () => renderer.update(React.createElement(AppBackground, null, 'screen')));
+  assert.equal(renderer.root.findAllByType('BackgroundImage').length, 0);
+  assert.equal(renderer.root.findByType('View').props.style.backgroundColor, 'transparent');
+  fullScreen = false;
   enabled = false;
   await act(async () => renderer.update(React.createElement(AppBackground, null, 'screen')));
   assert.equal(renderer.root.findByType('BackgroundImage').props.filename, undefined);

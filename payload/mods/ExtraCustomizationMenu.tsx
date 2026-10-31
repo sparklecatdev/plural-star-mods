@@ -5,6 +5,7 @@ import {Text} from '../components/AppText';
 import {ColorPickerModal} from '../components/ColorPickerModal';
 import {Btn, ToggleRow as BaseToggleRow} from '../components/controls';
 import {fontScale} from '../theme';
+import {options} from './modOptions';
 import {useTheme} from '../themeContext';
 import {COLOR_OPTIONS, DEFAULT_EXTRA_CUSTOMIZATION, extraCustomization, TILE_OPTIONS, useExtraCustomization} from './extraCustomization';
 import type {ColorOption, ExtraCustomization} from './extraCustomization';
@@ -36,7 +37,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
-  const toggle = (key: 'hideTabLabels' | 'hideTileLabels' | 'hideSystemName' | 'hideFrontTitle' | 'hideFrontSort' | 'hideHubTitle'
+  const toggle = (key: 'fullScreenWallpaper' | 'transparentHeader' | 'transparentTabBar' | 'hideTabLabels' | 'hideTileLabels' | 'hideSystemName' | 'hideFrontTitle' | 'hideFrontSort' | 'hideHubTitle'
     | 'hideHubReorder' | 'hideMemberSort' | 'hideMemberGroupFilter' | 'hideMemberTagFilter' | 'hideMemberSearch'
     | 'hideMemberBackToTop' | 'hideJournalTitle' | 'hideJournalTagFilter' | 'hideJournalAuthorFilter' | 'hideHistoryTitle') => {
     void save({...prefs, [key]: !prefs[key]});
@@ -54,6 +55,11 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
           <Btn variant="ghost" disabled={busy} onPress={onClose}>Done</Btn>
         </View>
         <Text style={{color: T.dim, fontSize: fs(14)}}>Hide what you do not use and adjust more of the app's colors.</Text>
+        {section('Background and bars')}
+        {options.wallpaper && <ToggleRow label="Extend wallpaper across the whole screen" value={prefs.fullScreenWallpaper} disabled={busy} onToggle={() => toggle('fullScreenWallpaper')} />}
+        <ToggleRow label="Transparent top bar" value={prefs.transparentHeader} disabled={busy} onToggle={() => toggle('transparentHeader')} />
+        <ToggleRow label="Transparent bottom bar" value={prefs.transparentTabBar} disabled={busy} onToggle={() => toggle('transparentTabBar')} />
+        <Text style={{color: T.dim, fontSize: fs(13)}}>Extend the wallpaper and make the bars transparent to see it behind them.</Text>
         {section('Navigation')}
         {(['members', 'journal', 'history'] as const).map(id =>
           <ToggleRow key={id} label={`Show ${TAB_NAMES[id]} tab`} value={!prefs.hiddenTabs.includes(id)} disabled={busy}

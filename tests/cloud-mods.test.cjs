@@ -40,6 +40,20 @@ function harness(saved = null, available = {wallpaper: true, storage: true}) {
     failRead: value => { failRead = value; }, failWrite: value => { failWrite = value; }, failRestore: value => { failRestore = value; }};
 }
 
+test('background controls default off and survive validated cloud preferences', () => {
+  const defaults = extra.sanitizeExtraCustomization(null);
+  for (const key of ['fullScreenWallpaper', 'transparentHeader', 'transparentTabBar']) {
+    assert.equal(defaults[key], false);
+    assert.equal(extra.sanitizeExtraCustomization({[key]: 'true'})[key], false);
+  }
+  const saved = record();
+  saved.settings.extraCustomization = {enabled: true, fullScreenWallpaper: true, transparentHeader: true, transparentTabBar: true};
+  const restored = readCloudMods(JSON.stringify(saved)).settings.extraCustomization;
+  assert.equal(restored.fullScreenWallpaper, true);
+  assert.equal(restored.transparentHeader, true);
+  assert.equal(restored.transparentTabBar, true);
+});
+
 test('cloud records reject malformed, oversized, future, and duplicate data; executable fields are discarded', () => {
   for (const raw of ['{', 'null', 'x'.repeat(16385), JSON.stringify({...record(), schema: 2}),
     JSON.stringify({...record(), settings: {...settings(), automaticUpdates: 'yes'}}),
