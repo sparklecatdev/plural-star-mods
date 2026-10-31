@@ -87,7 +87,19 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
         assert text.count(target) == 1
         text = "import {useModPreferences} from '../../mods/modPreferences';\n" + text
         text = text.replace(target, '  const showGroupTags = useModPreferences().groupView;\n' + target)
-        card.write_text(text.replace('{memberTags.length > 0 && (', '{showGroupTags && memberTags.length > 0 && ('))
+        text = text.replace('{memberTags.length > 0 && (', '{showGroupTags && memberTags.length > 0 && (')
+        target = "const bgMode = fields.background || 'plain';"
+        assert text.count(target) == 1
+        card.write_text(text.replace(target, "const bgMode = fields.background || (showGroupTags ? 'banner' : 'plain');"))
+        display = SOURCE / 'src/screens/members/DisplayOptionsSheet.tsx'
+        text = display.read_text()
+        text = "import {useModPreferences} from '../../mods/modPreferences';\n" + text
+        target = '  const T = useTheme();'
+        assert text.count(target) == 1
+        text = text.replace(target, target + '\n  const enhanced = useModPreferences().groupView;')
+        target = "(fields.background || 'plain') === mode"
+        assert text.count(target) == 1
+        display.write_text(text.replace(target, "(fields.background || (enhanced ? 'banner' : 'plain')) === mode"))
         shutil.copytree(ROOT / 'payload/mods', SOURCE / 'src/mods', dirs_exist_ok=True)
         assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', release['version'])
         assert re.fullmatch(r'[a-z0-9.-]{1,80}', release['runtime'])

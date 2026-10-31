@@ -525,3 +525,54 @@ test('inactive lock button hides only when its switch is enabled', async () => {
   assert.equal(renderer.root.findAllByProps({accessibilityLabel: 'a11y.lockApp'}).length, 1);
   await act(async () => renderer.unmount());
 });
+
+
+test('enhanced member cards default to banners while respecting an explicit background', async () => {
+  let enhanced = false;
+  const {MemberCard} = load('src/screens/members/MemberCard.tsx', {
+    '../../mods/modPreferences': {useModPreferences: () => ({groupView: enhanced})},
+    'react-native': {View: 'View', TouchableOpacity: 'TouchableOpacity', Image: 'Image', StyleSheet: {create: x => x, absoluteFill: {}}},
+    'react-i18next': {useTranslation: () => ({t: x => x})},
+    '@shopify/flash-list': {useMappingHelper: () => ({getMappingKey: x => x})},
+    '../../components/AppText': {Text: 'Text'}, '../../components/Avatar': {Avatar: host('Avatar')},
+    '../../components/Glyphs': {PlusMinusIcon: host('Icon')},
+    '../../theme': {fontScale: () => n => n, tierAccent: () => '#fff'},
+    '../../themeContext': {useTheme: () => theme},
+    '../../utils': {FRONT_TIER_KEYS: [], sortGroupsForDisplay: x => x, groupKind: () => 'group'},
+  }, true);
+  const props = {m: {id: '1', name: 'Name', banner: 'file://banner', color: '#aabbcc'}, index: 0, isLast: true,
+    selectionMode: false, isSelected: false, showReorder: false, front: null, allFrontIds: new Set(), groups: [],
+    onActivate: () => {}, onToggleSelect: () => {}, onEnterSelection: () => {}, fields: {}};
+  let renderer;
+  await act(async () => { renderer = create(React.createElement(MemberCard, props)); });
+  assert.equal(renderer.root.findAllByType('Image').length, 0);
+  enhanced = true;
+  await act(async () => renderer.update(React.createElement(MemberCard, {...props, fields: {}})));
+  assert.equal(renderer.root.findByType('Image').props.source.uri, 'file://banner');
+  await act(async () => renderer.update(React.createElement(MemberCard, {...props, fields: {background: 'plain'}})));
+  assert.equal(renderer.root.findAllByType('Image').length, 0);
+  await act(async () => renderer.unmount());
+});
+
+test('display options reflect the enhanced default and explicit background', async () => {
+  let enhanced = false;
+  const {DisplayOptionsSheet} = load('src/screens/members/DisplayOptionsSheet.tsx', {
+    '../../mods/modPreferences': {useModPreferences: () => ({groupView: enhanced})},
+    'react-native': {View: 'View', TouchableOpacity: 'TouchableOpacity', Modal: 'Modal'},
+    'react-i18next': {useTranslation: () => ({t: x => x})},
+    '../../components/AppText': {Text: 'Text'}, '../../theme': {fontScale: () => n => n},
+    '../../themeContext': {useTheme: () => theme}, '../../components/controls': {sectionLabel: () => ({})},
+    '../../components/ToggleSwitch': {TogglePill: host('Toggle')},
+  }, true);
+  const props = {visible: true, fields: {}, onChange: () => {}, onClose: () => {}};
+  let renderer;
+  await act(async () => { renderer = create(React.createElement(DisplayOptionsSheet, props)); });
+  const selected = label => renderer.root.findByProps({accessibilityLabel: label}).props.accessibilityState.selected;
+  assert.equal(selected('members.bgPlain'), true);
+  enhanced = true;
+  await act(async () => renderer.update(React.createElement(DisplayOptionsSheet, {...props, fields: {}})));
+  assert.equal(selected('members.bgBanner'), true);
+  await act(async () => renderer.update(React.createElement(DisplayOptionsSheet, {...props, fields: {background: 'plain'}})));
+  assert.equal(selected('members.bgPlain'), true);
+  await act(async () => renderer.unmount());
+});
