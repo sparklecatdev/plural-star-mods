@@ -1,3 +1,5 @@
+Biometric or device unlock now works in newly patched apps. Rebuild your patched app with this patcher to enable it.
+
 Latest Plural Star support: download the newest stable official release and fetch matching verified patches automatically.
 
 Check for patcher and mod updates manually alongside automatic checks.
