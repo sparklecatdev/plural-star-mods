@@ -31,6 +31,16 @@ def main():
     sdk = pathlib.Path(os.environ['ANDROID_HOME'])
     java = pathlib.Path(os.environ['JAVA_HOME']) / 'bin'
     discord = pathlib.Path(os.environ.get('DISCORD_SOCIAL_SDK_DIR', str(ROOT / '.work/discord-sdk')))
+    aar = discord / 'discord_social_sdk/lib/release/discord_partner_sdk.aar'
+    if not (discord / 'android/libs/discord_partner_sdk.jar').is_file() and aar.is_file():
+        with zipfile.ZipFile(aar) as archive:
+            for name in archive.namelist():
+                if name.startswith(('libs/', 'jni/')) and not name.endswith('/'):
+                    relative = pathlib.PurePosixPath(name)
+                    if '..' in relative.parts: raise ValueError('Invalid Discord SDK asset path')
+                    target = discord.joinpath('android', *relative.parts)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(archive.read(name))
     assets = ROOT / 'app/src/main/assets/discord'
     assets.mkdir(parents=True, exist_ok=True)
     bridge_hash = hashlib.sha256((ROOT / 'payload/native/DiscordPresence.cpp').read_bytes()).hexdigest()
