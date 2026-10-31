@@ -11,8 +11,6 @@ import time
 import urllib.error
 import urllib.request
 import uuid
-import tkinter as tk
-from tkinter import ttk
 
 CLIENT_ID = '1566174520350347434'
 INTERVAL = 30
@@ -178,6 +176,9 @@ def run_worker(value, stop, messages):
 
 
 def main():
+    import tkinter as tk
+    from tkinter import ttk
+
     root = tk.Tk()
     root.title('Sparklecat Discord Companion')
     root.resizable(False, False)
