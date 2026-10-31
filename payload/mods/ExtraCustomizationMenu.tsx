@@ -7,8 +7,8 @@ import {Btn, ToggleRow as BaseToggleRow} from '../components/controls';
 import {fontScale} from '../theme';
 import {options} from './modOptions';
 import {useTheme} from '../themeContext';
-import {ELEMENT_COLOR_OPTIONS, COLOR_OPTIONS, DEFAULT_EXTRA_CUSTOMIZATION, extraCustomization, TILE_OPTIONS, useExtraCustomization} from './extraCustomization';
-import type {ElementColorOption, ColorOption, ExtraCustomization} from './extraCustomization';
+import {CARD_AREAS, ELEMENT_COLOR_OPTIONS, COLOR_OPTIONS, DEFAULT_EXTRA_CUSTOMIZATION, extraCustomization, TILE_OPTIONS, useExtraCustomization} from './extraCustomization';
+import type {CardArea, CardAppearance, ElementColorOption, ColorOption, ExtraCustomization} from './extraCustomization';
 
 const ToggleRow = (props: Omit<React.ComponentProps<typeof BaseToggleRow>, 'desc'>) => <BaseToggleRow {...props} desc="" />;
 
@@ -32,6 +32,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
   const colorOf = (key: ColorOption) => key === 'canvas' ? ('canvas' in T && typeof T.canvas === 'string' ? T.canvas : T.bg) : T[key];
   const elementColorOf = (key: ElementColorOption) => ({header: T.bg, tabBar: T.surface, tabActive: T.accent, tabInactive: T.dim, hubTile: T.card, hubTileBorder: T.border})[key];
   const [elementPicker, setElementPicker] = useState<ElementColorOption | null>(null);
+  const [cardPicker, setCardPicker] = useState<{area: CardArea; key: 'color' | 'borderColor'} | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [picker, setPicker] = useState<ColorOption | null>(null);
@@ -50,12 +51,16 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
     const hidden = prefs[key].includes(id);
     void save({...prefs, [key]: hidden ? prefs[key].filter(item => item !== id) : [...prefs[key], id]});
   };
+  const updateCard = (area: CardArea, update: Partial<CardAppearance>) => {
+    const current = prefs.cards[area] || {transparent: false, hideBorder: false, radius: null, padding: null};
+    void save({...prefs, cards: {...prefs.cards, [area]: {...current, ...update}}});
+  };
   const choices = <K extends 'hubColumns' | 'tileRadius' | 'wallpaperDim' | 'wallpaperFit'>(key: K, label: string, values: ReadonlyArray<[string, ExtraCustomization[K]]>) => <View>
     <Text style={{color: T.text, fontSize: fs(14)}}>{label}</Text>
     <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 6}}>{values.map(([name, value]) => <Btn key={name} variant={prefs[key] === value ? 'solid' : 'ghost'} disabled={busy} onPress={() => { void save({...prefs, [key]: value}); }}>{name}</Btn>)}</View>
   </View>;
   const section = (title: string) => <Text accessibilityRole="header" style={{color: T.text, fontWeight: '700', fontSize: fs(17), marginTop: 12}}>{title}</Text>;
-  return <Modal visible animationType="slide" onRequestClose={() => { if (!busy && !picker && !elementPicker) onClose(); }}>
+  return <Modal visible animationType="slide" onRequestClose={() => { if (!busy && !picker && !elementPicker && !cardPicker) onClose(); }}>
     <SafeAreaView style={{flex: 1, backgroundColor: T.bg}}>
       <ScrollView contentContainerStyle={{padding: 24, gap: 14}} keyboardShouldPersistTaps="handled">
         <View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}>
@@ -103,6 +108,26 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         <ToggleRow label="Show author filter" value={!prefs.hideJournalAuthorFilter} disabled={busy} onToggle={() => toggle('hideJournalAuthorFilter')} />
         {section('History')}
         <ToggleRow label="Show title" value={!prefs.hideHistoryTitle} disabled={busy} onToggle={() => toggle('hideHistoryTitle')} />
+        {section('Cards')}
+        <Text style={{color: T.dim, fontSize: fs(13)}}>Choose the appearance of cards on each screen. Default keeps the original style.</Text>
+        {CARD_AREAS.map(area => {
+          const card = prefs.cards[area];
+          const name = area[0].toUpperCase() + area.slice(1);
+          return <View key={area} style={{gap: 8}}>
+            <Text accessibilityRole="header" style={{color: T.text, fontWeight: '700', fontSize: fs(15)}}>{name} cards</Text>
+            <ToggleRow label="Transparent background" value={card?.transparent === true} disabled={busy} onToggle={() => updateCard(area, {transparent: !card?.transparent})} />
+            <ToggleRow label="Show border" value={!card?.hideBorder} disabled={busy} onToggle={() => updateCard(area, {hideBorder: !card?.hideBorder})} />
+            {(['color', 'borderColor'] as const).map(key => <TouchableOpacity key={key} disabled={busy} accessibilityRole="button" accessibilityLabel={`Edit ${name} card ${key === 'color' ? 'background' : 'border'} color`} onPress={() => setCardPicker({area, key})} style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 9, gap: 12}}>
+              <View style={{width: 24, height: 24, borderRadius: 6, borderWidth: 1, borderColor: T.border, backgroundColor: card?.[key] || (key === 'color' ? T.card : T.border)}} />
+              <Text style={{flex: 1, color: T.text, fontSize: fs(14)}}>{key === 'color' ? 'Background color' : 'Border color'}</Text>
+              <Text style={{color: T.dim, fontSize: fs(12)}}>{card?.[key] || 'Default'}</Text>
+            </TouchableOpacity>)}
+            {(['radius', 'padding'] as const).map(key => <View key={key}>
+              <Text style={{color: T.text, fontSize: fs(14)}}>{key === 'radius' ? 'Corners' : 'Spacing'}</Text>
+              <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 6}}>{(key === 'radius' ? [['Default', null], ['Square', 0], ['Slight', 8], ['Round', 16], ['Extra round', 24]] : [['Default', null], ['Compact', 8], ['Medium', 12], ['Roomy', 20]]).map(([label, value]) => <Btn key={String(label)} variant={(card?.[key] ?? null) === value ? 'solid' : 'ghost'} disabled={busy} onPress={() => updateCard(area, {[key]: value})}>{String(label)}</Btn>)}</View>
+            </View>)}
+          </View>;
+        })}
         {section('Hub features')}
         {TILE_OPTIONS.map(id => <ToggleRow key={id} label={TILE_NAMES[id]} value={!prefs.hiddenTiles.includes(id)} disabled={busy}
           onToggle={() => toggleHidden('hiddenTiles', id)} />)}
@@ -126,6 +151,10 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         <Btn variant="ghost" disabled={busy} onPress={() => { void save({...DEFAULT_EXTRA_CUSTOMIZATION, enabled: true}); }}>Reset extra customization</Btn>
         {!!error && <Text accessibilityRole="alert" style={{color: T.danger, fontSize: fs(14)}}>{error}</Text>}
       </ScrollView>
+      {cardPicker && <ColorPickerModal visible title={`${cardPicker.area[0].toUpperCase() + cardPicker.area.slice(1)} card ${cardPicker.key === 'color' ? 'background' : 'border'} color`}
+        value={prefs.cards[cardPicker.area]?.[cardPicker.key] || (cardPicker.key === 'color' ? T.card : T.border)} onClose={() => setCardPicker(null)}
+        onSave={hex => { updateCard(cardPicker.area, {[cardPicker.key]: hex}); setCardPicker(null); }}
+        onClear={() => { updateCard(cardPicker.area, {[cardPicker.key]: undefined}); setCardPicker(null); }} clearLabel="Use default" />}
       {elementPicker && <ColorPickerModal visible title={`${ELEMENT_COLOR_NAMES[elementPicker]} color`}
         value={prefs.elementColors[elementPicker] || elementColorOf(elementPicker)} onClose={() => setElementPicker(null)}
         onSave={hex => { void save({...prefs, elementColors: {...prefs.elementColors, [elementPicker]: hex}}); setElementPicker(null); }}

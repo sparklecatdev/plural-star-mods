@@ -536,6 +536,7 @@ test('inactive lock button hides only when its switch is enabled', async () => {
 test('enhanced member cards default to banners while respecting an explicit background', async () => {
   let enhanced = false;
   const {MemberCard} = load('src/screens/members/MemberCard.tsx', {
+    '../../mods/extraCustomization': {useExtraCustomization: () => ({}), cardAppearance: () => ({})},
     '../../mods/modPreferences': {useModPreferences: () => ({groupView: enhanced})},
     'react-native': {View: 'View', TouchableOpacity: 'TouchableOpacity', Image: 'Image', StyleSheet: {create: x => x, absoluteFill: {}}},
     'react-i18next': {useTranslation: () => ({t: x => x})},

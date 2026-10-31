@@ -82,6 +82,23 @@ test('expanded customization validates and syncs appearance settings', () => {
   assert.equal(restored.elementColors.header, '#123456');
 });
 
+test('per-screen card settings validate, sync, and preserve defaults', () => {
+  const defaults = extra.sanitizeExtraCustomization(null);
+  assert.deepEqual(plain(extra.cardAppearance(defaults, 'front')), {});
+  const settings = extra.sanitizeExtraCustomization({enabled: true, cards: {
+    front: {transparent: true, hideBorder: true, radius: 24, padding: 8, color: '#aabbcc', borderColor: 'bad'},
+    members: {radius: 999, padding: -1, transparent: 'yes'}, unknown: {color: '#123456'},
+  }});
+  assert.deepEqual(plain(extra.cardAppearance(settings, 'front')), {backgroundColor: 'transparent', borderWidth: 0, borderRadius: 24, padding: 8});
+  assert.deepEqual(plain(extra.cardAppearance({...settings, enabled: false}, 'front')), {});
+  assert.deepEqual(plain(settings.cards.members), {transparent: false, hideBorder: false, radius: null, padding: null});
+  assert.equal(settings.cards.unknown, undefined);
+  assert.equal(settings.cards.front.color, '#AABBCC');
+  assert.equal(settings.cards.front.borderColor, undefined);
+  const saved = record(); saved.settings.extraCustomization = settings;
+  assert.deepEqual(plain(readCloudMods(JSON.stringify(saved)).settings.extraCustomization.cards), plain(settings.cards));
+});
+
 test('cloud records reject malformed, oversized, future, and duplicate data; executable fields are discarded', () => {
   for (const raw of ['{', 'null', 'x'.repeat(16385), JSON.stringify({...record(), schema: 2}),
     JSON.stringify({...record(), settings: {...settings(), automaticUpdates: 'yes'}}),

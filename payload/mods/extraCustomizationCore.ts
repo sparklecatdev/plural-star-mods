@@ -2,10 +2,14 @@ export const TAB_OPTIONS = ['front', 'members', 'hub', 'journal', 'history'] as 
 export const TILE_OPTIONS = ['planner', 'retroHistory', 'statistics', 'chat', 'mailbox', 'whiteboard', 'colors', 'network', 'polls', 'systemMap', 'customFields', 'systemManager', 'archive', 'share', 'credits', 'discord', 'supportPS'] as const;
 export const COLOR_OPTIONS = ['canvas', 'surface', 'card', 'border', 'borderLt', 'accentBg', 'dim', 'muted', 'toggleOff', 'danger', 'dangerBg', 'success', 'successBg', 'info', 'infoBg'] as const;
 export const ELEMENT_COLOR_OPTIONS = ['header', 'tabBar', 'tabActive', 'tabInactive', 'hubTile', 'hubTileBorder'] as const;
+export const CARD_AREAS = ['front', 'members', 'journal', 'history'] as const;
+export type CardArea = typeof CARD_AREAS[number];
+export type CardAppearance = {transparent: boolean; hideBorder: boolean; color?: string; borderColor?: string; radius: number | null; padding: number | null};
 export type ElementColorOption = typeof ELEMENT_COLOR_OPTIONS[number];
 export type ColorOption = typeof COLOR_OPTIONS[number];
 export type ExtraCustomization = {
   enabled: boolean;
+  cards: Partial<Record<CardArea, CardAppearance>>;
   hiddenTabs: string[];
   hiddenTiles: string[];
   fullScreenWallpaper: boolean;
@@ -41,6 +45,7 @@ export type ExtraCustomization = {
   colors: Partial<Record<ColorOption, string>>;
 };
 export const DEFAULT_EXTRA_CUSTOMIZATION: ExtraCustomization = {
+  cards: {},
   hideHeaderBorder: false, hideTabBarBorder: false, hideTabIcons: false, hideTileIcons: false,
   transparentHubTiles: false, hideHubTileBorders: false, hubColumns: 0, tileRadius: 14,
   wallpaperDim: 0.78, wallpaperFit: 'cover', elementColors: {},
@@ -64,7 +69,21 @@ export function sanitizeExtraCustomization(value: unknown): ExtraCustomization {
     const color = v.elementColors?.[key];
     if (typeof color === 'string' && hex.test(color)) elementColors[key] = color.toUpperCase();
   }
+  const cards: ExtraCustomization['cards'] = {};
+  for (const area of CARD_AREAS) {
+    const card = v.cards?.[area];
+    if (!card || typeof card !== 'object') continue;
+    const clean: CardAppearance = {
+      transparent: card.transparent === true, hideBorder: card.hideBorder === true,
+      radius: card.radius === 0 || card.radius === 8 || card.radius === 16 || card.radius === 24 ? card.radius : null,
+      padding: card.padding === 8 || card.padding === 12 || card.padding === 20 ? card.padding : null,
+    };
+    if (typeof card.color === 'string' && hex.test(card.color)) clean.color = card.color.toUpperCase();
+    if (typeof card.borderColor === 'string' && hex.test(card.borderColor)) clean.borderColor = card.borderColor.toUpperCase();
+    cards[area] = clean;
+  }
   return {
+    cards,
     hideHeaderBorder: v.hideHeaderBorder === true, hideTabBarBorder: v.hideTabBarBorder === true,
     hideTabIcons: v.hideTabIcons === true, hideTileIcons: v.hideTileIcons === true,
     transparentHubTiles: v.transparentHubTiles === true, hideHubTileBorders: v.hideHubTileBorders === true,
@@ -89,5 +108,18 @@ export function sanitizeExtraCustomization(value: unknown): ExtraCustomization {
     hideMemberSearch: v.hideMemberSearch === true, hideMemberBackToTop: v.hideMemberBackToTop === true,
     hideJournalTitle: v.hideJournalTitle === true, hideJournalTagFilter: v.hideJournalTagFilter === true,
     hideJournalAuthorFilter: v.hideJournalAuthorFilter === true, hideHistoryTitle: v.hideHistoryTitle === true, colors,
+  };
+}
+
+// Only explicitly chosen values override a screen's original card style.
+export function cardAppearance(prefs: ExtraCustomization, area: CardArea) {
+  const card = prefs.enabled ? prefs.cards[area] : undefined;
+  if (!card) return {};
+  return {
+    ...(card.transparent ? {backgroundColor: 'transparent'} : card.color ? {backgroundColor: card.color} : {}),
+    ...(card.borderColor ? {borderColor: card.borderColor} : {}),
+    ...(card.hideBorder ? {borderWidth: 0} : {}),
+    ...(card.radius !== null ? {borderRadius: card.radius} : {}),
+    ...(card.padding !== null ? {padding: card.padding} : {}),
   };
 }

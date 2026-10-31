@@ -125,6 +125,32 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
         target = "const bgMode = fields.background || 'plain';"
         assert text.count(target) == 1
         card.write_text(text.replace(target, "const bgMode = fields.background || (showGroupTags ? 'banner' : 'plain');"))
+        # Optional card styling retains the upstream style when no choice is set.
+        card_targets = [
+            ('src/screens/front/TierCard.tsx', 'front', [('{backgroundColor: T.card, borderColor: `${accentColor}40`},', "{backgroundColor: T.card, borderColor: `${accentColor}40`}, cardAppearance(extra, 'front'),")]),
+            ('src/screens/members/MemberCard.tsx', 'members', [("marginBottom: 8, overflow: 'hidden'}]}", "marginBottom: 8, overflow: 'hidden'}, cardAppearance(extra, 'members'), selectionMode && isSelected ? {borderWidth: 2, borderColor: T.accent} : null]}")]),
+            ('src/screens/journal/JournalParts.tsx', 'journal', [("borderColor: e.pinned ? `${T.accent}50` : T.border}]}", "borderColor: e.pinned ? `${T.accent}50` : T.border}, cardAppearance(extra, 'journal')]}")]),
+            ('src/screens/history/HistoryRows.tsx', 'history', [("borderColor: isOpen ? `${T.accent}40` : T.border, marginBottom: 8}]}", "borderColor: isOpen ? `${T.accent}40` : T.border, marginBottom: 8}, cardAppearance(extra, 'history')]}") , ("{flex: 1, backgroundColor: T.card, borderColor: T.border}]}", "{flex: 1, backgroundColor: T.card, borderColor: T.border}, cardAppearance(extra, 'history')]}")]),
+        ]
+        for path, area, changes in card_targets:
+            component = SOURCE / path
+            text = component.read_text()
+            text = "import {cardAppearance, useExtraCustomization} from '../../mods/extraCustomization';\n" + text
+            # These hooks occur once per component that renders a styled card.
+            if area == 'history':
+                for name in ['FrontHistoryEntryRow', 'MemberEventRow']:
+                    start = text.index('export const ' + name)
+                    pos = text.index('  const T = useTheme();', start) + len('  const T = useTheme();')
+                    text = text[:pos] + '\n  const extra = useExtraCustomization();' + text[pos:]
+            else:
+                assert text.count('  const T = useTheme();') == (4 if area == 'journal' else 1)
+                start = text.index('export const JournalEntryRow') if area == 'journal' else 0
+                pos = text.index('  const T = useTheme();', start) + len('  const T = useTheme();')
+                text = text[:pos] + '\n  const extra = useExtraCustomization();' + text[pos:]
+            for old, new in changes:
+                assert text.count(old) == 1, (path, old)
+                text = text.replace(old, new)
+            component.write_text(text)
         display = SOURCE / 'src/screens/members/DisplayOptionsSheet.tsx'
         text = display.read_text()
         text = "import {useModPreferences} from '../../mods/modPreferences';\n" + text
