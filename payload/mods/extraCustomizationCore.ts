@@ -1,3 +1,5 @@
+export const FRONT_TIERS = ['primary', 'coFront', 'coConscious'] as const;
+export type FrontTierOption = typeof FRONT_TIERS[number];
 export const TAB_OPTIONS = ['front', 'members', 'hub', 'journal', 'history'] as const;
 export const TILE_OPTIONS = ['planner', 'retroHistory', 'statistics', 'chat', 'mailbox', 'whiteboard', 'colors', 'network', 'polls', 'systemMap', 'customFields', 'systemManager', 'archive', 'share', 'credits', 'discord', 'supportPS'] as const;
 export const COLOR_OPTIONS = ['canvas', 'surface', 'card', 'border', 'borderLt', 'accentBg', 'dim', 'muted', 'toggleOff', 'danger', 'dangerBg', 'success', 'successBg', 'info', 'infoBg'] as const;
@@ -9,6 +11,9 @@ export type ElementColorOption = typeof ELEMENT_COLOR_OPTIONS[number];
 export type ColorOption = typeof COLOR_OPTIONS[number];
 export type ExtraCustomization = {
   enabled: boolean;
+  hiddenFrontTiers: FrontTierOption[];
+  frontTierNames: Partial<Record<FrontTierOption, string>>;
+  frontTierColors: Partial<Record<FrontTierOption, string>>;
   cards: Partial<Record<CardArea, CardAppearance>>;
   hiddenTabs: string[];
   hiddenTiles: string[];
@@ -45,7 +50,7 @@ export type ExtraCustomization = {
   colors: Partial<Record<ColorOption, string>>;
 };
 export const DEFAULT_EXTRA_CUSTOMIZATION: ExtraCustomization = {
-  cards: {},
+  cards: {}, hiddenFrontTiers: [], frontTierNames: {}, frontTierColors: {},
   hideHeaderBorder: false, hideTabBarBorder: false, hideTabIcons: false, hideTileIcons: false,
   transparentHubTiles: false, hideHubTileBorders: false, hubColumns: 0, tileRadius: 14,
   wallpaperDim: 0.78, wallpaperFit: 'cover', elementColors: {},
@@ -69,6 +74,14 @@ export function sanitizeExtraCustomization(value: unknown): ExtraCustomization {
     const color = v.elementColors?.[key];
     if (typeof color === 'string' && hex.test(color)) elementColors[key] = color.toUpperCase();
   }
+  const frontTierNames: ExtraCustomization['frontTierNames'] = {};
+  const frontTierColors: ExtraCustomization['frontTierColors'] = {};
+  for (const key of FRONT_TIERS) {
+    const name = v.frontTierNames?.[key];
+    const color = v.frontTierColors?.[key];
+    if (typeof name === 'string' && name.trim()) frontTierNames[key] = name.trim().slice(0, 40);
+    if (typeof color === 'string' && hex.test(color)) frontTierColors[key] = color.toUpperCase();
+  }
   const cards: ExtraCustomization['cards'] = {};
   for (const area of CARD_AREAS) {
     const card = v.cards?.[area];
@@ -83,7 +96,8 @@ export function sanitizeExtraCustomization(value: unknown): ExtraCustomization {
     cards[area] = clean;
   }
   return {
-    cards,
+    cards, frontTierNames, frontTierColors,
+    hiddenFrontTiers: Array.isArray(v.hiddenFrontTiers) ? v.hiddenFrontTiers.filter((id): id is FrontTierOption => (FRONT_TIERS as readonly string[]).includes(id)) : [],
     hideHeaderBorder: v.hideHeaderBorder === true, hideTabBarBorder: v.hideTabBarBorder === true,
     hideTabIcons: v.hideTabIcons === true, hideTileIcons: v.hideTileIcons === true,
     transparentHubTiles: v.transparentHubTiles === true, hideHubTileBorders: v.hideHubTileBorders === true,

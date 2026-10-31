@@ -82,6 +82,21 @@ test('expanded customization validates and syncs appearance settings', () => {
   assert.equal(restored.elementColors.header, '#123456');
 });
 
+test('front tier customizations validate and sync with defaults intact', () => {
+  const defaults = extra.sanitizeExtraCustomization(null);
+  assert.deepEqual(plain(defaults.hiddenFrontTiers), []);
+  assert.deepEqual(plain(defaults.frontTierNames), {});
+  assert.deepEqual(plain(defaults.frontTierColors), {});
+  const saved = record();
+  saved.settings.extraCustomization = {enabled: true, hiddenFrontTiers: ['coFront', 'invalid'],
+    frontTierNames: {primary: '  Main  ', coFront: ' ', invalid: 'Other'},
+    frontTierColors: {coConscious: '#abc123', primary: 'red'}};
+  const restored = readCloudMods(JSON.stringify(saved)).settings.extraCustomization;
+  assert.deepEqual(plain(restored.hiddenFrontTiers), ['coFront']);
+  assert.deepEqual(plain(restored.frontTierNames), {primary: 'Main'});
+  assert.deepEqual(plain(restored.frontTierColors), {coConscious: '#ABC123'});
+});
+
 test('per-screen card settings validate, sync, and preserve defaults', () => {
   const defaults = extra.sanitizeExtraCustomization(null);
   assert.deepEqual(plain(extra.cardAppearance(defaults, 'front')), {});

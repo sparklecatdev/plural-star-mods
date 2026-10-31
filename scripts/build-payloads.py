@@ -62,6 +62,35 @@ def main():
         run('git', 'apply', str(ROOT / 'payload/device-unlock.patch'))
         run('git', 'apply', str(ROOT / 'payload/extra-customization.patch'))
         run('git', 'apply', str(ROOT / 'payload/lock-icon.patch'))
+        # Keep tier customization opt-in and leave hidden tier data untouched.
+        theme = SOURCE / 'src/theme.ts'
+        text = theme.read_text()
+        assert text.count('  textScale: number;') == 1
+        text = text.replace('  textScale: number;', '  textScale: number;\n  tierColors?: Partial<Record<FrontTierKey, string>>;')
+        target = "tier === 'primary' ? T.accent : tier === 'coFront' ? T.info : T.success"
+        assert text.count(target) == 1
+        theme.write_text(text.replace(target, "T.tierColors?.[tier] || (" + target + ")"))
+        app_theme = SOURCE / 'src/app/useAppTheme.ts'
+        text = app_theme.read_text()
+        target = 'setTierNameOverrides(appSettings.tierNames); setOverridesTick(n => n + 1); }, [appSettings.tierNames]'
+        assert text.count(target) == 1
+        app_theme.write_text(text.replace(target, 'setTierNameOverrides({...appSettings.tierNames, ...(extra.enabled ? extra.frontTierNames : {})}); setOverridesTick(n => n + 1); }, [appSettings.tierNames, extra.enabled, extra.frontTierNames]'))
+        front = SOURCE / 'src/screens/FrontScreen.tsx'
+        text = front.read_text()
+        target = 'FRONT_TIER_KEYS.map(tierKey => ('
+        assert text.count(target) == 1
+        front.write_text(text.replace(target, 'FRONT_TIER_KEYS.filter(tierKey => !extra.enabled || !extra.hiddenFrontTiers.includes(tierKey)).map(tierKey => ('))
+        for relative, marker, target in [
+            ('src/modals/SetFrontModal.tsx', '../mods/extraCustomization', 'FRONT_TIER_KEYS.map(tier => {'),
+            ('src/screens/members/QuickFrontSheet.tsx', '../../mods/extraCustomization', 'FRONT_TIER_KEYS.map(k => ('),
+        ]:
+            component = SOURCE / relative
+            text = component.read_text()
+            assert text.count('  const T = useTheme();') == 1 and text.count(target) == 1
+            text = "import {useExtraCustomization} from '" + marker + "';\n" + text
+            text = text.replace('  const T = useTheme();', '  const T = useTheme();\n  const extra = useExtraCustomization();')
+            text = text.replace(target, target.replace('FRONT_TIER_KEYS.map', 'FRONT_TIER_KEYS.filter(tier => !extra.enabled || !extra.hiddenFrontTiers.includes(tier)).map'))
+            component.write_text(text)
         # Keep the controls visible while allowing their backgrounds to be transparent.
         header = SOURCE / 'src/components/AppHeader.tsx'
         text = header.read_text()

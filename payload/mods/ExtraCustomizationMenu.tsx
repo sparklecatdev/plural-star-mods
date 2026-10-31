@@ -1,16 +1,18 @@
 import React, {useState} from 'react';
-import {Modal, ScrollView, TouchableOpacity, View} from 'react-native';
+import {Modal, ScrollView, TextInput, TouchableOpacity, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Text} from '../components/AppText';
 import {ColorPickerModal} from '../components/ColorPickerModal';
 import {Btn, ToggleRow as BaseToggleRow} from '../components/controls';
-import {fontScale} from '../theme';
+import {fontScale, tierAccent} from '../theme';
 import {options} from './modOptions';
 import {useTheme} from '../themeContext';
-import {CARD_AREAS, ELEMENT_COLOR_OPTIONS, COLOR_OPTIONS, DEFAULT_EXTRA_CUSTOMIZATION, extraCustomization, TILE_OPTIONS, useExtraCustomization} from './extraCustomization';
-import type {CardArea, CardAppearance, ElementColorOption, ColorOption, ExtraCustomization} from './extraCustomization';
+import {FRONT_TIERS, CARD_AREAS, ELEMENT_COLOR_OPTIONS, COLOR_OPTIONS, DEFAULT_EXTRA_CUSTOMIZATION, extraCustomization, TILE_OPTIONS, useExtraCustomization} from './extraCustomization';
+import type {FrontTierOption, CardArea, CardAppearance, ElementColorOption, ColorOption, ExtraCustomization} from './extraCustomization';
 
 const ToggleRow = (props: Omit<React.ComponentProps<typeof BaseToggleRow>, 'desc'>) => <BaseToggleRow {...props} desc="" />;
+
+const FRONT_TIER_NAMES: Record<FrontTierOption, string> = {primary: 'Primary front', coFront: 'Co-front', coConscious: 'Co-conscious'};
 
 const TAB_NAMES: Record<string, string> = {members: 'Members', journal: 'Journal', history: 'History'};
 const TILE_NAMES: Record<string, string> = {
@@ -31,6 +33,8 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
   const prefs = useExtraCustomization();
   const colorOf = (key: ColorOption) => key === 'canvas' ? ('canvas' in T && typeof T.canvas === 'string' ? T.canvas : T.bg) : T[key];
   const elementColorOf = (key: ElementColorOption) => ({header: T.bg, tabBar: T.surface, tabActive: T.accent, tabInactive: T.dim, hubTile: T.card, hubTileBorder: T.border})[key];
+  const [tierPicker, setTierPicker] = useState<FrontTierOption | null>(null);
+  const [tierDrafts, setTierDrafts] = useState(prefs.frontTierNames);
   const [elementPicker, setElementPicker] = useState<ElementColorOption | null>(null);
   const [cardPicker, setCardPicker] = useState<{area: CardArea; key: 'color' | 'borderColor'} | null>(null);
   const [busy, setBusy] = useState(false);
@@ -60,7 +64,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
     <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 6}}>{values.map(([name, value]) => <Btn key={name} variant={prefs[key] === value ? 'solid' : 'ghost'} disabled={busy} onPress={() => { void save({...prefs, [key]: value}); }}>{name}</Btn>)}</View>
   </View>;
   const section = (title: string) => <Text accessibilityRole="header" style={{color: T.text, fontWeight: '700', fontSize: fs(17), marginTop: 12}}>{title}</Text>;
-  return <Modal visible animationType="slide" onRequestClose={() => { if (!busy && !picker && !elementPicker && !cardPicker) onClose(); }}>
+  return <Modal visible animationType="slide" onRequestClose={() => { if (!busy && !picker && !elementPicker && !cardPicker && !tierPicker) onClose(); }}>
     <SafeAreaView style={{flex: 1, backgroundColor: T.bg}}>
       <ScrollView contentContainerStyle={{padding: 24, gap: 14}} keyboardShouldPersistTaps="handled">
         <View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}>
@@ -96,6 +100,21 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         <ToggleRow label="Show hub tile borders" value={!prefs.hideHubTileBorders} disabled={busy} onToggle={() => toggle('hideHubTileBorders')} />
         {choices('hubColumns', 'Hub columns', [['Automatic', 0], ['1', 1], ['2', 2], ['3', 3]])}
         {choices('tileRadius', 'Hub tile corners', [['Square', 0], ['Slight', 8], ['Default', 14], ['Round', 24]])}
+        {section('Front tiers')}
+        <Text style={{color: T.dim, fontSize: fs(13)}}>Hidden tiers disappear from the front screen and front selection. Saved front data is kept.</Text>
+        {FRONT_TIERS.map(tier => <View key={tier} style={{gap: 6}}>
+          <ToggleRow label={`Show ${FRONT_TIER_NAMES[tier]}`} value={!prefs.hiddenFrontTiers.includes(tier)} disabled={busy} onToggle={() => {
+            const hiddenFrontTiers = prefs.hiddenFrontTiers.includes(tier) ? prefs.hiddenFrontTiers.filter(item => item !== tier) : [...prefs.hiddenFrontTiers, tier];
+            void save({...prefs, hiddenFrontTiers});
+          }} />
+          <TextInput accessibilityLabel={`${FRONT_TIER_NAMES[tier]} name`} value={tierDrafts[tier] || ''} maxLength={40} placeholder="Default name" placeholderTextColor={T.dim}
+            onChangeText={name => setTierDrafts({...tierDrafts, [tier]: name})} style={{color: T.text, borderWidth: 1, borderColor: T.border, borderRadius: 8, padding: 10}} />
+          <Btn variant="ghost" disabled={busy} onPress={() => { void save({...prefs, frontTierNames: {...prefs.frontTierNames, [tier]: tierDrafts[tier] || ''}}); }}>Save name</Btn>
+          <TouchableOpacity disabled={busy} accessibilityRole="button" accessibilityLabel={`Edit ${FRONT_TIER_NAMES[tier]} color`} onPress={() => setTierPicker(tier)} style={{flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9}}>
+            <View style={{width: 24, height: 24, borderRadius: 6, borderWidth: 1, borderColor: T.border, backgroundColor: tierAccent(T, tier)}} />
+            <Text style={{flex: 1, color: T.text, fontSize: fs(14)}}>Color</Text><Text style={{color: T.dim}}>{prefs.frontTierColors[tier] || 'Default'}</Text>
+          </TouchableOpacity>
+        </View>)}
         {section('Members')}
         <ToggleRow label="Show sorting" value={!prefs.hideMemberSort} disabled={busy} onToggle={() => toggle('hideMemberSort')} />
         <ToggleRow label="Show group filter" value={!prefs.hideMemberGroupFilter} disabled={busy} onToggle={() => toggle('hideMemberGroupFilter')} />
@@ -151,6 +170,9 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         <Btn variant="ghost" disabled={busy} onPress={() => { void save({...DEFAULT_EXTRA_CUSTOMIZATION, enabled: true}); }}>Reset extra customization</Btn>
         {!!error && <Text accessibilityRole="alert" style={{color: T.danger, fontSize: fs(14)}}>{error}</Text>}
       </ScrollView>
+      {tierPicker && <ColorPickerModal visible title={`${FRONT_TIER_NAMES[tierPicker]} color`} value={tierAccent(T, tierPicker)} onClose={() => setTierPicker(null)}
+        onSave={hex => { void save({...prefs, frontTierColors: {...prefs.frontTierColors, [tierPicker]: hex}}); setTierPicker(null); }}
+        onClear={() => { const frontTierColors = {...prefs.frontTierColors}; delete frontTierColors[tierPicker]; void save({...prefs, frontTierColors}); setTierPicker(null); }} clearLabel="Use default" />}
       {cardPicker && <ColorPickerModal visible title={`${cardPicker.area[0].toUpperCase() + cardPicker.area.slice(1)} card ${cardPicker.key === 'color' ? 'background' : 'border'} color`}
         value={prefs.cards[cardPicker.area]?.[cardPicker.key] || (cardPicker.key === 'color' ? T.card : T.border)} onClose={() => setCardPicker(null)}
         onSave={hex => { updateCard(cardPicker.area, {[cardPicker.key]: hex}); setCardPicker(null); }}
