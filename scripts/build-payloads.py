@@ -64,15 +64,15 @@ def main():
         run('git', 'apply', str(ROOT / 'payload/extra-customization.patch'))
         run('git', 'apply', str(ROOT / 'payload/lock-icon.patch'))
         run('git', 'apply', str(ROOT / 'payload/rest-mode-pr-25.patch'))
-        # Transparent cards must not make modal sheets reveal the page beneath them.
+        # Allow an optional sheet background opacity without fading its contents.
         sheet = SOURCE / 'src/components/Sheet.tsx'
-        text = sheet.read_text()
+        text = "import {useExtraCustomization} from '../mods/extraCustomization';\n" + sheet.read_text()
         assert text.count('  const T = useTheme();') == 1 and text.count('backgroundColor: T.card') == 1
         assert text.count('backgroundColor={T.card}') == 1 and text.count('style={s.body}') == 1
-        text = text.replace('  const T = useTheme();', "  const T = useTheme();\n  const sheetBackground = T.card === '#00000000' ? T.bg : T.card;")
+        text = text.replace('  const T = useTheme();', "  const T = useTheme();\n  const extra = useExtraCustomization();\n  const sheetOpacity = extra.enabled ? extra.sheetOpacity : null;\n  const sheetBackground = sheetOpacity === null ? T.card : T.bg + Math.round(sheetOpacity * 255 / 100).toString(16).padStart(2, '0');\n  const sheetContentBackground = sheetOpacity === null ? T.card : 'transparent';")
         text = text.replace('backgroundColor={T.card}', 'backgroundColor={sheetBackground}')
-        text = text.replace('backgroundColor: T.card', 'backgroundColor: sheetBackground')
-        text = text.replace('style={s.body}', 'style={[s.body, {backgroundColor: sheetBackground}]}')
+        text = text.replace('backgroundColor: T.card', 'backgroundColor: sheetContentBackground')
+        text = text.replace('style={s.body}', 'style={[s.body, {backgroundColor: sheetContentBackground}]}')
         sheet.write_text(text)
         types = SOURCE / 'src/model/types.ts'
         text = types.read_text()

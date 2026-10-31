@@ -13,6 +13,7 @@ export type ExtraCustomization = {
   enabled: boolean;
   blankStartPage: boolean;
   transparentAllCards: boolean;
+  sheetOpacity: number | null;
   minimalHubIcons: boolean;
   hubIconImages: Partial<Record<typeof TILE_OPTIONS[number], string>>;
   autoCollapseControls: boolean;
@@ -55,7 +56,7 @@ export type ExtraCustomization = {
   colors: Partial<Record<ColorOption, string>>;
 };
 export const DEFAULT_EXTRA_CUSTOMIZATION: ExtraCustomization = {
-  blankStartPage: false, transparentAllCards: false, minimalHubIcons: false, hubIconImages: {}, autoCollapseControls: false, cards: {}, hiddenFrontTiers: [], frontTierNames: {}, frontTierColors: {},
+  blankStartPage: false, transparentAllCards: false, sheetOpacity: null, minimalHubIcons: false, hubIconImages: {}, autoCollapseControls: false, cards: {}, hiddenFrontTiers: [], frontTierNames: {}, frontTierColors: {},
   hideHeaderBorder: false, hideTabBarBorder: false, hideTabIcons: false, hideTileIcons: false,
   transparentHubTiles: false, hideHubTileBorders: false, hubColumns: 0, tileRadius: 14,
   wallpaperDim: 0.78, wallpaperFit: 'cover', elementColors: {},
@@ -107,7 +108,7 @@ export function sanitizeExtraCustomization(value: unknown): ExtraCustomization {
   }
   return {
     cards, frontTierNames, frontTierColors, hubIconImages,
-    transparentAllCards: v.transparentAllCards === true, minimalHubIcons: v.minimalHubIcons === true,
+    transparentAllCards: v.transparentAllCards === true, sheetOpacity: typeof v.sheetOpacity === 'number' && Number.isFinite(v.sheetOpacity) && v.sheetOpacity >= 0 && v.sheetOpacity <= 100 ? Math.round(v.sheetOpacity) : null, minimalHubIcons: v.minimalHubIcons === true,
     hiddenFrontTiers: Array.isArray(v.hiddenFrontTiers) ? v.hiddenFrontTiers.filter((id): id is FrontTierOption => (FRONT_TIERS as readonly string[]).includes(id)) : [],
     hideHeaderBorder: v.hideHeaderBorder === true, hideTabBarBorder: v.hideTabBarBorder === true,
     hideTabIcons: v.hideTabIcons === true, hideTileIcons: v.hideTileIcons === true,

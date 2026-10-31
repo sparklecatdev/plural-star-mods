@@ -304,9 +304,13 @@ test('sync opt-in is local and disabled sync does not read or apply cloud settin
 });
 
 test('experimental control collapsing defaults off and syncs only valid preferences', () => {
+  assert.equal(extra.sanitizeExtraCustomization(null).sheetOpacity, null);
+  assert.equal(extra.sanitizeExtraCustomization({sheetOpacity: 101}).sheetOpacity, null);
+  assert.equal(extra.sanitizeExtraCustomization({sheetOpacity: 50}).sheetOpacity, 50);
   assert.equal(extra.sanitizeExtraCustomization(null).autoCollapseControls, false);
   assert.equal(extra.sanitizeExtraCustomization({autoCollapseControls: 'true'}).autoCollapseControls, false);
   const saved = record();
-  saved.settings.extraCustomization = {enabled: true, autoCollapseControls: true};
+  saved.settings.extraCustomization = {enabled: true, autoCollapseControls: true, sheetOpacity: 50};
   assert.equal(readCloudMods(JSON.stringify(saved)).settings.extraCustomization.autoCollapseControls, true);
+  assert.equal(readCloudMods(JSON.stringify(saved)).settings.extraCustomization.sheetOpacity, 50);
 });

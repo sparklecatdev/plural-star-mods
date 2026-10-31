@@ -26,25 +26,35 @@ function load(name, imports = {}, generated = false) {
 const theme = {bg: '#14101F', text: '#ffffff', surface: '#241b33', accent: '#e5b5ff', dim: '#c5b9d4', muted: '#9889a8', danger: '#ffb4c8', border: '#51465e'};
 const host = name => ({children, ...props}) => React.createElement(name, props, children);
 
-test('sheets stay opaque when cards are transparent and retain the normal card color otherwise', async () => {
+test('sheet opacity is optional and does not fade content', async () => {
   let colors = {...theme, card: '#00000000'};
+  let extra = {enabled: true, sheetOpacity: null};
   const {Sheet} = load('src/components/Sheet.tsx', {
     'react-native': {View: 'View', ScrollView: 'ScrollView', TouchableOpacity: 'TouchableOpacity', StyleSheet: {create: x => x}, Platform: {OS: 'android'}},
     './AppText': {Text: 'Text'}, 'react-native-safe-area-context': {useSafeAreaInsets: () => ({bottom: 0})},
     '@lodev09/react-native-true-sheet': {TrueSheet: host('TrueSheet')}, '../theme': {Fonts: {display: 'font'}},
     '../themeContext': {useTheme: () => colors}, 'react-i18next': {useTranslation: () => ({t: x => x})},
-    '../utils/log': {log: {debug: () => {}}},
+    '../utils/log': {log: {debug: () => {}}}, '../mods/extraCustomization': {useExtraCustomization: () => extra},
   }, true);
   let renderer;
   const element = () => React.createElement(Sheet, {visible: false, title: 'Settings', onClose: () => {}}, 'Content');
-  const check = color => {
+  const check = (color, content = color) => {
     const sheet = renderer.root.findByType('TrueSheet');
     assert.equal(sheet.props.backgroundColor, color);
-    assert.equal(sheet.props.header.props.style[1].backgroundColor, color);
-    assert.equal(renderer.root.findByType('ScrollView').props.style[1].backgroundColor, color);
+    assert.equal(sheet.props.header.props.style[1].backgroundColor, content);
+    assert.equal(renderer.root.findByType('ScrollView').props.style[1].backgroundColor, content);
   };
   await act(async () => { renderer = create(element()); });
-  check(theme.bg);
+  check('#00000000');
+  extra = {enabled: true, sheetOpacity: 50};
+  await act(async () => renderer.update(element()));
+  check(theme.bg + '80', 'transparent');
+  extra = {enabled: true, sheetOpacity: 100};
+  await act(async () => renderer.update(element()));
+  check(theme.bg + 'ff', 'transparent');
+  extra = {enabled: false, sheetOpacity: 100};
+  await act(async () => renderer.update(element()));
+  check('#00000000');
   colors = {...colors, card: '#322233'};
   await act(async () => renderer.update(element()));
   check(colors.card);

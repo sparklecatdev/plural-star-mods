@@ -1,7 +1,7 @@
 import {pickAndSaveImage} from '../utils/imagePicker';
 import {saveBioImageFromUri} from '../utils/mediaUtils';
-import React, {useState} from 'react';
-import {Image, Modal, ScrollView, TextInput, TouchableOpacity, View} from 'react-native';
+import React, {useRef, useState} from 'react';
+import {Image, Modal, PanResponder, ScrollView, TextInput, TouchableOpacity, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Text} from '../components/AppText';
 import {ColorPickerModal} from '../components/ColorPickerModal';
@@ -30,6 +30,36 @@ const COLOR_NAMES: Partial<Record<ColorOption, string>> = {
 };
 
 const ELEMENT_COLOR_NAMES: Record<ElementColorOption, string> = {header: 'Top bar', tabBar: 'Bottom bar', tabActive: 'Selected tab', tabInactive: 'Unselected tabs', hubTile: 'Hub tile', hubTileBorder: 'Hub tile border'};
+
+function OpacitySlider({value, disabled, onChange}: {value: number; disabled: boolean; onChange: (value: number) => void}) {
+  const T = useTheme();
+  const [draft, setDraft] = useState<number | null>(null);
+  const width = useRef(0); const origin = useRef(0); const current = useRef(value);
+  const props = useRef({disabled, onChange}); props.current = {disabled, onChange};
+  const update = (x: number) => {
+    if (width.current <= 0) return;
+    current.current = Math.max(0, Math.min(100, Math.round(x / width.current * 100)));
+    setDraft(current.current);
+  };
+  const pan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => !props.current.disabled,
+    onMoveShouldSetPanResponder: () => !props.current.disabled,
+    onPanResponderGrant: e => { origin.current = e.nativeEvent.pageX - e.nativeEvent.locationX; update(e.nativeEvent.locationX); },
+    onPanResponderMove: e => update(e.nativeEvent.pageX - origin.current),
+    onPanResponderRelease: () => { props.current.onChange(current.current); setDraft(null); },
+    onPanResponderTerminate: () => setDraft(null),
+  })).current;
+  const shown = draft ?? value;
+  return <View accessibilityRole="adjustable" accessibilityLabel="Sheet opacity" accessibilityValue={{min: 0, max: 100, now: shown, text: `${shown}%`}}
+    accessibilityState={{disabled}} accessibilityActions={[{name: 'increment'}, {name: 'decrement'}]}
+    onAccessibilityAction={event => { if (!disabled) onChange(Math.max(0, Math.min(100, value + (event.nativeEvent.actionName === 'increment' ? 5 : -5)))); }}>
+    <Text style={{color: T.text}}>Sheet opacity: {shown}%</Text>
+    <View {...pan.panHandlers} onLayout={event => { width.current = event.nativeEvent.layout.width; }} style={{height: 44, justifyContent: 'center'}}>
+      <View style={{height: 6, borderRadius: 3, backgroundColor: T.border}} />
+      <View pointerEvents="none" style={{position: 'absolute', left: `${shown}%`, marginLeft: -9, width: 18, height: 18, borderRadius: 9, backgroundColor: T.accent}} />
+    </View>
+  </View>;
+}
 
 export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
   const T = useTheme(); const fs = fontScale(T);
@@ -150,6 +180,9 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         <ToggleRow label="Show title" value={!prefs.hideHistoryTitle} disabled={busy} onToggle={() => toggle('hideHistoryTitle')} />
         {section('Cards')}
         <BaseToggleRow label="Transparent cards throughout the app" desc="Remove the shared card background across screens. Individual card settings can override this." value={prefs.transparentAllCards} disabled={busy} onToggle={() => toggle('transparentAllCards')} />
+        <Text style={{color: T.dim, fontSize: fs(13)}}>Sheet opacity controls how much of the page shows through settings and profile panels.</Text>
+        <OpacitySlider value={prefs.sheetOpacity ?? 100} disabled={busy} onChange={value => { void save({...prefs, sheetOpacity: value}); }} />
+        <Btn variant="ghost" disabled={busy || prefs.sheetOpacity === null} onPress={() => { void save({...prefs, sheetOpacity: null}); }}>Use default sheet background</Btn>
         <Text style={{color: T.dim, fontSize: fs(13)}}>Choose the appearance of cards on each screen. Default keeps the original style.</Text>
         {CARD_AREAS.map(area => {
           const card = prefs.cards[area];
