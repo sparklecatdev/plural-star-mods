@@ -1,1 +1,1 @@
-Adds support for scheduled notification rest mode. Rebuild the patched app to use it.
+Optional themed Plural Star launcher icon, designed for supported Android home screens.

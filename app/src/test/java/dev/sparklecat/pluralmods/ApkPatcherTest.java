@@ -58,6 +58,24 @@ public class ApkPatcherTest {
     }
     private int u16(byte[] b, int i) { return (b[i] & 255) | (b[i+1] & 255) << 8; }
 
+    @Test public void replacesRequestedIconAndRejectsMissingIcon() throws Exception {
+        File input = new File(temp, "input.zip"), output = new File(temp, "output.zip");
+        try (ZipOutputStream zip = new ZipOutputStream(new FileOutputStream(input))) {
+            for (String name : List.of(ApkPatcher.BUNDLE, "res/icon.xml", "res/other.xml")) {
+                zip.putNextEntry(new ZipEntry(name)); zip.write(name.getBytes(StandardCharsets.UTF_8)); zip.closeEntry();
+            }
+        }
+        ApkPatcher.rewrite(input, output, () -> new ByteArrayInputStream(new byte[]{1}), null, null, Map.of("res/icon.xml", new byte[]{2}));
+        try (ZipFile zip = new ZipFile(output)) {
+            assertArrayEquals(new byte[]{2}, zip.getInputStream(zip.getEntry("res/icon.xml")).readAllBytes());
+            assertEquals("res/other.xml", new String(zip.getInputStream(zip.getEntry("res/other.xml")).readAllBytes(), StandardCharsets.UTF_8));
+        }
+        try {
+            ApkPatcher.rewrite(input, output, () -> new ByteArrayInputStream(new byte[]{1}), null, null, Map.of("res/missing.xml", new byte[]{2}));
+            fail("must reject a missing icon");
+        } catch (IOException expected) { assertTrue(expected.getMessage().contains("icon")); }
+    }
+
     @Test public void replacesBothNativeFilesWhenProvided() throws Exception {
         File input = new File(temp, "input.zip"), output = new File(temp, "output.zip");
         try (ZipOutputStream zip = new ZipOutputStream(new FileOutputStream(input))) {

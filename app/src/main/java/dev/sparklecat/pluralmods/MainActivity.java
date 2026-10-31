@@ -29,7 +29,7 @@ public final class MainActivity extends Activity {
     private File source, output;
     private UpdateClient updater;
     private TextView updateStatus;
-    private CheckBox previewUpdates;
+    private CheckBox previewUpdates, themedIcon;
     private ProgressBar updateProgress;
     private LinearLayout updateCard, patchCard;
     private TextView patchStatus;
@@ -76,6 +76,15 @@ public final class MainActivity extends Activity {
         LinearLayout build = card("02", "Install and update mods");
         patchCard = build;
         text(build, "Includes wallpaper, storage tools, and PluralKit front sync. Manage them in Settings → sparklecat's mods after installing.", 15, MUTED, false);
+        themedIcon = new CheckBox(this); themedIcon.setText("Use a themed Plural Star icon"); themedIcon.setTextColor(INK);
+        themedIcon.setChecked(getPreferences(0).getBoolean("themed_icon", false));
+        themedIcon.setOnCheckedChangeListener((button, value) -> {
+            getPreferences(0).edit().putBoolean("themed_icon", value).apply();
+            if (output.exists() && !output.delete()) { message("Could not discard the previous build. Please restart the patcher."); return; }
+            refresh();
+        });
+        build.addView(themedIcon); controls.add(themedIcon);
+        text(build, "Uses a star design with your wallpaper colors on supported launchers. Enable themed icons in your home screen settings.", 13, MUTED, false);
         patchStatus = text(build, "New patches are fetched here without updating the patcher.", 14, ACCENT, false);
         patch = button(build, "Prepare and install", this::build);
         progress = new ProgressBar(this); progress.setVisibility(View.GONE); build.addView(progress);
@@ -392,6 +401,7 @@ public final class MainActivity extends Activity {
     }
     private void build() { build(false); }
     private void build(boolean included) {
+        final boolean useThemedIcon = themedIcon.isChecked();
         work("Checking patches…", () -> {
             CompatibilityPack matching = updater.compatibility(source, note -> updateUi(() -> status.setText(note)));
             org.json.JSONObject info = matching == null ? embeddedInfo() : matching.info;
@@ -425,6 +435,7 @@ public final class MainActivity extends Activity {
                 () -> bundle != null ? new FileInputStream(bundle) : matching == null ? getAssets().open("payloads/wallpaper-storage.bundle") : matching.open("wallpaper-storage.bundle"),
                 () -> matching == null ? getAssets().open("payloads/wallpaper-storage.dex") : matching.open("wallpaper-storage.dex"),
                 matching == null ? () -> getAssets().open("payloads/primary.dex") : matching.info.getJSONObject("files").has("primary.dex") ? () -> matching.open("primary.dex") : null,
+                useThemedIcon ? ThemedIcon.create(this, source) : java.util.Collections.emptyMap(),
                 SigningIdentity.load(), note -> updateUi(() -> status.setText(note)));
             getPreferences(0).edit().putInt("last_patch_version", BuildConfig.VERSION_CODE).putString("prepared_patch", version).apply();
             final String prepared = version;

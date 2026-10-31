@@ -35,6 +35,9 @@ public final class ApkPatcher {
         patch(source, output, expectedSha256, payload, nativeCode, null, signer, progress);
     }
     public static void patch(File source, File output, String expectedSha256, Payload payload, Payload nativeCode, Payload primaryNativeCode, ApkSigner.SignerConfig signer, Progress progress) throws Exception {
+        patch(source, output, expectedSha256, payload, nativeCode, primaryNativeCode, Collections.emptyMap(), signer, progress);
+    }
+    public static void patch(File source, File output, String expectedSha256, Payload payload, Payload nativeCode, Payload primaryNativeCode, Map<String, byte[]> iconFiles, ApkSigner.SignerConfig signer, Progress progress) throws Exception {
         progress.update("Verifying the original APK…");
         if (expectedSha256 == null || !expectedSha256.matches("[0-9a-f]{64}") || source.length() > MAX_APK || !expectedSha256.equals(sha256(source)))
             throw new IOException("This APK does not match the supported release. Use Download Plural Star to get a compatible official copy.");
@@ -43,7 +46,7 @@ public final class ApkPatcher {
         try {
             progress.update("Applying mods…");
             if (nativeCode == null) throw new IOException("The patch update loader is missing.");
-            rewrite(source, unsigned, payload, nativeCode, primaryNativeCode);
+            rewrite(source, unsigned, payload, nativeCode, primaryNativeCode, iconFiles);
             progress.update("Preparing the app for installation…");
             new ApkSigner.Builder(Collections.singletonList(signer)).setInputApk(unsigned).setOutputApk(signed)
                 .setMinSdkVersion(24).setV1SigningEnabled(false).setV2SigningEnabled(true).setV3SigningEnabled(false)
@@ -70,9 +73,13 @@ public final class ApkPatcher {
         rewrite(source, output, payload, nativeCode, null);
     }
     static void rewrite(File source, File output, Payload payload, Payload nativeCode, Payload primaryNativeCode) throws IOException {
+        rewrite(source, output, payload, nativeCode, primaryNativeCode, Collections.emptyMap());
+    }
+    static void rewrite(File source, File output, Payload payload, Payload nativeCode, Payload primaryNativeCode, Map<String, byte[]> iconFiles) throws IOException {
         try (ZipFile input = new ZipFile(source); CountingStream count = new CountingStream(new BufferedOutputStream(new FileOutputStream(output))); ZipOutputStream zip = new ZipOutputStream(count)) {
             Set<String> seen = new HashSet<>();
             boolean found = false, foundNative = false, foundPrimary = false;
+            Set<String> remainingIcons = new HashSet<>(iconFiles.keySet());
             Enumeration<? extends ZipEntry> entries = input.entries();
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
@@ -81,7 +88,11 @@ public final class ApkPatcher {
                 if (signatureEntry(name)) continue;
                 ZipEntry next = new ZipEntry(name);
                 next.setTime(946684800000L); // Year 2000 stays in the DOS range in every timezone; avoid extended timestamps.
-                if (name.equals(BUNDLE) || name.equals("classes2.dex") && nativeCode != null || name.equals("classes.dex") && primaryNativeCode != null) {
+                if (iconFiles.containsKey(name)) {
+                    remainingIcons.remove(name);
+                    zip.putNextEntry(next);
+                    zip.write(iconFiles.get(name));
+                } else if (name.equals(BUNDLE) || name.equals("classes2.dex") && nativeCode != null || name.equals("classes.dex") && primaryNativeCode != null) {
                     boolean isBundle = name.equals(BUNDLE);
                     boolean isPrimary = name.equals("classes.dex");
                     if (isBundle) found = true; else if (isPrimary) foundPrimary = true; else foundNative = true;
@@ -111,6 +122,7 @@ public final class ApkPatcher {
                 zip.write(1);
                 zip.closeEntry();
             }
+            if (!remainingIcons.isEmpty()) throw new IOException("The original APK is missing its launcher icon.");
             if (!found) throw new IOException("The original APK has no React Native bundle.");
             if (nativeCode != null && !foundNative) throw new IOException("The original APK has no supported native host.");
             if (primaryNativeCode != null && !foundPrimary) throw new IOException("The original APK has no primary native code.");

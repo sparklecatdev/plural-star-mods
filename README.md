@@ -49,7 +49,9 @@ Have a feature in mind? Message **sparklecatdev** directly, join the [patches Di
 
 ## Supported versions
 
-The patcher requires Android 8.0 or later. The patched app keeps the original package ID, minimum SDK, resources, permissions, version name, and version code. A small compatibility loader is added. Patcher-managed installations always use their embedded bundle, so old downloaded patches cannot override a new installation; other native classes are preserved.
+The patcher requires Android 8.0 or later. The patched app keeps the original package ID, minimum SDK, permissions, version name, and version code. A small compatibility loader is added. Patcher-managed installations always use their embedded bundle, so old downloaded patches cannot override a new installation; other native classes are preserved.
+
+Optionally, select **Use a themed Plural Star icon** before preparing the app. On Android 13 or later, supported home screens can then color its monochrome star to match your theme when themed icons are enabled. The regular icon stays the same.
 
 The patcher downloads the latest stable official standalone `app-release.apk`, verifies GitHub’s published SHA-256 and size, and fetches a compatibility pack built for that exact APK. Choose a file or use the installed official app instead if preferred.
 
