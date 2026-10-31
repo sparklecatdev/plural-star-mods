@@ -7,8 +7,8 @@ android {
         applicationId 'dev.sparklecat.pluralmods'
         minSdk 26
         targetSdk 36
-        versionCode 13
-        versionName '0.6.4'
+        versionCode 14
+        versionName '0.6.5'
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     buildFeatures { buildConfig true }
@@ -35,7 +35,7 @@ tasks.register('verifyPayloads') {
 tasks.register('packageSource', Zip) {
     from(rootProject.projectDir) {
         include '.github/**', '.gitattributes', '.gitignore', 'LICENSE', 'LICENSES/**', 'THIRD_PARTY_NOTICES.md', 'README.md', 'fordevs.md', 'patcher-feature-implementation-guide.md', 'developer-improvement-plan.md', 'patcher-improvement-summary.md', 'SPARKLESCRIPT.md', 'examples/**', 'AGENTS.md', 'release-signing.sha256'
-        include 'app/build.gradle', 'app/themed-icon-template.xml', 'app/src/**', 'native-tools/build.gradle', 'native-tools/src/**', 'build.gradle', 'settings.gradle', 'gradle.properties', 'gradlew', 'gradlew.bat', 'gradle/**', 'payload/**', 'scripts/**', 'tests/**'
+        include 'desktop-companion/**', 'app/build.gradle', 'app/themed-icon-template.xml', 'app/src/**', 'native-tools/build.gradle', 'native-tools/src/**', 'build.gradle', 'settings.gradle', 'gradle.properties', 'gradlew', 'gradlew.bat', 'gradle/**', 'payload/**', 'scripts/**', 'tests/**'
         exclude 'app/src/main/assets/**', '**/__pycache__/**', '**/node_modules/**'
     }
     destinationDirectory = file('src/main/assets/source')

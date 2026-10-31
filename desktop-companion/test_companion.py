@@ -1,0 +1,78 @@
+import importlib.util
+import json
+import os
+import socket
+import struct
+import tempfile
+import threading
+import unittest
+from unittest import mock
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location('companion', Path(__file__).with_name('companion.py'))
+companion = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(companion)
+
+
+class CompanionTests(unittest.TestCase):
+    def test_system_ids_and_activity(self):
+        self.assertEqual(companion.system_id('ABC-DEF'), 'abcdef')
+        with self.assertRaises(ValueError):
+            companion.system_id('../bad')
+        self.assertIsNone(companion.activity_for([]))
+        self.assertEqual(companion.activity_for(['Alex'])['state'], 'Alex')
+        self.assertEqual(len(companion.activity_for(['x' * 200])['state']), 128)
+
+    def test_front_and_private_error(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.status = 200
+        response.read.return_value = json.dumps({'members': [{'name': 'Alex', 'display_name': 'A'}]}).encode()
+        with mock.patch.object(companion.urllib.request, 'urlopen', return_value=response):
+            self.assertEqual(companion.get_front('abcde'), ['A'])
+        error = companion.urllib.error.HTTPError('', 403, 'Forbidden', {}, None)
+        with mock.patch.object(companion.urllib.request, 'urlopen', side_effect=error):
+            with self.assertRaisesRegex(ValueError, 'must be public'):
+                companion.get_front('abcde')
+
+    @unittest.skipIf(os.name == 'nt', 'Unix socket test')
+    def test_discord_handshake_activity_and_clear(self):
+        with tempfile.TemporaryDirectory() as directory:
+            server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            server.bind(os.path.join(directory, 'discord-ipc-0'))
+            server.listen(1)
+            received = []
+            def serve():
+                connection, _ = server.accept()
+                with connection:
+                    def read(size):
+                        data = b''
+                        while len(data) < size:
+                            data += connection.recv(size - len(data))
+                        return data
+                    def exchange(response):
+                        opcode, length = struct.unpack('<II', read(8))
+                        request = json.loads(read(length))
+                        received.append((opcode, request))
+                        body = json.dumps(response(request)).encode()
+                        connection.sendall(struct.pack('<II', 1, len(body)) + body)
+                    exchange(lambda _: {'evt': 'READY'})
+                    for _ in range(2):
+                        exchange(lambda req: {'nonce': req['nonce'], 'cmd': 'SET_ACTIVITY'})
+            thread = threading.Thread(target=serve, daemon=True)
+            thread.start()
+            with mock.patch.dict(os.environ, {'XDG_RUNTIME_DIR': directory}):
+                discord = companion.Discord()
+                discord.connect()
+                discord.set_activity(companion.activity_for(['Alex']))
+                discord.set_activity(None)
+                discord.close()
+            thread.join(2)
+            server.close()
+            self.assertEqual(received[0][1]['client_id'], companion.CLIENT_ID)
+            self.assertEqual(received[1][1]['args']['activity']['state'], 'Alex')
+            self.assertIsNone(received[2][1]['args']['activity'])
+
+
+if __name__ == '__main__':
+    unittest.main()

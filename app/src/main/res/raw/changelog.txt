@@ -1,1 +1,1 @@
-Adds support for optional Discord Rich Presence in the patched app.
+Removed the Android Discord presence integration. Use the desktop companion to share your PluralKit front on Discord.

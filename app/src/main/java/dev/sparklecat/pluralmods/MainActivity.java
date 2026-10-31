@@ -436,7 +436,6 @@ public final class MainActivity extends Activity {
                 () -> matching == null ? getAssets().open("payloads/wallpaper-storage.dex") : matching.open("wallpaper-storage.dex"),
                 matching == null ? () -> getAssets().open("payloads/primary.dex") : matching.info.getJSONObject("files").has("primary.dex") ? () -> matching.open("primary.dex") : null,
                 useThemedIcon ? ThemedIcon.create(this, source) : java.util.Collections.emptyMap(),
-                name -> getAssets().open("discord/" + name),
                 SigningIdentity.load(), note -> updateUi(() -> status.setText(note)));
             getPreferences(0).edit().putInt("last_patch_version", BuildConfig.VERSION_CODE).putString("prepared_patch", version).apply();
             final String prepared = version;

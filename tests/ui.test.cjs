@@ -159,7 +159,6 @@ function rootHarness({password = null, reduceMotion = false, recoveryError = fal
     './sparkleScripts': {loadScripts: async () => {}, runScripts: () => {}, useScriptState: () => ({wrappers: []})},
     './useDeviceUnlock': {useDeviceUnlock: () => ({available: false, prompt: async () => {}})},
     './modOptions': {nativeUnlockSupported: true},
-    './DiscordPresence': {DiscordPresence: () => null},
     './updateCheck': {updateChecker: {check: async force => { checks.push(force); }}, confirmPatchLaunch: async () => {}},
     './storageSnapshot': {recoverBeforeStart: async () => { await recovered; if (recoveryError) throw Error('restore failed'); },
       retryStoragePreparation: async () => {}, recovery: {recover: async () => {}}, restoreQueue: {cancel: async () => {}}},
@@ -237,7 +236,7 @@ test('Settings opens the mod menu; switches persist and hide disabled controls',
   const prefs = createModPreferences({wallpaper: true, storage: true}, {read: async () => null, write: async value => { disk = value; }});
   await prefs.load();
   const {ModSettingsButton} = load('ModMenu.tsx', {
-    'react-native': {Modal: 'Modal', ScrollView: 'ScrollView', View: 'View', NativeModules: {}},
+    'react-native': {Modal: 'Modal', ScrollView: 'ScrollView', View: 'View'},
     'react-native-safe-area-context': {SafeAreaView: 'SafeAreaView'},
     '../components/AppText': {Text: 'Text'}, '../components/controls': {Btn: host('Button'), ToggleRow: host('Toggle')},
     '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n},
@@ -275,7 +274,7 @@ test('Settings opens the mod menu; switches persist and hide disabled controls',
       await new Promise(setImmediate);
     });
   }
-  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: false, noSpeaker: true, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, hideLockIcon: true, chatKeyboardFix: false, disableFacets: false, archivePolls: false, discordPresence: false, syncPreferences: false});
+  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: false, noSpeaker: true, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, hideLockIcon: true, chatKeyboardFix: false, disableFacets: false, archivePolls: false, syncPreferences: false});
   assert.equal(renderer.root.findAllByType('WallpaperControls').length, 0);
   assert.equal(renderer.root.findAllByType('BackupTools').length, 0);
   assert.equal(renderer.root.findAllByType('CloudModSettings').length, 0);

@@ -16,7 +16,6 @@ public final class ApkPatcher {
     private static final long MAX_APK = 160L * 1024 * 1024;
     public interface Progress { void update(String message); }
     public interface Payload { InputStream open() throws IOException; }
-    public interface Assets { InputStream open(String path) throws IOException; }
 
     public static String sha256(File file) throws Exception {
         MessageDigest md = MessageDigest.getInstance("SHA-256");
@@ -39,9 +38,6 @@ public final class ApkPatcher {
         patch(source, output, expectedSha256, payload, nativeCode, primaryNativeCode, Collections.emptyMap(), signer, progress);
     }
     public static void patch(File source, File output, String expectedSha256, Payload payload, Payload nativeCode, Payload primaryNativeCode, Map<String, byte[]> iconFiles, ApkSigner.SignerConfig signer, Progress progress) throws Exception {
-        patch(source, output, expectedSha256, payload, nativeCode, primaryNativeCode, iconFiles, null, signer, progress);
-    }
-    public static void patch(File source, File output, String expectedSha256, Payload payload, Payload nativeCode, Payload primaryNativeCode, Map<String, byte[]> iconFiles, Assets discord, ApkSigner.SignerConfig signer, Progress progress) throws Exception {
         progress.update("Verifying the original APK…");
         if (expectedSha256 == null || !expectedSha256.matches("[0-9a-f]{64}") || source.length() > MAX_APK || !expectedSha256.equals(sha256(source)))
             throw new IOException("This APK does not match the supported release. Use Download Plural Star to get a compatible official copy.");
@@ -50,7 +46,7 @@ public final class ApkPatcher {
         try {
             progress.update("Applying mods…");
             if (nativeCode == null) throw new IOException("The patch update loader is missing.");
-            rewrite(source, unsigned, payload, nativeCode, primaryNativeCode, iconFiles, discord);
+            rewrite(source, unsigned, payload, nativeCode, primaryNativeCode, iconFiles);
             progress.update("Preparing the app for installation…");
             new ApkSigner.Builder(Collections.singletonList(signer)).setInputApk(unsigned).setOutputApk(signed)
                 .setMinSdkVersion(24).setV1SigningEnabled(false).setV2SigningEnabled(true).setV3SigningEnabled(false)
@@ -80,9 +76,6 @@ public final class ApkPatcher {
         rewrite(source, output, payload, nativeCode, primaryNativeCode, Collections.emptyMap());
     }
     static void rewrite(File source, File output, Payload payload, Payload nativeCode, Payload primaryNativeCode, Map<String, byte[]> iconFiles) throws IOException {
-        rewrite(source, output, payload, nativeCode, primaryNativeCode, iconFiles, null);
-    }
-    static void rewrite(File source, File output, Payload payload, Payload nativeCode, Payload primaryNativeCode, Map<String, byte[]> iconFiles, Assets discord) throws IOException {
         try (ZipFile input = new ZipFile(source); CountingStream count = new CountingStream(new BufferedOutputStream(new FileOutputStream(output))); ZipOutputStream zip = new ZipOutputStream(count)) {
             Set<String> seen = new HashSet<>();
             boolean found = false, foundNative = false, foundPrimary = false;
@@ -99,12 +92,6 @@ public final class ApkPatcher {
                     remainingIcons.remove(name);
                     zip.putNextEntry(next);
                     zip.write(iconFiles.get(name));
-                } else if (discord != null && name.equals("AndroidManifest.xml")) {
-                    zip.putNextEntry(next);
-                    try (InputStream in = input.getInputStream(entry); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
-                        copy(in, bytes, 4L * 1024 * 1024);
-                        zip.write(DiscordManifest.addQueries(bytes.toByteArray()));
-                    }
                 } else if (name.equals(BUNDLE) || name.equals("classes2.dex") && nativeCode != null || name.equals("classes.dex") && primaryNativeCode != null) {
                     boolean isBundle = name.equals(BUNDLE);
                     boolean isPrimary = name.equals("classes.dex");
@@ -130,21 +117,6 @@ public final class ApkPatcher {
                 }
                 zip.closeEntry();
             }
-            if (discord != null) {
-                int dex = 2;
-                while (seen.contains("classes" + dex + ".dex")) dex++;
-                writeAsset(zip, count, "classes" + dex + ".dex", discord, "classes.dex");
-                for (String abi : new String[] {"arm64-v8a", "armeabi-v7a", "x86", "x86_64"}) {
-                    boolean present = false;
-                    for (String path : seen) if (path.startsWith("lib/" + abi + "/")) { present = true; break; }
-                    if (!present) continue;
-                    for (String lib : new String[] {"libdiscord_partner_sdk.so", "libsparklecat_discord.so"}) {
-                        String path = "lib/" + abi + "/" + lib;
-                        if (seen.contains(path)) throw new IOException("Unexpected Discord library already exists.");
-                        writeAsset(zip, count, path, discord, abi + "/" + lib);
-                    }
-                }
-            }
             if (nativeCode != null) {
                 zip.putNextEntry(new ZipEntry(PATCHER_MANAGED));
                 zip.write(1);
@@ -154,25 +126,6 @@ public final class ApkPatcher {
             if (!found) throw new IOException("The original APK has no React Native bundle.");
             if (nativeCode != null && !foundNative) throw new IOException("The original APK has no supported native host.");
             if (primaryNativeCode != null && !foundPrimary) throw new IOException("The original APK has no primary native code.");
-        }
-    }
-    private static void writeAsset(ZipOutputStream zip, CountingStream count, String path, Assets assets, String asset) throws IOException {
-        ZipEntry entry = new ZipEntry(path);
-        entry.setTime(946684800000L);
-        try (InputStream in = assets.open(asset); ByteArrayOutputStream buffer = new ByteArrayOutputStream()) {
-            copy(in, buffer, 32L * 1024 * 1024);
-            byte[] data = buffer.toByteArray();
-            if (path.endsWith(".so")) {
-                CRC32 crc = new CRC32(); crc.update(data);
-                entry.setMethod(ZipEntry.STORED); entry.setSize(data.length); entry.setCrc(crc.getValue());
-                int pad = (int) ((16384 - (count.count + 30 + path.getBytes(StandardCharsets.UTF_8).length) % 16384) % 16384);
-                if (pad > 0) {
-                    if (pad < 4) pad += 16384;
-                    byte[] extra = new byte[pad]; extra[0] = 0x35; extra[1] = (byte) 0xD9;
-                    extra[2] = (byte) (pad - 4); extra[3] = (byte) ((pad - 4) >> 8); entry.setExtra(extra);
-                }
-            }
-            zip.putNextEntry(entry); zip.write(data); zip.closeEntry();
         }
     }
     public static long copy(InputStream in, OutputStream out, long max) throws IOException {

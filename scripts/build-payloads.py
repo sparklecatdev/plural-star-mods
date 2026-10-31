@@ -423,7 +423,6 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
             run('node', '--test', 'scripts/background-settings.test.js', 'scripts/restore-settings.test.js')
         run('node', str(ROOT / 'tests/storage.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/mods.test.cjs'), str(SOURCE))
-        run('node', str(ROOT / 'tests/discord-presence.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/sparklescript.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/field-tables.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/cloud-mods.test.cjs'), str(SOURCE))

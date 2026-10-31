@@ -17,5 +17,5 @@ def load():
         raise ValueError('Invalid official APK URL')
     release = json.loads((ROOT / 'payload/release.json').read_text())
     if base['sha256'] != pinned['sha256']:
-        release['runtime'] = f"plural-star-{base['version']}-{base['sha256'][:12]}-mods-2"
+        release['runtime'] = f"plural-star-{base['version']}-{base['sha256'][:12]}-mods-3"
     return base, release

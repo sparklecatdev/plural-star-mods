@@ -67,6 +67,7 @@ Do not change a published release's assets in place. Advance the appropriate ver
 | Extra interface controls | `payload/mods/extraCustomizationCore.ts`, `extraCustomization.ts`, `ExtraCustomizationMenu.tsx` |
 | Patched-app startup, app lock, and recovery | `payload/mods/ModsRoot.tsx`, `storageSnapshot.ts`, `restoreQueue.ts`, `toolsState.ts` |
 | Update notice and handoff to patcher | `payload/mods/PatchUpdatePrompt.tsx`, `updateCheck.ts`, `updateCheckCore.ts`, `patchInstallCore.ts` |
+| Discord desktop companion | `desktop-companion/companion.py`, `desktop-companion/test_companion.py`, `desktop-companion/README.md` |
 | PluralKit sync | `payload/pluralkit-pr-11.patch`, `payload/mods/PluralKitSettings.tsx`, `pluralKitSync.ts`, `pluralKitSyncCore.ts` |
 | Storage backups | `payload/mods/BackupTools.tsx`, `storageSnapshot.ts`, `snapshotCore.ts`, `restoreQueue.ts` |
 | Native loader and unlock bridge | `payload/native/*.java`, `scripts/build-native-updates.py`, `native-tools/src/main/java/dev/sparklecat/tools/PatchHost.java` |
@@ -102,6 +103,10 @@ The builder resets and cleans **only** `.work/upstream`, installs upstream and t
 5. Add or adjust the nearest meaningful tests: `tests/*.test.cjs` for patched-app behavior, `app/src/test/` for patcher behavior, and `native-tools/src/test/` for native loader behavior. Include a test for a failure or compatibility boundary when relevant. Update `README.md`, release notes/changelog, and this guide when behavior or the build contract changes.
 
 The existing feature switches are in `modPreferencesCore.ts`; the extra customization controls have their own core file. The enhanced group view switch also defaults normal member cards to banner backgrounds; preserve an explicitly selected background in the display options. Keep feature behavior gated at use sites, not only hidden in the menu. Test disabled behavior and saved preference restoration. For sensitive features, keep PluralKit tokens in app settings, omit them from diagnostics, and avoid putting private data into logs or release assets. Storage snapshots and restore have strict size, path, authentication, and cold-start recovery rules; read `snapshotCore.ts`, `storageSnapshot.ts`, and `restoreQueue.ts` before changing their format or timing.
+
+## Desktop companion
+
+The standalone Python/Tkinter companion reads public PluralKit current fronters and uses Discord desktop IPC to publish an activity. It does not read Plural Star cloud saves or use a token. Plural Star’s existing PluralKit sync mirrors imported primary fronters. Keep sharing opt-in, clear presence on stop or failed refresh, and document the public visibility requirement. Run `python3 -m unittest discover -s desktop-companion -p "test_*.py"` and test against a running Discord desktop client when changing the integration. Include `desktop-companion/` in the patcher source ZIP and publish it as a separate release ZIP.
 
 ## Validation
 
@@ -157,10 +162,3 @@ Keep release assets, source archives, and diagnostics free of credentials and us
 - **Source verification fails:** commit the exact files first, rebuild the unsigned APK so `packageSource` embeds that commit's source, then sign and verify again. The release verifier compares the embedded ZIP with every tracked file.
 
 SparkleScript is unrestricted JavaScript after explicit device-local opt-in. Keep the master switch off by default and never restore it from cloud preferences. `sparkleScripts.ts` owns script lifecycle and app wrappers; scripts must register cleanup with `api.onDispose`. Keep legacy scripts compatible and update `SPARKLESCRIPT.md` when the API changes.
-
-
-## Discord Rich Presence
-
-Discord presence is off by default, remains device-local, and only shares non-private fronting members while the app is running. The opt-in setting lives in the mod menu. Discord must be installed and signed in. `DiscordPresence.tsx` selects names, while `DiscordPresenceModule.java` and `DiscordPresence.cpp` use Discord Social SDK 1.10.19337 without OAuth. `DiscordManifest.java` and `ApkPatcher.java` add the SDK classes, native libraries, and package visibility to newly created APKs. Native changes require a new patcher release and native runtime version; patch-only updates cannot add the bridge to an old installation.
-
-For a local native build, extract the official Discord Social SDK 1.10.19337 into `.work/discord-sdk` or set `DISCORD_SOCIAL_SDK_DIR`; Android NDK 27.0.12077973 is required. Do not commit SDK binaries. When the SDK is unavailable, the build reuses native components from the signed v0.6.4 patcher after verifying its certificate and bridge source hash; changing the bridge requires the SDK. Run the normal full build and Android tests, and test presence on a device with Discord signed in.

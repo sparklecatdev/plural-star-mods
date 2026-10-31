@@ -17,7 +17,7 @@ export const cloudMods = createCloudMods({version: payloadVersion, runtime: patc
   read: () => AsyncStorage.getItem(CLOUD_MODS_KEY),
   write: text => store.setRaw(CLOUD_MODS_KEY, text),
   local: () => {
-    const {syncPreferences: _syncPreferences, discordPresence: _discordPresence, ...enabled} = modPreferences.getSnapshot();
+    const {syncPreferences: _syncPreferences, ...enabled} = modPreferences.getSnapshot();
     return {enabled,
     pkFrontSyncEnabled: useAppStore.getState().appSettings.pkFrontSyncEnabled === true,
     automaticUpdates: true, extraCustomization: extraCustomization.getSnapshot()};

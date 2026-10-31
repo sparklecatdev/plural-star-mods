@@ -9,4 +9,3 @@ app/src/main/assets/source/
 *.keystore
 node_modules/
 __pycache__/
-app/src/main/assets/discord/
