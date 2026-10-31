@@ -35,7 +35,7 @@ jobs:
           TAG="patches-v$VERSION"
           printf '%s\n' "$RELEASE_NOTES" > .work/patch-notes.md
           gh release create "$TAG" --target "$GITHUB_SHA" --draft --title "Patches $VERSION" --notes-file .work/patch-notes.md .work/patch-release/*
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > .work/patch-assets.json
+          gh release view "$TAG" --json assets > .work/patch-assets.json
           python3 - <<'PY'
           import hashlib, json, pathlib
           assets = {a['name']: a for a in json.load(open('.work/patch-assets.json'))['assets']}
