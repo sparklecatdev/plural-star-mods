@@ -40,6 +40,23 @@ function harness(saved = null, available = {wallpaper: true, storage: true}) {
     failRead: value => { failRead = value; }, failWrite: value => { failWrite = value; }, failRestore: value => { failRestore = value; }};
 }
 
+test('blank first page defaults off and syncs only a valid boolean', () => {
+  assert.equal(extra.sanitizeExtraCustomization(null).blankStartPage, false);
+  assert.equal(extra.sanitizeExtraCustomization({blankStartPage: 'true'}).blankStartPage, false);
+  const saved = record();
+  saved.settings.extraCustomization = {enabled: true, blankStartPage: true};
+  assert.equal(readCloudMods(JSON.stringify(saved)).settings.extraCustomization.blankStartPage, true);
+});
+
+test('hub icons and transparent cards require valid opt-in settings', () => {
+  const settings = extra.sanitizeExtraCustomization({transparentAllCards: true, minimalHubIcons: true,
+    hubIconImages: {chat: 'file:///local/icon.png', polls: 'https://example.com/icon.png', unknown: 'file:///other'}});
+  assert.equal(settings.transparentAllCards, true);
+  assert.equal(settings.minimalHubIcons, true);
+  assert.deepEqual(plain(settings.hubIconImages), {chat: 'file:///local/icon.png'});
+  assert.equal(extra.sanitizeExtraCustomization({transparentAllCards: 'true'}).transparentAllCards, false);
+});
+
 test('background controls default off and survive validated cloud preferences', () => {
   const defaults = extra.sanitizeExtraCustomization(null);
   for (const key of ['fullScreenWallpaper', 'transparentHeader', 'transparentTabBar']) {

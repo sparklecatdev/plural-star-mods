@@ -1,0 +1,70 @@
+--- a/src/app/TabHost.tsx
++++ b/src/app/TabHost.tsx
+@@ -18,6 +18,8 @@
+ 
+ export function TabHost({isSinglet, screens, memory}: {isSinglet: boolean; screens: Record<Tab, React.ReactNode>; memory: React.RefObject<TabMemory>}) {
+   const extra = useExtraCustomization();
++  const [blank, setBlank] = useState(() => extra.enabled && extra.blankStartPage);
++  const showBlank = blank && extra.enabled && extra.blankStartPage;
+   const [tab, setTab] = useState<Tab>(memory.current.tab);
+   const [shownTab, setShownTab] = useState<Tab>(memory.current.tab);
+   const [mountedTabs, setMountedTabs] = useState<Tab[]>(memory.current.mounted);
+@@ -25,6 +27,7 @@
+   const tabRef = useRef(tab);
+   const tabSwitchStart = useRef<{id: Tab; at: number} | null>(null);
+   const goTab = useCallback((id: Tab) => {
++    setBlank(false);
+     tabSwitchStart.current = {id, at: Date.now()};
+     tabRef.current = id;
+     setTab(id);
+@@ -37,7 +40,7 @@
+   useEffect(() => { registerTabControl({goTab, currentTab: () => tabRef.current}); return () => registerTabControl(null); }, [goTab]);
+   const onReselectHub = useUiStore(s => s.reselectHub);
+   useEffect(() => { memory.current = {tab: shownTab, mounted: mountedTabs}; }, [memory, shownTab, mountedTabs]);
+-  useEffect(() => { TAB_IDS.forEach(id => activeSources[id].set(id === shownTab)); }, [activeSources, shownTab]);
++  useEffect(() => { TAB_IDS.forEach(id => activeSources[id].set(id === shownTab && !showBlank)); }, [activeSources, shownTab, showBlank]);
+   useEffect(() => {
+     const s = tabSwitchStart.current;
+     if (!s || s.id !== shownTab) return;
+@@ -53,15 +56,15 @@
+     <>
+       <View style={styles.content}>
+         {TAB_IDS.map(id => mountedTabs.includes(id) ? (
+-          <View key={id} style={[StyleSheet.absoluteFill, shownTab === id ? null : styles.hiddenTab]} pointerEvents={shownTab === id ? 'auto' : 'none'}
+-            importantForAccessibility={shownTab === id ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={shownTab !== id}>
++          <View key={id} style={[StyleSheet.absoluteFill, shownTab === id && !showBlank ? null : styles.hiddenTab]} pointerEvents={shownTab === id && !showBlank ? 'auto' : 'none'}
++            importantForAccessibility={shownTab === id && !showBlank ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={shownTab !== id || showBlank}>
+             <TabActiveContext.Provider value={activeSources[id]}>
+-              <FrozenTab frozen={shownTab !== id}>{screens[id]}</FrozenTab>
++              <FrozenTab frozen={shownTab !== id || showBlank}>{screens[id]}</FrozenTab>
+             </TabActiveContext.Provider>
+           </View>
+         ) : null)}
+       </View>
+-      <TabBar tab={tab} isSinglet={isSinglet} onPressTab={onPressTab} />
++      <TabBar tab={showBlank ? null : tab} isSinglet={isSinglet} onPressTab={onPressTab} onPressBlank={() => setBlank(true)} />
+     </>
+   );
+ }
+--- a/src/components/TabBar.tsx
++++ b/src/components/TabBar.tsx
+@@ -14,7 +14,7 @@
+   front: '◈', members: '◇', hub: '⬡', journal: '◉', history: '◷',
+ };
+ 
+-export const TabBar = React.memo(function TabBar({tab, isSinglet, onPressTab}: {tab: Tab; isSinglet: boolean; onPressTab: (id: Tab) => void}) {
++export const TabBar = React.memo(function TabBar({tab, isSinglet, onPressTab, onPressBlank}: {tab: Tab | null; isSinglet: boolean; onPressTab: (id: Tab) => void; onPressBlank: () => void}) {
+   const {t} = useTranslation();
+   const insets = useSafeAreaInsets();
+   const C = useTheme();
+@@ -28,6 +28,10 @@
+   };
+   return (
+     <View style={[styles.tabBar, {backgroundColor: extra.enabled && extra.transparentTabBar ? 'transparent' : extra.enabled ? extra.elementColors.tabBar || C.surface : C.surface, borderTopColor: C.border, borderTopWidth: extra.enabled && extra.hideTabBarBorder ? 0 : 1}]} accessibilityRole="tablist" accessibilityLabel={t('a11y.mainNav')}>
++      {extra.enabled && extra.blankStartPage && <TouchableOpacity onPress={onPressBlank} activeOpacity={0.7} accessibilityRole="tab" accessibilityState={{selected: tab === null}} accessibilityLabel="Blank page" style={[styles.tabBtn, {paddingBottom: 8 + insets.bottom}]}>
++        {(!extra.hideTabIcons || extra.hideTabLabels) && <View style={{height: fs(24), justifyContent: 'center', marginBottom: 2}}><AccentText style={{color: tab === null ? extra.elementColors.tabActive || C.accent : extra.elementColors.tabInactive || C.dim, fontSize: fs(18), textAlign: 'center'}}>□</AccentText></View>}
++        {!extra.hideTabLabels && <AccentText style={[styles.tabLabel, {color: tab === null ? extra.elementColors.tabActive || C.accent : extra.elementColors.tabInactive || C.dim, fontSize: Math.min(fs(9), 12), textAlign: 'center'}]}>Blank</AccentText>}
++      </TouchableOpacity>}
+       {TAB_IDS.filter(id => !extra.enabled || !extra.hiddenTabs.includes(id)).map(id => (
+         <TouchableOpacity key={id} onPress={() => onPressTab(id)} activeOpacity={0.7} accessibilityRole="tab" accessibilityState={{selected: tab === id}} accessibilityLabel={tabLabel(id)} style={[styles.tabBtn, {paddingBottom: 8 + insets.bottom}]}>
+           {(!extra.enabled || !extra.hideTabIcons || extra.hideTabLabels) && <View style={{height: fs(24), justifyContent: 'center', marginBottom: 2}}>

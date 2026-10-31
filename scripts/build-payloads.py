@@ -128,6 +128,7 @@ def main():
         assert text.count(icon_end) == 1
         text = text.replace(icon_end, '</AccentText>\n          </View>}')
         tab_bar.write_text(text)
+        run('git', 'apply', str(ROOT / 'payload/blank-page.patch'))
         hub = SOURCE / 'src/screens/HubScreen.tsx'
         text = hub.read_text()
         replacements = {
@@ -140,6 +141,11 @@ def main():
         for old, new in replacements.items():
             assert text.count(old) == 1, old
             text = text.replace(old, new)
+        text = "import {Image} from 'react-native';\nimport {HubIcon} from '../mods/HubIcon';\n" + text
+        old_icon = '''<Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{fontSize: fs(26), lineHeight: fs(32), color: T.accent, textAlign: 'center', includeFontPadding: false}} maxFontSizeMultiplier={1.2}>{tile.icon}</Text>'''
+        new_icon = "extra.enabled && extra.hubIconImages[tile.id] ? <Image source={{uri: extra.hubIconImages[tile.id]}} style={{width: fs(30), height: fs(30)}} resizeMode=\"contain\" /> : extra.enabled && extra.minimalHubIcons ? <HubIcon id={tile.id} color={T.accent} size={fs(30)} /> : " + old_icon
+        assert text.count(old_icon) == 1
+        text = text.replace(old_icon, '(' + new_icon + ')')
         hub.write_text(text)
         group_pane = SOURCE / 'src/screens/systemManager/GroupBrowsePane.tsx'
         classic = group_pane.read_text()
@@ -173,6 +179,7 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
         text = text.replace('{memberTags.length > 0 && (', '{showGroupTags && memberTags.length > 0 && (')
         target = "const bgMode = fields.background || 'plain';"
         assert text.count(target) == 1
+        text = text.replace('`${T.card}C8`', "T.card === '#00000000' ? 'transparent' : `${T.card}C8`")
         card.write_text(text.replace(target, "const bgMode = fields.background || (showGroupTags ? 'banner' : 'plain');"))
         members_screen = SOURCE / 'src/screens/MembersScreen.tsx'
         text = members_screen.read_text()
@@ -180,6 +187,12 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
         assert text.count(target) == 1
         text = text.replace(target, "  useEffect(() => { if (!archiveOnly) setListFields({groups: true, descriptions: true, pronouns: true, roles: true, count: true, ...savedListFields}); }, [archiveOnly, savedListFields]);\n" + target)
         members_screen.write_text(text)
+        if wallpaper:
+            history_screen = SOURCE / 'src/screens/HistoryScreen.tsx'
+            history_text = history_screen.read_text()
+            target = 'backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: landscape'
+            assert history_text.count(target) == 1
+            history_screen.write_text(history_text.replace(target, 'backgroundColor: T.canvas, paddingHorizontal: 16, paddingTop: landscape'))
         # Optional card styling retains the upstream style when no choice is set.
         card_targets = [
             ('src/screens/front/TierCard.tsx', 'front', [('{backgroundColor: T.card, borderColor: `${accentColor}40`},', "{backgroundColor: T.card, borderColor: `${accentColor}40`}, cardAppearance(extra, 'front'),")]),
@@ -205,6 +218,13 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
             for old, new in changes:
                 assert text.count(old) == 1, (path, old)
                 text = text.replace(old, new)
+            if area == 'history':
+                for name in ['NoteBox', 'DetailBadges', 'StatCard']:
+                    start = text.index('const ' + name)
+                    pos = text.index('  const T = useTheme();', start) + len('  const T = useTheme();')
+                    text = text[:pos] + '\n  const extra = useExtraCustomization();' + text[pos:]
+                text = text.replace('backgroundColor: T.surface', "backgroundColor: extra.enabled && (extra.transparentAllCards || extra.cards.history?.transparent) ? 'transparent' : T.surface")
+                text = text.replace('{backgroundColor: T.card, borderColor: T.border}]}', "{backgroundColor: T.card, borderColor: T.border}, cardAppearance(extra, 'history')]}")
             component.write_text(text)
         display = SOURCE / 'src/screens/members/DisplayOptionsSheet.tsx'
         text = display.read_text()

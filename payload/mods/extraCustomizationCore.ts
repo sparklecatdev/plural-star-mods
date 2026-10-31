@@ -11,6 +11,10 @@ export type ElementColorOption = typeof ELEMENT_COLOR_OPTIONS[number];
 export type ColorOption = typeof COLOR_OPTIONS[number];
 export type ExtraCustomization = {
   enabled: boolean;
+  blankStartPage: boolean;
+  transparentAllCards: boolean;
+  minimalHubIcons: boolean;
+  hubIconImages: Partial<Record<typeof TILE_OPTIONS[number], string>>;
   autoCollapseControls: boolean;
   hiddenFrontTiers: FrontTierOption[];
   frontTierNames: Partial<Record<FrontTierOption, string>>;
@@ -51,7 +55,7 @@ export type ExtraCustomization = {
   colors: Partial<Record<ColorOption, string>>;
 };
 export const DEFAULT_EXTRA_CUSTOMIZATION: ExtraCustomization = {
-  autoCollapseControls: false, cards: {}, hiddenFrontTiers: [], frontTierNames: {}, frontTierColors: {},
+  blankStartPage: false, transparentAllCards: false, minimalHubIcons: false, hubIconImages: {}, autoCollapseControls: false, cards: {}, hiddenFrontTiers: [], frontTierNames: {}, frontTierColors: {},
   hideHeaderBorder: false, hideTabBarBorder: false, hideTabIcons: false, hideTileIcons: false,
   transparentHubTiles: false, hideHubTileBorders: false, hubColumns: 0, tileRadius: 14,
   wallpaperDim: 0.78, wallpaperFit: 'cover', elementColors: {},
@@ -83,6 +87,11 @@ export function sanitizeExtraCustomization(value: unknown): ExtraCustomization {
     if (typeof name === 'string' && name.trim()) frontTierNames[key] = name.trim().slice(0, 40);
     if (typeof color === 'string' && hex.test(color)) frontTierColors[key] = color.toUpperCase();
   }
+  const hubIconImages: ExtraCustomization['hubIconImages'] = {};
+  for (const id of TILE_OPTIONS) {
+    const uri = v.hubIconImages?.[id];
+    if (typeof uri === 'string' && uri.startsWith('file://') && uri.length <= 2048) hubIconImages[id] = uri;
+  }
   const cards: ExtraCustomization['cards'] = {};
   for (const area of CARD_AREAS) {
     const card = v.cards?.[area];
@@ -97,7 +106,8 @@ export function sanitizeExtraCustomization(value: unknown): ExtraCustomization {
     cards[area] = clean;
   }
   return {
-    cards, frontTierNames, frontTierColors,
+    cards, frontTierNames, frontTierColors, hubIconImages,
+    transparentAllCards: v.transparentAllCards === true, minimalHubIcons: v.minimalHubIcons === true,
     hiddenFrontTiers: Array.isArray(v.hiddenFrontTiers) ? v.hiddenFrontTiers.filter((id): id is FrontTierOption => (FRONT_TIERS as readonly string[]).includes(id)) : [],
     hideHeaderBorder: v.hideHeaderBorder === true, hideTabBarBorder: v.hideTabBarBorder === true,
     hideTabIcons: v.hideTabIcons === true, hideTileIcons: v.hideTileIcons === true,
@@ -107,7 +117,7 @@ export function sanitizeExtraCustomization(value: unknown): ExtraCustomization {
     wallpaperDim: v.wallpaperDim === 0 || v.wallpaperDim === 0.25 || v.wallpaperDim === 0.5 || v.wallpaperDim === 0.9 ? v.wallpaperDim : 0.78,
     wallpaperFit: v.wallpaperFit === 'contain' || v.wallpaperFit === 'stretch' ? v.wallpaperFit : 'cover',
     elementColors,
-    enabled: v.enabled === true, autoCollapseControls: v.autoCollapseControls === true,
+    enabled: v.enabled === true, blankStartPage: v.blankStartPage === true, autoCollapseControls: v.autoCollapseControls === true,
     fullScreenWallpaper: v.fullScreenWallpaper === true, transparentHeader: v.transparentHeader === true,
     transparentTabBar: v.transparentTabBar === true,
     // Keep Front and Hub available so settings and primary navigation remain reachable.

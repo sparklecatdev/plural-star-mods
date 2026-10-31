@@ -34,4 +34,4 @@ export const extraCustomization = {
 };
 export const useExtraCustomization = () => useSyncExternalStore(extraCustomization.subscribe, extraCustomization.getSnapshot, extraCustomization.getSnapshot);
 export const applyExtraColors = (theme: ThemeColors, prefs: ExtraCustomization): ThemeColors =>
-  prefs.enabled ? {...theme, ...prefs.colors, tierColors: prefs.frontTierColors} : theme;
+  prefs.enabled ? {...theme, ...prefs.colors, ...(prefs.transparentAllCards ? {card: '#00000000'} : {}), tierColors: prefs.frontTierColors} : theme;

@@ -1,5 +1,7 @@
+import {pickAndSaveImage} from '../utils/imagePicker';
+import {saveBioImageFromUri} from '../utils/mediaUtils';
 import React, {useState} from 'react';
-import {Modal, ScrollView, TextInput, TouchableOpacity, View} from 'react-native';
+import {Image, Modal, ScrollView, TextInput, TouchableOpacity, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Text} from '../components/AppText';
 import {ColorPickerModal} from '../components/ColorPickerModal';
@@ -48,7 +50,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
-  const toggle = (key: 'autoCollapseControls' | 'hideHeaderBorder' | 'hideTabBarBorder' | 'hideTabIcons' | 'hideTileIcons' | 'transparentHubTiles' | 'hideHubTileBorders' | 'fullScreenWallpaper' | 'transparentHeader' | 'transparentTabBar' | 'hideTabLabels' | 'hideTileLabels' | 'hideSystemName' | 'hideFrontTitle' | 'hideFrontSort' | 'hideHubTitle'
+  const toggle = (key: 'blankStartPage' | 'transparentAllCards' | 'minimalHubIcons' | 'autoCollapseControls' | 'hideHeaderBorder' | 'hideTabBarBorder' | 'hideTabIcons' | 'hideTileIcons' | 'transparentHubTiles' | 'hideHubTileBorders' | 'fullScreenWallpaper' | 'transparentHeader' | 'transparentTabBar' | 'hideTabLabels' | 'hideTileLabels' | 'hideSystemName' | 'hideFrontTitle' | 'hideFrontSort' | 'hideHubTitle'
     | 'hideHubReorder' | 'hideMemberSort' | 'hideMemberGroupFilter' | 'hideMemberTagFilter' | 'hideMemberSearch'
     | 'hideMemberBackToTop' | 'hideJournalTitle' | 'hideJournalTagFilter' | 'hideJournalAuthorFilter' | 'hideHistoryTitle') => {
     void save({...prefs, [key]: !prefs[key]});
@@ -85,6 +87,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         {options.wallpaper && choices('wallpaperDim', 'Wallpaper dimming', [['None', 0], ['25%', 0.25], ['50%', 0.5], ['Default', 0.78], ['90%', 0.9]])}
         {options.wallpaper && choices('wallpaperFit', 'Wallpaper fit', [['Fill', 'cover'], ['Fit', 'contain'], ['Stretch', 'stretch']])}
         {section('Navigation')}
+        <BaseToggleRow label="Blank first page" desc="Open to an empty page and add it as the first navigation tab." value={prefs.blankStartPage} disabled={busy} onToggle={() => toggle('blankStartPage')} />
         {(['members', 'journal', 'history'] as const).map(id =>
           <ToggleRow key={id} label={`Show ${TAB_NAMES[id]} tab`} value={!prefs.hiddenTabs.includes(id)} disabled={busy}
             onToggle={() => toggleHidden('hiddenTabs', id)} />)}
@@ -103,6 +106,17 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         <ToggleRow label="Show hub tile borders" value={!prefs.hideHubTileBorders} disabled={busy} onToggle={() => toggle('hideHubTileBorders')} />
         {choices('hubColumns', 'Hub columns', [['Automatic', 0], ['1', 1], ['2', 2], ['3', 3]])}
         {choices('tileRadius', 'Hub tile corners', [['Square', 0], ['Slight', 8], ['Default', 14], ['Round', 24]])}
+        <ToggleRow label="Minimal line hub icons" value={prefs.minimalHubIcons} disabled={busy} onToggle={() => toggle('minimalHubIcons')} />
+        <Text style={{color: T.dim, fontSize: fs(13)}}>Choose an image for any hub icon. Custom images take priority over the line icons and are stored on this device.</Text>
+        {TILE_OPTIONS.map(id => <View key={id} style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+          {prefs.hubIconImages[id] && <Image source={{uri: prefs.hubIconImages[id]}} style={{width: 32, height: 32}} resizeMode="contain" />}
+          <Text style={{flex: 1, color: T.text}}>{TILE_NAMES[id]}</Text>
+          <Btn variant="ghost" disabled={busy} onPress={() => { void (async () => {
+            const uri = await pickAndSaveImage(src => saveBioImageFromUri(`hub-icon-${id}`, src));
+            if (uri) await save({...prefs, hubIconImages: {...prefs.hubIconImages, [id]: uri}});
+          })(); }}>Choose image</Btn>
+          {prefs.hubIconImages[id] && <Btn variant="ghost" disabled={busy} onPress={() => { const images = {...prefs.hubIconImages}; delete images[id]; void save({...prefs, hubIconImages: images}); }}>Reset</Btn>}
+        </View>)}
         {section('Front tiers')}
         <Text style={{color: T.dim, fontSize: fs(13)}}>Hidden tiers disappear from the front screen and front selection. Saved front data is kept.</Text>
         {FRONT_TIERS.map(tier => <View key={tier} style={{gap: 6}}>
@@ -135,6 +149,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         {section('History')}
         <ToggleRow label="Show title" value={!prefs.hideHistoryTitle} disabled={busy} onToggle={() => toggle('hideHistoryTitle')} />
         {section('Cards')}
+        <BaseToggleRow label="Transparent cards throughout the app" desc="Remove the shared card background across screens. Individual card settings can override this." value={prefs.transparentAllCards} disabled={busy} onToggle={() => toggle('transparentAllCards')} />
         <Text style={{color: T.dim, fontSize: fs(13)}}>Choose the appearance of cards on each screen. Default keeps the original style.</Text>
         {CARD_AREAS.map(area => {
           const card = prefs.cards[area];
