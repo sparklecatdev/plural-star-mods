@@ -1,0 +1,95 @@
+--- a/src/screens/PollsScreen.tsx
++++ b/src/screens/PollsScreen.tsx
+@@ -1,3 +1,4 @@
++import {useModPreferences} from '../mods/modPreferences';
+ import {NO_SPEAKER_ID, withNoSpeaker} from '../mods/noSpeakerCore';
+ import {useNoSpeaker} from '../mods/useNoSpeaker';
+ import React, {useState, useEffect, useCallback, useMemo} from 'react';
+@@ -19,6 +20,8 @@
+ import {castPollVote, createPoll, defaultVoterId, pollOptionPercent, pollVoterCount, togglePollClosed} from '../polls/polls';
+ import type {PollDraft} from '../polls/polls';
+ 
++type ArchivablePoll = MemberPoll & {archived?: boolean};
++
+ type NewPoll = Omit<PollDraft, 'targetId' | 'createdBy'>;
+ 
+ const BLANK_POLL: NewPoll = {question: '', options: ['', ''], hideVoters: false, multiChoice: false};
+@@ -26,13 +29,15 @@
+ export const PollsScreen = () => {
+   const T = useTheme();
+   const noSpeaker = useNoSpeaker();
++  const archiveEnabled = useModPreferences().archivePolls;
++  const [showArchived, setShowArchived] = useState(false);
+   const members = useAppStore(s => s.members);
+   const front = useAppStore(s => s.front);
+   const {t} = useTranslation();
+   const fs = fontScale(T);
+   const behavior = useKeyboardBehavior();
+   const voterPools = useMemo(() => withNoSpeaker(memberFacetPools(members, t), noSpeaker.member, noSpeaker.enabled), [members, t, noSpeaker.member, noSpeaker.enabled]);
+-  const [polls, setPolls] = useState<MemberPoll[]>([]);
++  const [polls, setPolls] = useState<ArchivablePoll[]>([]);
+   const [showCreate, setShowCreate] = useState(false);
+   const [draft, setDraft] = useState<NewPoll>(BLANK_POLL);
+   const patch = (p: Partial<NewPoll>) => setDraft(d => ({...d, ...p}));
+@@ -43,14 +48,14 @@
+   }, [noSpeaker.enabled, voterId, members, front]);
+   const [voterPickerOpen, setVoterPickerOpen] = useState(false);
+ 
+-  const load = useCallback(() => { store.get<MemberPoll[]>(KEYS.polls, []).then(p => setPolls(p || [])).catch(e => logError('polls', e)); }, []);
++  const load = useCallback(() => { store.get<ArchivablePoll[]>(KEYS.polls, []).then(p => setPolls(p || [])).catch(e => logError('polls', e)); }, []);
+ 
+   useEffect(() => {
+     load();
+     return NetworkManager.onSyncApplied(load);
+   }, [load]);
+ 
+-  const savePolls = (updated: MemberPoll[]) => {
++  const savePolls = (updated: ArchivablePoll[]) => {
+     setPolls(updated);
+     store.set(KEYS.polls, updated).catch((e: unknown) => { reportSaveError(e); load(); });
+   };
+@@ -77,6 +82,9 @@
+ 
+   const toggleClose = (pollId: string) => savePolls(polls.map(p => (p.id === pollId ? togglePollClosed(p) : p)));
+ 
++  const setArchived = (id: string, archived: boolean) => savePolls(polls.map(p => p.id === id ? {...p, archived} : p));
++  const visiblePolls = archiveEnabled ? polls.filter(p => !!p.archived === showArchived) : polls;
++
+   const deletePoll = (id: string) => {
+     Alert.alert(t('polls.deletePoll'), t('polls.deletePollMsg'), [
+       {text: t('common.cancel'), style: 'cancel'},
+@@ -138,12 +146,17 @@
+         </View>
+       )}
+ 
++      {archiveEnabled && (
++        <TouchableOpacity onPress={() => setShowArchived(!showArchived)} accessibilityRole="button" accessibilityState={{selected: showArchived}} style={{alignSelf: 'flex-start', marginHorizontal: 16, marginBottom: 10}}>
++          <Text style={{fontSize: fs(12), color: T.accent}}>{showArchived ? 'Show active polls' : 'Show archived polls'}</Text>
++        </TouchableOpacity>
++      )}
+       <ScrollView style={{flex: 1}} contentContainerStyle={{padding: 16, paddingTop: 0}}>
+-        {polls.length === 0 ? (
++        {visiblePolls.length === 0 ? (
+           <View style={{alignItems: 'center', paddingVertical: 48}}>
+-            <Text style={{fontSize: fs(13), color: T.dim}}>{t('polls.noPolls')}</Text>
++            <Text style={{fontSize: fs(13), color: T.dim}}>{archiveEnabled && showArchived ? 'No archived polls.' : t('polls.noPolls')}</Text>
+           </View>
+-        ) : polls.map(poll => {
++        ) : visiblePolls.map(poll => {
+           const voterCount = pollVoterCount(poll);
+           const isClosed = !!poll.closedAt;
+           return (
+@@ -176,7 +189,12 @@
+                 );
+               })}
+ 
+-              <View style={{flexDirection: 'row', gap: 12, marginTop: 6}}>
++              <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 6}}>
++                {archiveEnabled && (
++                  <TouchableOpacity hitSlop={{top: 12, bottom: 12, left: 6, right: 6}} onPress={() => setArchived(poll.id, !poll.archived)} activeOpacity={0.7} accessibilityRole="button">
++                    <Text style={{fontSize: fs(11), color: T.accent}}>{poll.archived ? 'Restore poll' : 'Archive poll'}</Text>
++                  </TouchableOpacity>
++                )}
+                 <TouchableOpacity hitSlop={{top: 12, bottom: 12, left: 6, right: 6}} onPress={() => toggleClose(poll.id)} activeOpacity={0.7} accessibilityRole="button">
+                   <Text style={{fontSize: fs(11), color: T.accent}}>{isClosed ? t('polls.reopenPoll') : t('polls.closePoll')}</Text>
+                 </TouchableOpacity>

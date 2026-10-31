@@ -59,6 +59,7 @@ def main():
         run('git', 'apply', '--unidiff-zero', str(ROOT / 'payload/profile-palettes-pr-23.patch'))
         run('git', 'apply', str(ROOT / 'payload/pluralkit-pr-11.patch'))
         run('git', 'apply', str(ROOT / 'payload/no-speaker.patch'))
+        run('git', 'apply', str(ROOT / 'payload/archive-polls.patch'))
         run('git', 'apply', str(ROOT / 'payload/confirm-once.patch'))
         run('git', 'apply', str(ROOT / 'payload/device-unlock.patch'))
         run('git', 'apply', str(ROOT / 'payload/extra-customization.patch'))

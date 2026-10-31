@@ -61,6 +61,8 @@ function ModMenu({onClose}: {onClose: () => void}) {
         </View>}
         <ToggleRow label="Allow No speaker" desc="Choose No speaker in chat, polls, and mailbox senders. Polls use one shared No speaker vote." value={enabled.noSpeaker} disabled={busy || saving || pkBusy}
           onToggle={() => { void toggle('noSpeaker'); }} />
+        <ToggleRow label="Archive polls" desc="Move polls out of the main list and restore them later." value={enabled.archivePolls} disabled={busy || saving || pkBusy}
+          onToggle={() => { void toggle('archivePolls'); }} />
         <ToggleRow label="Fix System Chat keyboard position" desc="On Android, let the system position chat when the keyboard opens." value={enabled.chatKeyboardFix} disabled={busy || saving || pkBusy}
           onToggle={() => { void toggle('chatKeyboardFix'); }} />
         <ToggleRow label="Disable facets" desc="Hide the facets tab and conversion action. Saved facets are kept." value={enabled.disableFacets} disabled={busy || saving || pkBusy}
