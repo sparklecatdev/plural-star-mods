@@ -26,25 +26,29 @@ test('appearance changes require a declared permission and valid colors', () => 
  const actions = []; runSparkle(mod, 'tap', a => actions.push(a.value)); assert.deepEqual(actions, ['#AB12EF']);
 });
 function managerHarness(initial = null) {
- let disk = initial; const alerts = []; const changes = [];
+ const disk = {'sparklecat:custom-scripts': initial}; const alerts = []; const changes = [];
  const file = path.join(__dirname, '../payload/mods/sparkleScripts.ts');
  const transformed = babel.transformSync(fs.readFileSync(file, 'utf8'), {filename: file, babelrc: false, configFile: false, presets: [path.join(upstream, 'node_modules/@react-native/babel-preset')]}).code;
- const api = {};
+ const api = {}; const native = {Alert: {alert: (...args) => alerts.push(args)}};
  vm.runInNewContext(transformed, {exports: api, require: name => {
-  if (name === '@react-native-async-storage/async-storage') return {getItem: async () => disk, setItem: async (_, value) => {disk = value;}};
-  if (name === 'react-native') return {Alert: {alert: (...args) => alerts.push(args)}};
+  if (name === '@react-native-async-storage/async-storage') return {getItem: async key => disk[key] || null, setItem: async (key, value) => {disk[key] = value;}};
+  if (name === 'react') return {useSyncExternalStore: () => {}};
+  if (name === 'react-native-blob-util') return {};
+  if (name === '../store/appStore') return {useAppStore: {}};
+  if (name === 'react-native') return native;
   if (name === './sparkleScriptCore') return result;
   if (name === './extraCustomization') return {extraCustomization: {getSnapshot: () => ({enabled: false, colors: {}}), set: async value => changes.push(value)}};
   if (name.startsWith('@babel/runtime/')) return require(require.resolve(name, {paths: [upstream]}));
   throw Error('Unexpected dependency ' + name);
  }});
- return {api, alerts, changes, disk: () => disk};
+ return {api, native, alerts, changes, disk: () => disk['sparklecat:custom-scripts']};
 }
 test('scripts persist disabled until explicitly enabled; edits may be disabled again', async () => {
  const h = managerHarness(); await h.api.loadScripts();
  await h.api.saveScripts(rows => [...rows, {id: 'one', source: script, enabled: false}]);
  h.api.runScripts('tap', 'one'); assert.equal(h.alerts.length, 0);
  await h.api.saveScripts(rows => rows.map(row => ({...row, enabled: true})));
+ await h.api.setScriptingEnabled(true);
  h.api.runScripts('tap', 'one'); assert.equal(h.alerts.length, 1);
  const next = managerHarness(h.disk()); await next.api.loadScripts();
  assert.equal(next.api.listScripts()[0].enabled, true);
@@ -62,7 +66,27 @@ test('an appearance script does not turn on unrelated saved customization settin
  const source = 'mod "x" version "1.0.0" { allow appearance when tap { accent "#abcdef" } }';
  const h = managerHarness(); await h.api.loadScripts();
  await h.api.saveScripts(() => [{id: 'x', source, enabled: true}]);
- h.api.runScripts('tap', 'x'); await new Promise(setImmediate);
+ await h.api.setScriptingEnabled(true); h.api.runScripts('tap', 'x'); await new Promise(setImmediate);
  assert.equal(h.changes.length, 1); assert.equal(h.changes[0].enabled, false);
  assert.equal(h.changes[0].colors.accentBg, '#ABCDEF');
+});
+
+test('JavaScript mods require opt-in and clean up when disabled', async () => {
+ const h = managerHarness(); await h.api.loadScripts();
+ const source = '// sparkle {"name":"Example","version":"1.0.0"}\napi.ReactNative.Alert.alert("started"); api.onDispose(() => api.ReactNative.Alert.alert("stopped"));';
+ await h.api.saveScripts(() => [{id: 'example', source, enabled: true}]);
+ h.api.runScripts('open'); assert.equal(h.alerts.length, 0);
+ await h.api.setScriptingEnabled(true); assert.equal(h.alerts[0][0], 'started');
+ await h.api.setScriptingEnabled(false); assert.equal(h.alerts[1][0], 'stopped');
+ assert.throws(() => parseSparkle('// sparkle {"name":"x","version":"1.0.0"}\nconst ='));
+});
+
+test('a stopped script cannot add a late app wrapper', async () => {
+ const h = managerHarness(); await h.api.loadScripts();
+ const source = '// sparkle {"name":"Late","version":"1.0.0"}\napi.ReactNative.Alert.late = () => api.wrapApp(function Wrapper() {});';
+ await h.api.saveScripts(() => [{id: 'late', source, enabled: true}]);
+ h.api.runScripts('open'); await h.api.setScriptingEnabled(true);
+ await h.api.setScriptingEnabled(false);
+ // The saved callback retains the original API, even after disabling the mod.
+ h.native.Alert.late(); assert.equal(h.api.useScriptState().wrappers.length, 0);
 });

@@ -8,7 +8,7 @@ import {nativeUnlockSupported} from './modOptions';
 import {recovery, recoverBeforeStart, restoreQueue, retryStoragePreparation} from './storageSnapshot';
 import {setToolsOpen, waitForStorageIdle} from './toolsState';
 import {updateChecker, confirmPatchLaunch} from './updateCheck';
-import {loadScripts, runScripts} from './sparkleScripts';
+import {loadScripts, runScripts, useScriptState} from './sparkleScripts';
 
 function LaunchAnimation({onFinished}: {onFinished: () => void}) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -39,6 +39,7 @@ function LaunchAnimation({onFinished}: {onFinished: () => void}) {
 }
 
 export default function ModsRoot() {
+  const {wrappers} = useScriptState();
   const [ready, setReady] = useState(false);
   const [animationDone, setAnimationDone] = useState(false);
   const [error, setError] = useState('');
@@ -111,6 +112,7 @@ export default function ModsRoot() {
     // Recovery and queued restores finish before upstream singletons can start.
     const App = require('../../App').default;
     content = <App />;
+    for (let i = wrappers.length - 1; i >= 0; i--) content = React.createElement(wrappers[i].component, {key: `${wrappers[i].id}-${i}`, children: content});
   } else content = <View style={styles.center}><ActivityIndicator color="#E5B5FF" /></View>;
 
   return <View style={styles.root}>

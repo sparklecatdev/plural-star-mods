@@ -121,7 +121,7 @@ function rootHarness({password = null, reduceMotion = false, recoveryError = fal
     '@react-native-async-storage/async-storage': {getItem: async () => password ? JSON.stringify({appLockPassword: password}) : null},
     './modPreferences': {modPreferences: {load: async () => {}}, useModPreferences: () => ({deviceUnlock: false})},
     './extraCustomization': {extraCustomization: {load: async () => {}}},
-    './sparkleScripts': {loadScripts: async () => {}, runScripts: () => {}},
+    './sparkleScripts': {loadScripts: async () => {}, runScripts: () => {}, useScriptState: () => ({wrappers: []})},
     './useDeviceUnlock': {useDeviceUnlock: () => ({available: false, prompt: async () => {}})},
     './modOptions': {nativeUnlockSupported: true},
     './updateCheck': {updateChecker: {check: async force => { checks.push(force); }}, confirmPatchLaunch: async () => {}},
@@ -470,21 +470,21 @@ test('custom mods import disabled and can be enabled after appearance permission
   const {parseSparkle} = load('sparkleScriptCore.ts'); const rows = []; const dialogs = [];
   const source = 'mod "Lilac" version "1.0.0" { allow appearance when tap { accent "#abcdef" } }';
   const {CustomMods} = load('CustomMods.tsx', {
-    'react-native': {View: 'View', Linking: {}, Share: {}, Alert: {alert: (title, message, buttons) => { dialogs.push(title); if (title === 'Allow appearance changes?') buttons[1].onPress(); }}},
+    'react-native': {View: 'View', Linking: {}, Share: {}, Alert: {alert: (title, message, buttons) => { dialogs.push(title); if (title === 'Enable SparkleScript?') buttons[1].onPress(); }}},
     '@react-native-documents/picker': {pick: async () => [{uri: 'file://script', size: source.length}], keepLocalCopy: async () => [{status: 'success', localUri: 'file://script'}], isErrorWithCode: () => false, errorCodes: {}},
     'react-native-blob-util': {fs: {stat: async () => ({size: source.length}), readFile: async () => source, exists: async () => false}}, '../components/AppText': {Text: 'Text'},
     '../components/controls': {Btn: host('Button'), ToggleRow: host('Toggle')},
     '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n},
     './sparkleScriptCore': {parseSparkle},
-    './sparkleScripts': {listScripts: () => rows.slice(), loadScripts: async () => {}, runScripts: () => {},
+    './sparkleScripts': {listScripts: () => rows.slice(), loadScripts: async () => {}, runScripts: () => {}, useScriptState: () => ({enabled: true}), setScriptingEnabled: async () => {},
       saveScripts: async update => { const next = update(rows.slice()); rows.splice(0, rows.length, ...next); }},
   });
   let renderer;
   await act(async () => { renderer = create(React.createElement(CustomMods, {disabled: false})); });
   await act(async () => renderer.root.findAllByType('Button').find(n => n.props.children === 'Import .sparkle').props.onPress());
   assert.equal(rows.length, 1); assert.equal(rows[0].enabled, false);
-  await act(async () => renderer.root.findByType('Toggle').props.onToggle());
-  assert.equal(rows[0].enabled, true); assert.deepEqual(dialogs, ['Mod imported', 'Allow appearance changes?']);
+  await act(async () => renderer.root.findAllByType('Toggle').find(n => n.props.label === 'Lilac').props.onToggle());
+  assert.equal(rows[0].enabled, true); assert.deepEqual(dialogs, ['Mod imported']);
   await act(async () => renderer.unmount());
 });
 

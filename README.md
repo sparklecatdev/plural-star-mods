@@ -40,7 +40,7 @@ Building or modifying the project? See the [developer guide](fordevs.md).
 
 ## Custom mods
 
-Create, import, and manage small local SparkleScript mods under **Settings → sparklecat's mods → Custom mods**. Write or edit scripts in a text editor, then import them into the app. See [SparkleScript](SPARKLESCRIPT.md) for syntax, examples, permissions, and current limits.
+Create, import, and manage unrestricted JavaScript-powered SparkleScript mods under **Settings → sparklecat's mods → Custom mods**. Write or edit scripts in a text editor, then import them into the app. See [SparkleScript](SPARKLESCRIPT.md) for syntax, examples, API details, and risks.
 
 ## Suggestions
 

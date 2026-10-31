@@ -1,8 +1,16 @@
-/** SparkleScript is parsed as data. It never evaluates JavaScript or accesses host objects. */
 export type SparkleAction = {kind: 'show' | 'accent'; value: string};
-export type SparkleMod = {name: string; version: string; description: string; appearance: boolean; handlers: {event: 'open' | 'tap'; actions: SparkleAction[]}[]};
+export type SparkleMod = {name: string; version: string; description: string; appearance: boolean; javascript?: boolean; handlers: {event: 'open' | 'tap'; actions: SparkleAction[]}[]};
 export function parseSparkle(source: string): SparkleMod {
-  if (source.length > 16384) throw Error('Script exceeds 16 KiB.');
+  if (source.length > 1048576) throw Error('Script exceeds 1 MiB.');
+  if (source.startsWith('// sparkle ')) {
+    const end = source.indexOf('\n');
+    if (end < 0) throw Error('Missing script body.');
+    let metadata: any;
+    try { metadata = JSON.parse(source.slice(11, end)); } catch { throw Error('Invalid SparkleScript metadata.'); }
+    if (!metadata || typeof metadata.name !== 'string' || !metadata.name.trim() || metadata.name.length > 80 || typeof metadata.version !== 'string' || !/^\d+\.\d+\.\d+$/.test(metadata.version) || (metadata.description !== undefined && (typeof metadata.description !== 'string' || metadata.description.length > 500))) throw Error('Invalid SparkleScript metadata.');
+    new Function('api', source);
+    return {name: metadata.name, version: metadata.version, description: metadata.description || '', appearance: false, javascript: true, handlers: []};
+  }
   let pos = 0;
   const error = (message: string): never => {
     const before = source.slice(0, pos).split('\n');

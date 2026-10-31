@@ -57,7 +57,7 @@ Do not change a published release's assets in place. Advance the appropriate ver
 | --- | --- |
 | Supported offline original and payload version | `payload/base.json`, `payload/release.json`, `scripts/base_config.py` |
 | Upstream integration and build order | `scripts/build-payloads.py`, `payload/*.patch` |
-| Custom mod interpreter and import flow | `payload/mods/sparkleScriptCore.ts`, `sparkleScripts.ts`, `CustomMods.tsx`; see `SPARKLESCRIPT.md` |
+| Custom mod runtime, app wrappers, and import flow | `payload/mods/sparkleScriptCore.ts`, `sparkleScripts.ts`, `CustomMods.tsx`; see `SPARKLESCRIPT.md` |
 | Patched-app screens and behavior | `payload/mods/*.tsx`, `payload/mods/*.ts` |
 | Feature defaults, persistence, and cloud sync | `payload/mods/modPreferencesCore.ts`, `modPreferences.ts`, `cloudModsCore.ts`, `cloudMods.ts` |
 | Extra interface controls | `payload/mods/extraCustomizationCore.ts`, `extraCustomization.ts`, `ExtraCustomizationMenu.tsx` |
@@ -150,3 +150,5 @@ Keep release assets, source archives, and diagnostics free of credentials and us
 - **Patch/update discovery fails:** check the release tag, `payload/release.json` version/runtime, variant-specific asset names, release draft status, published size/digest, and `UpdatePolicy.java`. Check network errors in `UpdateClient.java` separately from selection errors. Publish a new immutable release after fixing bad assets.
 - **Installation says the signatures differ:** inspect the installed app's signer and the patcher's retained Android Keystore identity. The publisher key signs only the patcher; it cannot replace the per-device key for an already installed patched app. Back up user data before any reinstall.
 - **Source verification fails:** commit the exact files first, rebuild the unsigned APK so `packageSource` embeds that commit's source, then sign and verify again. The release verifier compares the embedded ZIP with every tracked file.
+
+SparkleScript is unrestricted JavaScript after explicit device-local opt-in. Keep the master switch off by default and never restore it from cloud preferences. `sparkleScripts.ts` owns script lifecycle and app wrappers; scripts must register cleanup with `api.onDispose`. Keep legacy scripts compatible and update `SPARKLESCRIPT.md` when the API changes.
