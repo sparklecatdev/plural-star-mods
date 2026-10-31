@@ -54,6 +54,34 @@ test('background controls default off and survive validated cloud preferences', 
   assert.equal(restored.transparentTabBar, true);
 });
 
+test('expanded customization validates and syncs appearance settings', () => {
+  const defaults = extra.sanitizeExtraCustomization(null);
+  assert.equal(defaults.enabled, false);
+  assert.equal(defaults.hubColumns, 0);
+  assert.equal(defaults.tileRadius, 14);
+  assert.equal(defaults.wallpaperDim, 0.78);
+  assert.equal(defaults.wallpaperFit, 'cover');
+  for (const key of ['hideHeaderBorder', 'hideTabBarBorder', 'hideTabIcons', 'hideTileIcons', 'transparentHubTiles', 'hideHubTileBorders']) {
+    assert.equal(defaults[key], false);
+    assert.equal(extra.sanitizeExtraCustomization({[key]: 'true'})[key], false);
+  }
+  const invalid = extra.sanitizeExtraCustomization({hubColumns: 100, tileRadius: -1, wallpaperDim: 2, wallpaperFit: 'invalid', elementColors: {header: 'red', tabActive: '#ab12CD', unknown: '#000000'}});
+  assert.equal(invalid.hubColumns, 0);
+  assert.equal(invalid.tileRadius, 14);
+  assert.equal(invalid.wallpaperDim, 0.78);
+  assert.equal(invalid.wallpaperFit, 'cover');
+  assert.deepEqual(plain(invalid.elementColors), {tabActive: '#AB12CD'});
+  const saved = record();
+  saved.settings.extraCustomization = {enabled: true, hubColumns: 1, tileRadius: 24, wallpaperDim: 0, wallpaperFit: 'contain', hideTabIcons: true, elementColors: {header: '#123456'}};
+  const restored = readCloudMods(JSON.stringify(saved)).settings.extraCustomization;
+  assert.equal(restored.hubColumns, 1);
+  assert.equal(restored.tileRadius, 24);
+  assert.equal(restored.wallpaperDim, 0);
+  assert.equal(restored.wallpaperFit, 'contain');
+  assert.equal(restored.hideTabIcons, true);
+  assert.equal(restored.elementColors.header, '#123456');
+});
+
 test('cloud records reject malformed, oversized, future, and duplicate data; executable fields are discarded', () => {
   for (const raw of ['{', 'null', 'x'.repeat(16385), JSON.stringify({...record(), schema: 2}),
     JSON.stringify({...record(), settings: {...settings(), automaticUpdates: 'yes'}}),

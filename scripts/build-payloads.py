@@ -62,12 +62,36 @@ def main():
         header = SOURCE / 'src/components/AppHeader.tsx'
         text = header.read_text()
         assert text.count('backgroundColor: C.bg') == 2
-        header.write_text(text.replace('backgroundColor: C.bg', "backgroundColor: extra.enabled && extra.transparentHeader ? 'transparent' : C.bg"))
+        text = text.replace('backgroundColor: C.bg', "backgroundColor: extra.enabled && extra.transparentHeader ? 'transparent' : extra.enabled ? extra.elementColors.header || C.bg : C.bg")
+        text = text.replace('borderBottomColor: C.border,', 'borderBottomColor: C.border, borderBottomWidth: extra.enabled && extra.hideHeaderBorder ? 0 : 1,')
+        header.write_text(text)
         tab_bar = SOURCE / 'src/components/TabBar.tsx'
         text = tab_bar.read_text()
         target = 'backgroundColor: C.surface, borderTopColor: C.border'
         assert text.count(target) == 1
-        tab_bar.write_text(text.replace(target, "backgroundColor: extra.enabled && extra.transparentTabBar ? 'transparent' : C.surface, borderTopColor: C.border"))
+        text = text.replace(target, "backgroundColor: extra.enabled && extra.transparentTabBar ? 'transparent' : extra.enabled ? extra.elementColors.tabBar || C.surface : C.surface, borderTopColor: C.border, borderTopWidth: extra.enabled && extra.hideTabBarBorder ? 0 : 1")
+        assert text.count('tab === id ? C.accent : C.dim') == 2
+        text = text.replace('tab === id ? C.accent : C.dim', 'tab === id ? (extra.enabled ? extra.elementColors.tabActive || C.accent : C.accent) : (extra.enabled ? extra.elementColors.tabInactive || C.dim : C.dim)')
+        icon_start = "          <View style={{height: fs(24), justifyContent: 'center', marginBottom: 2}}>"
+        assert text.count(icon_start) == 1
+        text = text.replace(icon_start, "          {(!extra.enabled || !extra.hideTabIcons || extra.hideTabLabels) && <View style={{height: fs(24), justifyContent: 'center', marginBottom: 2}}>")
+        icon_end = '</AccentText>\n          </View>'
+        assert text.count(icon_end) == 1
+        text = text.replace(icon_end, '</AccentText>\n          </View>}')
+        tab_bar.write_text(text)
+        hub = SOURCE / 'src/screens/HubScreen.tsx'
+        text = hub.read_text()
+        replacements = {
+            'const tileCols = (T.textScale || 1) * osFontCap >= 1.4 ? 2 : 3;': 'const tileCols = extra.enabled && extra.hubColumns ? extra.hubColumns : (T.textScale || 1) * osFontCap >= 1.4 ? 2 : 3;',
+            "const tileWidth = tileCols === 2 ? '48%' : '31%';": "const tileWidth = tileCols === 1 ? '100%' : tileCols === 2 ? '48%' : '31%';",
+            'borderRadius: 14,\n                borderWidth: isTarget ? 2 : 1,\n                backgroundColor: T.card,\n                borderColor: isTarget ? T.accent : T.border,': "borderRadius: extra.enabled ? extra.tileRadius : 14,\n                borderWidth: isTarget ? 2 : extra.enabled && extra.hideHubTileBorders ? 0 : 1,\n                backgroundColor: extra.enabled && extra.transparentHubTiles ? 'transparent' : extra.enabled ? extra.elementColors.hubTile || T.card : T.card,\n                borderColor: isTarget ? T.accent : extra.enabled ? extra.elementColors.hubTileBorder || T.border : T.border,",
+            '<Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{fontSize: fs(26)': '{(!extra.enabled || !extra.hideTileIcons || extra.hideTileLabels) && <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{fontSize: fs(26)',
+            '>{tile.icon}</Text>': '>{tile.icon}</Text>}',
+        }
+        for old, new in replacements.items():
+            assert text.count(old) == 1, old
+            text = text.replace(old, new)
+        hub.write_text(text)
         group_pane = SOURCE / 'src/screens/systemManager/GroupBrowsePane.tsx'
         classic = group_pane.read_text()
         run('git', 'apply', '--unidiff-zero', str(ROOT / 'payload/group-view.patch'))
@@ -125,6 +149,14 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
         assert settings_text.count(sheet) == 1
         settings_text = settings_text.replace(sheet, sheet + '\n      <ModSettingsButton />')
         if wallpaper:
+            image = SOURCE / 'src/components/BackgroundImage.tsx'
+            image_text = "import {useExtraCustomization} from '../mods/extraCustomization';\n" + image.read_text()
+            target = '  const uri = backgroundImageUri(filename);'
+            assert image_text.count(target) == 1
+            image_text = image_text.replace(target, target + '\n  const extra = useExtraCustomization();')
+            image_text = image_text.replace('resizeMode="cover"', "resizeMode={extra.enabled ? extra.wallpaperFit : 'cover'}")
+            image_text = image_text.replace('opacity: 0.78', 'opacity: extra.enabled ? extra.wallpaperDim : 0.78')
+            image.write_text(image_text)
             settings_text = settings_text.replace("import {BackgroundSection} from './system/BackgroundSection';\n", '')
             settings_text = settings_text.replace('      <BackgroundSection filename={settings.backgroundImage} onChange={onChangeBackground} />\n', '')
             settings_text = settings_text.replace('onSelectPalette, onChangeBackground, onOpenProfile', 'onSelectPalette, onOpenProfile')

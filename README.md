@@ -24,7 +24,7 @@ Building or modifying the project? See the [developer guide](fordevs.md).
 
 ## Features
 
-- **Wallpaper:** personalize your app background and change it whenever you like. Extra Customization can extend it across the screen and make the top and bottom bars transparent.
+- **Wallpaper:** personalize your app background and change it whenever you like. Extra Customization can extend it across the screen, adjust its fit and dimming, and make the top and bottom bars transparent. It also lets you change individual interface colors, hub layouts, tile corners, and which controls are visible.
 - **Storage tools:** save and restore password-protected backups of your app data and local media.
 - **Settings mod menu:** open **Settings → sparklecat's mods** to enable or disable included features. Switches save automatically; turning wallpaper off keeps the selected image, and turning storage tools off cancels a pending restore.
 - **Quick launch:** a short sparkle animation leads straight into Plural Star. Reduced-motion settings are respected. Release notes appear after updates; mod controls stay in Settings.
