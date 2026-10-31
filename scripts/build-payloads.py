@@ -174,6 +174,12 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
         target = "const bgMode = fields.background || 'plain';"
         assert text.count(target) == 1
         card.write_text(text.replace(target, "const bgMode = fields.background || (showGroupTags ? 'banner' : 'plain');"))
+        members_screen = SOURCE / 'src/screens/MembersScreen.tsx'
+        text = members_screen.read_text()
+        target = '  const changeListFields = (next: MemberListFields) => {'
+        assert text.count(target) == 1
+        text = text.replace(target, "  useEffect(() => { if (!archiveOnly) setListFields({groups: true, descriptions: true, pronouns: true, roles: true, count: true, ...savedListFields}); }, [archiveOnly, savedListFields]);\n" + target)
+        members_screen.write_text(text)
         # Optional card styling retains the upstream style when no choice is set.
         card_targets = [
             ('src/screens/front/TierCard.tsx', 'front', [('{backgroundColor: T.card, borderColor: `${accentColor}40`},', "{backgroundColor: T.card, borderColor: `${accentColor}40`}, cardAppearance(extra, 'front'),")]),

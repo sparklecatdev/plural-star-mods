@@ -1,10 +1,10 @@
 --- a/src/components/GroupBrowser.tsx
 +++ b/src/components/GroupBrowser.tsx
-@@ -25,0 +26 @@
+@@ -25,0 +26,1 @@
 +  showAllAtRoot?: boolean;
-@@ -41,0 +43 @@
+@@ -41,0 +43,1 @@
 +  showAllAtRoot,
-@@ -56 +58 @@
+@@ -56,1 +58,1 @@
 -  const folderMembersRaw = inFolder(listable);
 +  const folderMembersRaw = browseId === null && showAllAtRoot ? listable : inFolder(listable);
 @@ -58,2 +60,2 @@
@@ -14,7 +14,7 @@
 +  const folderCustomFronts = sortMembers(browseId === null ? cfListable : inFolder(cfListable), sort);
 --- a/src/screens/members/MemberCard.tsx
 +++ b/src/screens/members/MemberCard.tsx
-@@ -60,0 +61 @@
+@@ -60,0 +61,1 @@
 +  const memberTags = m.tags || [];
 @@ -125,0 +127,5 @@
 +          {memberTags.length > 0 && (
@@ -24,18 +24,19 @@
 +          )}
 --- a/src/screens/systemManager/GroupBrowsePane.tsx
 +++ b/src/screens/systemManager/GroupBrowsePane.tsx
-@@ -5,2 +5 @@
+@@ -5,2 +5,1 @@
 -import {Text} from '../../components/AppText';
 -import {Avatar} from '../../components/Avatar';
 +import {Text, TextInput} from '../../components/AppText';
-@@ -13 +12,2 @@
+@@ -13,1 +12,2 @@
 -import {quickAddToFront, removeFromFront, bulkAddGroups, bulkRemoveFromGroup, saveGroupSortMode} from '../../store/actions';
 +import {useUiStore} from '../../store/uiStore';
-+import {quickAddToFront, removeFromFront, bulkAddGroups, bulkAddTags, bulkRemoveFromGroup, bulkSetArchived, bulkDeleteMembers, saveGroupSortMode} from '../../store/actions';
-@@ -16 +16,9 @@
++import {quickAddToFront, removeFromFront, bulkAddGroups, bulkAddTags, bulkRemoveFromGroup, bulkSetArchived, bulkDeleteMembers, saveGroupSortMode, saveMemberListFields} from '../../store/actions';
+@@ -16,1 +16,10 @@
 -import {Member, FrontTierKey, MemberSortMode, allFrontMemberIds, groupKind, toggleId} from '../../utils';
 +import {Member, FrontTierKey, MemberSortMode, allFrontMemberIds, groupKind, tagKey, toggleId, uniqueTags} from '../../utils';
 +import {MemberCard} from '../members/MemberCard';
++import {DisplayOptionsSheet} from '../members/DisplayOptionsSheet';
 +import {TagFilterChips} from '../members/FilterChips';
 +import {SelectionHeader} from '../members/MembersListHeader';
 +import {BulkActionBar} from '../members/BulkActionBar';
@@ -43,9 +44,12 @@
 +import {TagAssignSheet} from '../members/TagAssignSheet';
 +import {filterMembers} from '../members/memberList';
 +import {ms} from '../members/shared';
-@@ -36,0 +45 @@
+@@ -36,0 +46,4 @@
 +  const openCustomFront = useUiStore(s => s.openCustomFront);
-@@ -43,2 +52,6 @@
++  const savedListFields = useAppStore(s => s.appSettings.memberListFields);
++  const listFields = {groups: true, descriptions: true, pronouns: true, roles: true, count: true, ...savedListFields};
++  const [showDisplayOptions, setShowDisplayOptions] = useState(false);
+@@ -43,2 +56,6 @@
 -  const [removeMode, setRemoveMode] = useState(false);
 -  const [removeIds, setRemoveIds] = useState<string[]>([]);
 +  const [selectionMode, setSelectionMode] = useState(false);
@@ -54,17 +58,17 @@
 +  const [showTagAssign, setShowTagAssign] = useState(false);
 +  const [query, setQuery] = useState('');
 +  const [activeTag, setActiveTag] = useState<string | null>(null);
-@@ -47,3 +60,3 @@
+@@ -47,3 +64,3 @@
 -  const exitRemoveMode = () => {
 -    setRemoveMode(false);
 -    setRemoveIds([]);
 +  const exitSelection = () => {
 +    setSelectionMode(false);
 +    setSelectedIds([]);
-@@ -57 +70 @@
+@@ -57,1 +74,1 @@
 -    exitRemoveMode();
 +    exitSelection();
-@@ -64 +77,7 @@
+@@ -64,1 +81,7 @@
 -  const hasFolderMembers = !!current && browseEligible.some(m => (m.groupIds || []).includes(current.id));
 +  const knownTags = useMemo(() => uniqueTags(browseListable.flatMap(m => m.tags || [])), [members]);
 +  const filteredMembers = useMemo(() => filterMembers(browseListable, query.trim(), null, activeTag ? tagKey(activeTag) : null, groupSortMode || 'manual'), [members, query, activeTag, groupSortMode]);
@@ -73,16 +77,16 @@
 +    ? (m.isCustomFront || showAllAtRoot || !(m.groupIds || []).length)
 +    : (m.groupIds || []).includes(browseId)).map(m => m.id);
 +  const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.includes(id));
-@@ -76,2 +95,2 @@
+@@ -76,2 +99,2 @@
 -    if (!current || removeIds.length === 0) return;
 -    Alert.alert(t('memberGroups.removeMembers'), t('members.selectedCount', {count: removeIds.length}), [
 +    if (!current || selectedIds.length === 0) return;
 +    Alert.alert(t('memberGroups.removeMembers'), t('members.selectedCount', {count: selectedIds.length}), [
-@@ -80,2 +99 @@
+@@ -80,2 +103,1 @@
 -        bulkRemoveFromGroup(removeIds, current.id).catch(reportSaveError);
 -        exitRemoveMode();
 +        bulkRemoveFromGroup(selectedIds, current.id).then(exitSelection, reportSaveError);
-@@ -96,30 +114,27 @@
+@@ -96,30 +118,27 @@
 -  const renderRemoveRow = (m: Member) => {
 -    const checked = removeIds.includes(m.id);
 -    const sub = [m.pronouns, m.role].filter(Boolean).join(' · ');
@@ -139,11 +143,11 @@
 +    onToggleSelect={id => setSelectedIds(ids => toggleId(ids, id))}
 +    onEnterSelection={id => { setSelectionMode(true); setSelectedIds([id]); }}
 +    onQuickFront={setQuickFrontFor} onRemoveFromFront={confirmRemoveFromFront}
-+    fields={{background: 'banner', groups: true, descriptions: true, pronouns: true, roles: true, count: true}} />;
-@@ -129 +144 @@
++    fields={listFields} />;
+@@ -129,1 +148,1 @@
 -      {current && !removeMode && (
 +      {current && !selectionMode && (
-@@ -135,7 +150 @@
+@@ -135,7 +154,1 @@
 -      {hasFolderMembers && !removeMode && (
 -        <TouchableOpacity onPress={() => { setRemoveIds([]); setRemoveMode(true); }} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('memberGroups.removeMembers')}
 -          hitSlop={ROUND_HIT} style={roundBtn(T.dangerBg, `${T.danger}40`)}>
@@ -152,7 +156,7 @@
 -      )}
 -      {!removeMode && (
 +      {!selectionMode && (
-@@ -150,12 +159,14 @@
+@@ -150,12 +163,14 @@
 -  const removeBanner = removeMode && current ? (
 -    <View style={{flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12, padding: 8, borderRadius: 8, backgroundColor: T.surface, borderWidth: 1, borderColor: `${T.danger}40`}}>
 -      <Text style={{flex: 1, fontSize: fs(11), color: T.dim}}>{t('members.selectedCount', {count: removeIds.length})}</Text>
@@ -179,7 +183,7 @@
 +      </TouchableOpacity>}
 +    </>}
 +  </> : undefined;
-@@ -165,0 +177,12 @@
+@@ -165,0 +181,15 @@
 +      {!selectionMode && <TouchableOpacity onPress={() => { setSelectedIds([]); setSelectionMode(true); }} accessibilityRole="button"
 +        style={[ms.addBtn, {backgroundColor: T.surface, borderColor: T.border, alignSelf: 'flex-start', marginBottom: 10}]}>
 +        <Text style={{fontSize: fs(12), color: T.dim}}>{t('members.select')}</Text>
@@ -188,20 +192,23 @@
 +        style={[ms.addBtn, {backgroundColor: T.accentBg, borderColor: `${T.accent}40`, alignSelf: 'flex-start', marginBottom: 10}]}>
 +        <Text style={{fontSize: fs(12), color: T.accent}}>{`+ ${t('members.customFront')}`}</Text>
 +      </TouchableOpacity>}
++      <TouchableOpacity onPress={() => setShowDisplayOptions(true)} accessibilityRole="button" accessibilityLabel={t('members.displayFields')}
++        style={[ms.addBtn, {backgroundColor: T.surface, borderColor: T.border, alignSelf: 'flex-start', marginBottom: 10}]}><Text style={{fontSize: fs(12), color: T.dim}}>{t('members.displayFields')}</Text></TouchableOpacity>
++      <DisplayOptionsSheet visible={showDisplayOptions} fields={listFields} onChange={next => { saveMemberListFields(next).catch(reportSaveError); }} onClose={() => setShowDisplayOptions(false)} />
 +      <TagFilterChips tags={knownTags} active={activeTag} onChange={setActiveTag} />
 +      <TextInput value={query} onChangeText={setQuery} accessibilityLabel={t('members.search')} placeholder={t('members.search')}
 +        placeholderTextColor={T.muted} autoCorrect={false} autoComplete="off" spellCheck={false} textContentType="none"
 +        style={[ms.search, {backgroundColor: T.surface, color: T.text, borderColor: T.border, fontSize: fs(13), marginBottom: 12}]} />
-@@ -168 +191 @@
+@@ -168,1 +198,1 @@
 -        members={browseListable}
 +        members={filteredMembers}
-@@ -177,3 +200,3 @@
+@@ -177,3 +207,3 @@
 -        banner={removeBanner}
 -        renderMemberRow={removeMode ? renderRemoveRow : undefined}
 -        renderMemberAction={renderFrontAction}
 +        banner={selectionBanner}
 +        renderMemberRow={renderMember}
 +        showAllAtRoot={showAllAtRoot}
-@@ -182,0 +206,2 @@
+@@ -182,0 +213,2 @@
 +      <GroupAssignSheet visible={showGroupAssign} groups={groups} onApply={applyGroups} onClose={() => setShowGroupAssign(false)} />
 +      <TagAssignSheet visible={showTagAssign} known={knownTags} onApply={applyTags} onClose={() => setShowTagAssign(false)} />

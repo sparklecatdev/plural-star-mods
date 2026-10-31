@@ -6,6 +6,7 @@ import {ColorPickerModal} from '../components/ColorPickerModal';
 import {Btn, ToggleRow as BaseToggleRow} from '../components/controls';
 import {fontScale, tierAccent} from '../theme';
 import {options} from './modOptions';
+import {modPreferences, useModPreferences} from './modPreferences';
 import {useTheme} from '../themeContext';
 import {FRONT_TIERS, CARD_AREAS, ELEMENT_COLOR_OPTIONS, COLOR_OPTIONS, DEFAULT_EXTRA_CUSTOMIZATION, extraCustomization, TILE_OPTIONS, useExtraCustomization} from './extraCustomization';
 import type {FrontTierOption, CardArea, CardAppearance, ElementColorOption, ColorOption, ExtraCustomization} from './extraCustomization';
@@ -31,6 +32,7 @@ const ELEMENT_COLOR_NAMES: Record<ElementColorOption, string> = {header: 'Top ba
 export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
   const T = useTheme(); const fs = fontScale(T);
   const prefs = useExtraCustomization();
+  const enabled = useModPreferences();
   const colorOf = (key: ColorOption) => key === 'canvas' ? ('canvas' in T && typeof T.canvas === 'string' ? T.canvas : T.bg) : T[key];
   const elementColorOf = (key: ElementColorOption) => ({header: T.bg, tabBar: T.surface, tabActive: T.accent, tabInactive: T.dim, hubTile: T.card, hubTileBorder: T.border})[key];
   const [tierPicker, setTierPicker] = useState<FrontTierOption | null>(null);
@@ -117,6 +119,10 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
           </TouchableOpacity>
         </View>)}
         {section('Members')}
+        <BaseToggleRow label="Enhanced group view" desc="Show richer cards in both views, plus search, filters, and custom fronts in group view." value={enabled.groupView} disabled={busy} onToggle={() => {
+          setBusy(true); setError('');
+          void modPreferences.setEnabled('groupView', !enabled.groupView).catch(e => setError(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false));
+        }} />
         <ToggleRow label="Show sorting" value={!prefs.hideMemberSort} disabled={busy} onToggle={() => toggle('hideMemberSort')} />
         <ToggleRow label="Show group filter" value={!prefs.hideMemberGroupFilter} disabled={busy} onToggle={() => toggle('hideMemberGroupFilter')} />
         <ToggleRow label="Show tag filter" value={!prefs.hideMemberTagFilter} disabled={busy} onToggle={() => toggle('hideMemberTagFilter')} />

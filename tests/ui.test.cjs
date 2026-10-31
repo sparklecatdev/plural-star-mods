@@ -232,13 +232,13 @@ test('Settings opens the mod menu; switches persist and hide disabled controls',
   await act(async () => renderer.root.findByType('Modal').props.onRequestClose());
   assert.equal(renderer.root.findAllByType('Modal').length, 1);
   await act(async () => renderer.root.findByType('PluralKitSettings').props.onBusy(false));
-  for (const label of ['Wallpaper', 'Storage tools', 'Allow No speaker', 'Enhanced group view', 'Hide inactive lock icon', 'Sync mod preferences']) {
+  for (const label of ['Wallpaper', 'Storage tools', 'Allow No speaker', 'Hide inactive lock icon', 'Sync mod preferences']) {
     await act(async () => {
       renderer.root.findAllByType('Toggle').find(n => n.props.label === label).props.onToggle();
       await new Promise(setImmediate);
     });
   }
-  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: false, noSpeaker: true, singleConfirm: false, deviceUnlock: false, groupView: true, profilePalettes: false, hideLockIcon: true, syncPreferences: false});
+  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: false, noSpeaker: true, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, hideLockIcon: true, syncPreferences: false});
   assert.equal(renderer.root.findAllByType('WallpaperControls').length, 0);
   assert.equal(renderer.root.findAllByType('BackupTools').length, 0);
   assert.equal(renderer.root.findAllByType('CloudModSettings').length, 0);

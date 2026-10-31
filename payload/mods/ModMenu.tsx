@@ -64,8 +64,6 @@ function ModMenu({onClose}: {onClose: () => void}) {
           onToggle={() => { void toggle('singleConfirm'); }} />
         <ToggleRow label="Biometric or device unlock" desc={nativeUnlockSupported ? "Use your phone's screen lock when available. Your app password remains available." : "Requires a newer patcher."} value={nativeUnlockSupported && enabled.deviceUnlock} disabled={!nativeUnlockSupported || busy || saving || pkBusy}
           onToggle={() => { void toggle('deviceUnlock'); }} />
-        <ToggleRow label="Enhanced group view" desc="Show richer cards in both views, plus search, filters, and custom fronts in group view." value={enabled.groupView} disabled={busy || saving || pkBusy}
-          onToggle={() => { void toggle('groupView'); }} />
         <ToggleRow label="Profile palettes" desc="Choose individual colors for member and system profiles, including shared profiles." value={enabled.profilePalettes} disabled={busy || saving || pkBusy}
           onToggle={() => { void toggle('profilePalettes'); }} />
         <ToggleRow label="Hide inactive lock icon" desc="Hide the lock icon when app locking is not enabled." value={enabled.hideLockIcon} disabled={busy || saving || pkBusy}
