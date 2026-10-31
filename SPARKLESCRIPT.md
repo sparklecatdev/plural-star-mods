@@ -29,10 +29,21 @@ Enabled JavaScript mods start after the app unlocks, or when enabled in the menu
 - `api.storage`: AsyncStorage, for reading and writing app storage.
 - `api.files`: react-native-blob-util, including its filesystem and networking APIs.
 - `api.fetch`: the app's fetch function.
+- `api.css`: convert CSS-style declarations into a React Native style object. Use `api.css('color: red; padding: 12px')` or a JavaScript tagged template, then pass the result as a component's `style` prop.
 - `api.wrapApp(Component)`: wrap the app with a React component receiving `children`. A wrapper can add UI or replace its children entirely. Multiple wrappers are supported.
 - `api.onDispose(callback)`: register a synchronous cleanup function for subscriptions, timers, and other resources.
 
 Scripts also have the JavaScript globals supplied by the app's runtime. Availability of native modules and app internals depends on the installed app version. Scripts must be plain JavaScript supported by the installed Hermes runtime; compile JSX, TypeScript, and external dependencies into one file first. Scripts are limited to 1 MiB each and 20 imported mods.
+
+## CSS-style declarations
+
+```js
+const card = api.css`background-color: #302540; padding: 16px; border-radius: 12px;`;
+const title = api.css`color: white; font-size: 18px; font-weight: 700;`;
+// React.createElement(api.ReactNative.View, {style: card}, ...)
+```
+
+The helper supports common React Native layout, spacing, border, text, and color properties. Numbers and `px` become device-independent numbers; supported dimensions also accept percentages. Use separate declarations such as `margin-top` and `margin-right` rather than CSS shorthand with multiple values. Unsupported properties and numeric formats throw an error; string values must be valid for React Native. This is a declaration converter, not a browser stylesheet: selectors, cascading, media queries, animations, and automatic styling of existing app screens are not supported. Use the returned styles on components your script creates; `api.wrapApp` can place those components around the app.
 
 ## Earlier scripts
 

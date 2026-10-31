@@ -8,7 +8,15 @@ const babel = require(path.join(upstream, 'node_modules/@babel/core'));
 const filename = path.join(__dirname, '../payload/mods/sparkleScriptCore.ts');
 const {code} = babel.transformSync(fs.readFileSync(filename, 'utf8'), {filename, babelrc: false, configFile: false, presets: [path.join(upstream, 'node_modules/@react-native/babel-preset')]});
 const result = {}; vm.runInNewContext(code, {exports: result});
-const {parseSparkle, runSparkle} = result;
+const {parseSparkle, runSparkle, sparkleCss} = result;
+test('CSS declarations translate to React Native styles and reject unsupported syntax', () => {
+ const style = sparkleCss`background-color: #123456; padding: ${12}px; width: 50%; font-weight: 700;`;
+ assert.equal(style.backgroundColor, '#123456'); assert.equal(style.padding, 12);
+ assert.equal(style.width, '50%'); assert.equal(style.fontWeight, '700');
+ assert.throws(() => sparkleCss('view { color: red }'));
+ assert.throws(() => sparkleCss('margin: 1px 2px'));
+ assert.throws(() => sparkleCss('animation: spin 1s'));
+});
 const script = 'mod "Hello" version "1.0.0" { describe "A greeting" when tap { show "Hello!" } }';
 test('parses a bounded mod and runs only the selected event', () => {
  const mod = parseSparkle(script), messages = [];
@@ -79,6 +87,14 @@ test('JavaScript mods require opt-in and clean up when disabled', async () => {
  await h.api.setScriptingEnabled(true); assert.equal(h.alerts[0][0], 'started');
  await h.api.setScriptingEnabled(false); assert.equal(h.alerts[1][0], 'stopped');
  assert.throws(() => parseSparkle('// sparkle {"name":"x","version":"1.0.0"}\nconst ='));
+});
+
+test('enabled scripts can use the CSS helper', async () => {
+ const h = managerHarness(); await h.api.loadScripts();
+ const source = '// sparkle {"name":"Styles","version":"1.0.0"}\napi.ReactNative.Alert.alert(api.css("padding: 8px").padding);';
+ await h.api.saveScripts(() => [{id: 'styles', source, enabled: true}]);
+ h.api.runScripts('open'); await h.api.setScriptingEnabled(true);
+ assert.equal(h.alerts[0][0], 8);
 });
 
 test('a stopped script cannot add a late app wrapper', async () => {

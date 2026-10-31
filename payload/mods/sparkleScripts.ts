@@ -3,7 +3,7 @@ import React, {useSyncExternalStore} from 'react';
 import * as ReactNative from 'react-native';
 import Blob from 'react-native-blob-util';
 import {useAppStore} from '../store/appStore';
-import {parseSparkle, runSparkle} from './sparkleScriptCore';
+import {parseSparkle, runSparkle, sparkleCss} from './sparkleScriptCore';
 import {extraCustomization} from './extraCustomization';
 
 export type SavedScript = {id: string; source: string; enabled: boolean};
@@ -38,7 +38,7 @@ function reconcile() {
     if (!row.enabled || !mod.javascript || active.has(row.id)) continue;
     const entry = {source: row.source, dispose: [] as (() => void)[]}; active.set(row.id, entry);
     const api = {
-      React, ReactNative, storage: AsyncStorage, files: Blob, store: useAppStore, fetch: globalThis.fetch,
+      React, ReactNative, storage: AsyncStorage, files: Blob, store: useAppStore, fetch: globalThis.fetch, css: sparkleCss,
       wrapApp(component: Wrapper) { if (active.get(row.id) !== entry) return; if (!component || (typeof component !== 'function' && typeof component !== 'object')) throw Error('Expected a React component.'); wrappers = [...wrappers, {id: row.id, component}]; notify(); },
       onDispose(callback: () => void) { if (typeof callback !== 'function') throw Error('Expected a cleanup function.'); if (active.get(row.id) === entry) entry.dispose.push(callback); else callback(); },
     };

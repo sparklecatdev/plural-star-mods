@@ -1,4 +1,27 @@
 export type SparkleAction = {kind: 'show' | 'accent'; value: string};
+// React Native has no CSS cascade; translate declarations for script-owned components.
+const cssNumbers = new Set('width height minWidth minHeight maxWidth maxHeight top right bottom left margin marginTop marginRight marginBottom marginLeft padding paddingTop paddingRight paddingBottom paddingLeft gap rowGap columnGap borderWidth borderTopWidth borderRightWidth borderBottomWidth borderLeftWidth borderRadius borderTopLeftRadius borderTopRightRadius borderBottomLeftRadius borderBottomRightRadius fontSize lineHeight letterSpacing opacity flex flexGrow flexShrink flexBasis zIndex elevation'.split(' '));
+const cssStrings = new Set('color backgroundColor borderColor borderTopColor borderRightColor borderBottomColor borderLeftColor display position overflow alignItems alignSelf alignContent justifyContent flexDirection flexWrap textAlign textTransform textDecorationLine fontFamily fontStyle fontWeight resizeMode'.split(' '));
+export function sparkleCss(input: string | TemplateStringsArray, ...values: unknown[]): Record<string, string | number> {
+  const source = typeof input === 'string' ? input : input.reduce((text, part, i) => text + part + (i < values.length ? String(values[i]) : ''), '');
+  if (source.length > 65536 || /[{}]/.test(source)) throw Error('CSS must contain declarations only.');
+  const style: Record<string, string | number> = {};
+  for (const declaration of source.replace(/\/\*[\s\S]*?\*\//g, '').split(';')) {
+    if (!declaration.trim()) continue;
+    const match = /^\s*([a-z][a-z-]*)\s*:\s*([^:;]+?)\s*$/i.exec(declaration);
+    if (!match) throw Error('Invalid CSS declaration.');
+    const property = match[1].replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+    const value = match[2].trim();
+    if (cssNumbers.has(property)) {
+      if (/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:px)?$/i.test(value)) style[property] = Number(value.replace(/px$/i, ''));
+      else if (/^-?(?:\d+(?:\.\d+)?|\.\d+)%$/.test(value) && /^(width|height|minWidth|minHeight|maxWidth|maxHeight|top|right|bottom|left|margin|marginTop|marginRight|marginBottom|marginLeft|padding|paddingTop|paddingRight|paddingBottom|paddingLeft|flexBasis)$/.test(property)) style[property] = value;
+      else if (value === 'auto' && /^(width|height|top|right|bottom|left|margin|marginTop|marginRight|marginBottom|marginLeft|flexBasis)$/.test(property)) style[property] = value;
+      else throw Error(`Unsupported CSS value for ${match[1]}: ${value}`);
+    } else if (cssStrings.has(property)) style[property] = value;
+    else throw Error(`Unsupported CSS property: ${match[1]}`);
+  }
+  return style;
+}
 export type SparkleMod = {name: string; version: string; description: string; appearance: boolean; javascript?: boolean; handlers: {event: 'open' | 'tap'; actions: SparkleAction[]}[]};
 export function parseSparkle(source: string): SparkleMod {
   if (source.length > 1048576) throw Error('Script exceeds 1 MiB.');
