@@ -6,19 +6,21 @@ import {useAppStore} from '../store/appStore';
 import {saveAppSettings} from '../store/actions';
 import {NetworkManager} from '../network/NetworkManager';
 import {modPreferences} from './modPreferences';
+import {extraCustomization} from './extraCustomization';
 import {updateChecker} from './updateCheck';
 import {options, payloadVersion, patchRuntime, patchVariant} from './modOptions';
 import {CLOUD_MODS_KEY, createCloudMods} from './cloudModsCore';
 
 export const cloudMods = createCloudMods({version: payloadVersion, runtime: patchRuntime, variant: patchVariant}, options, {
-  load: () => Promise.all([modPreferences.load(), updateChecker.load()]),
+  load: () => Promise.all([modPreferences.load(), extraCustomization.load(), updateChecker.load()]),
   read: () => AsyncStorage.getItem(CLOUD_MODS_KEY),
   write: text => store.setRaw(CLOUD_MODS_KEY, text),
   local: () => ({enabled: {...modPreferences.getSnapshot()},
     pkFrontSyncEnabled: useAppStore.getState().appSettings.pkFrontSyncEnabled === true,
-    automaticUpdates: true}),
+    automaticUpdates: true, extraCustomization: extraCustomization.getSnapshot()}),
   apply: async settings => {
     await modPreferences.setPreferences(settings.enabled);
+    if (settings.extraCustomization) await extraCustomization.set(settings.extraCustomization);
     if ((useAppStore.getState().appSettings.pkFrontSyncEnabled === true) !== settings.pkFrontSyncEnabled) {
       await saveAppSettings({...useAppStore.getState().appSettings, pkFrontSyncEnabled: settings.pkFrontSyncEnabled});
     }
@@ -41,7 +43,7 @@ export function useModCloudSync(enabled: boolean) {
     void cloudMods.sync().then(() => {
       if (stopped) return;
       const save = () => { void cloudMods.saveLocal(); };
-      off.push(modPreferences.subscribe(save), updateChecker.subscribe(save), useAppStore.subscribe(save));
+      off.push(modPreferences.subscribe(save), extraCustomization.subscribe(save), updateChecker.subscribe(save), useAppStore.subscribe(save));
     });
     return () => { stopped = true; off.forEach(fn => fn()); };
   }, [enabled]);

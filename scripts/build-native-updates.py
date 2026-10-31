@@ -27,7 +27,8 @@ def main():
         (work / 'original.dex').write_bytes(source.read('classes2.dex'))
     sdk = pathlib.Path(os.environ['ANDROID_HOME'])
     java = pathlib.Path(os.environ['JAVA_HOME']) / 'bin'
-    run('bash', 'gradlew', ':native-tools:installDist')
+    run('bash', 'gradlew', ':native-tools:installDist', ':native-tools:extractReactClasses')
+    react_classes = ROOT / 'native-tools/build/react-android/classes.jar'
     for variant in ('wallpaper', 'storage', 'wallpaper-storage'):
         target = work / variant
         target.mkdir(exist_ok=True)
@@ -36,9 +37,11 @@ def main():
             code = code.replace('@' + key + '@', value)
         source = target / 'BundleLoader.java'
         source.write_text(code)
-        run(str(java / 'javac'), '--release', '17', '-classpath', str(sdk / 'platforms/android-36/android.jar'), '-d', str(target), str(source))
+        run(str(java / 'javac'), '--release', '17', '-classpath', os.pathsep.join((str(sdk / 'platforms/android-36/android.jar'), str(react_classes))),
+            '-d', str(target), str(source), str(ROOT / 'payload/native/DeviceUnlockModule.java'), str(ROOT / 'payload/native/DeviceUnlockPackage.java'))
         run(str(java / 'jar'), '--create', '--file', str(target / 'loader.jar'), '-C', str(target), 'dev')
-        run(str(sdk / 'build-tools/36.0.0/d8'), '--min-api', '26', '--lib', str(sdk / 'platforms/android-36/android.jar'), '--output', str(target), str(target / 'loader.jar'))
+        run(str(sdk / 'build-tools/36.0.0/d8'), '--min-api', '26', '--lib', str(sdk / 'platforms/android-36/android.jar'),
+            '--classpath', str(react_classes), '--output', str(target), str(target / 'loader.jar'))
         run(str(ROOT / 'native-tools/build/install/native-tools/bin/native-tools'), str(work / 'original.dex'), str(target / 'classes.dex'), str(ROOT / f'app/src/main/assets/payloads/{variant}.dex'))
 
 if __name__ == '__main__':

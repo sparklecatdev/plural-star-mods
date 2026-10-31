@@ -1,0 +1,27 @@
+--- a/src/screens/LockScreen.tsx
++++ b/src/screens/LockScreen.tsx
+@@ -1,4 +1,6 @@
+ import React, {useState} from 'react';
++import {useModPreferences} from '../mods/modPreferences';
++import {useDeviceUnlock} from '../mods/useDeviceUnlock';
+ import {View, Image, ScrollView, TouchableOpacity, AccessibilityInfo} from 'react-native';
+ import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
+ import {Text, TextInput} from '../components/AppText';
+@@ -21,6 +23,7 @@
+   const [input, setInput] = useState('');
+   const [error, setError] = useState('');
+   const behavior = useKeyboardBehavior();
++  const {available, prompt} = useDeviceUnlock(useModPreferences().deviceUnlock, onUnlock);
+ 
+   const submit = () => {
+     if (input === password) {
+@@ -56,6 +59,9 @@
+           <TouchableOpacity onPress={submit} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel={t('lock.unlock')} style={[entry.btn, {backgroundColor: T.accent}]}>
+             <Text style={[entry.btnText, {color: initialOn(T.accent), fontSize: fs(15)}]}>{t('lock.unlock')}</Text>
+           </TouchableOpacity>
++          {available && <TouchableOpacity onPress={() => { void prompt(); }} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Use device unlock" style={[entry.btn, {backgroundColor: T.surface}]}>
++            <Text style={[entry.btnText, {color: T.text, fontSize: fs(15)}]}>Use device unlock</Text>
++          </TouchableOpacity>}
+         </View>
+       </ScrollView>
+     </KeyboardAvoidingView>

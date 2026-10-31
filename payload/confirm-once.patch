@@ -1,0 +1,45 @@
+--- a/src/utils/confirmSteps.ts
++++ b/src/utils/confirmSteps.ts
+@@ -1,5 +1,6 @@
+ import {Alert} from 'react-native';
+ import i18n from '../i18n/i18n';
++import {modPreferences} from '../mods/modPreferences';
+ 
+ export interface ConfirmStep {
+   title: string;
+@@ -8,6 +9,15 @@
+ }
+ 
+ export const confirmSteps = (steps: ConfirmStep[], onConfirm: () => void, onCancel?: () => void): void => {
++  if (steps.length > 1 && modPreferences.getSnapshot().singleConfirm) {
++    const first = steps[0];
++    const last = steps[steps.length - 1];
++    Alert.alert(first.title, [...new Set(steps.map(step => step.message).filter(Boolean))].join('\n\n'), [
++      {text: i18n.t('common.cancel'), style: 'cancel', onPress: onCancel},
++      {text: last.action, style: 'destructive', onPress: onConfirm},
++    ]);
++    return;
++  }
+   const [step, ...rest] = steps;
+   if (!step) {
+     onConfirm();
+--- a/src/cloud/destructiveGuard.ts
++++ b/src/cloud/destructiveGuard.ts
+@@ -1,5 +1,6 @@
+ import {Alert, AlertButton, AlertOptions} from 'react-native';
+ import i18n from '../i18n/i18n';
++import {modPreferences} from '../mods/modPreferences';
+ import {CloudServices} from './cloudPlatform';
+ 
+ const EXEMPT_TITLE_KEYS = [
+@@ -38,6 +39,10 @@
+       original(title, message, buttons, options);
+       return;
+     }
++    if (modPreferences.getSnapshot().singleConfirm) {
++      original(title, [message, i18n.t('network.cloudConfirmMsg')].filter(Boolean).join('\n\n'), buttons, options);
++      return;
++    }
+     const wrapped = buttons.map(b => {
+       if (b.style !== 'destructive') return b;
+       const originalPress = b.onPress as ((v?: unknown) => void) | undefined;

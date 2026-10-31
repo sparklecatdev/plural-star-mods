@@ -1,7 +1,9 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {AccessibilityInfo, ActivityIndicator, Animated, Button, Easing, StyleSheet, Text, TextInput, View} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {modPreferences} from './modPreferences';
+import {modPreferences, useModPreferences} from './modPreferences';
+import {extraCustomization} from './extraCustomization';
+import {useDeviceUnlock} from './useDeviceUnlock';
 import {recovery, recoverBeforeStart, restoreQueue, retryStoragePreparation} from './storageSnapshot';
 import {setToolsOpen, waitForStorageIdle} from './toolsState';
 import {updateChecker, confirmPatchLaunch} from './updateCheck';
@@ -41,6 +43,10 @@ export default function ModsRoot() {
   const [gatePassword, setGatePassword] = useState<string | null>(null);
   const [unlockInput, setUnlockInput] = useState('');
   const [working, setWorking] = useState(false);
+  const deviceUnlockEnabled = useModPreferences().deviceUnlock;
+  const deviceAuth = useDeviceUnlock(ready && gatePassword !== null && deviceUnlockEnabled, () => {
+    setUnlockInput(''); setGatePassword(null); setError('');
+  });
   const finishAnimation = useCallback(() => setAnimationDone(true), []);
   const prepare = useCallback(async (retry = false) => {
     setWorking(true); setError('');
@@ -48,6 +54,7 @@ export default function ModsRoot() {
       await waitForStorageIdle();
       await (retry ? retryStoragePreparation() : recoverBeforeStart());
       await modPreferences.load();
+      await extraCustomization.load();
       const raw = await AsyncStorage.getItem('ps:settings');
       const password = raw ? JSON.parse(raw)?.appLockPassword : undefined;
       setGatePassword(typeof password === 'string' && password ? password : null);
@@ -83,6 +90,7 @@ export default function ModsRoot() {
       if (unlockInput === gatePassword) { setUnlockInput(''); setGatePassword(null); setError(''); }
       else setError('Incorrect app password.');
     }} />
+    {deviceAuth.available && <Button title="Use device unlock" onPress={() => { void deviceAuth.prompt(); }} />}
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
   </View>;
   else if (ready) {

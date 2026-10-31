@@ -119,7 +119,9 @@ function rootHarness({password = null, reduceMotion = false, recoveryError = fal
       Animated: {Value: class {}, View: 'AnimatedView', timing: () => ({}), parallel: () => ({}), delay: () => ({}),
         sequence: () => ({start: fn => animations.push(fn), stop: () => {}})}},
     '@react-native-async-storage/async-storage': {getItem: async () => password ? JSON.stringify({appLockPassword: password}) : null},
-    './modPreferences': {modPreferences: {load: async () => {}}},
+    './modPreferences': {modPreferences: {load: async () => {}}, useModPreferences: () => ({deviceUnlock: false})},
+    './extraCustomization': {extraCustomization: {load: async () => {}}},
+    './useDeviceUnlock': {useDeviceUnlock: () => ({available: false, prompt: async () => {}})},
     './updateCheck': {updateChecker: {check: async () => {}}, confirmPatchLaunch: async () => {}},
     './storageSnapshot': {recoverBeforeStart: async () => { await recovered; if (recoveryError) throw Error('restore failed'); },
       retryStoragePreparation: async () => {}, recovery: {recover: async () => {}}, restoreQueue: {cancel: async () => {}}},
@@ -180,7 +182,7 @@ test('the existing app password still gates access after the intro', async () =>
   await act(async () => renderer.unmount());
 });
 
-test('Settings opens the mod menu; both switches persist and hide disabled controls', async () => {
+test('Settings opens the mod menu; switches persist and hide disabled controls', async () => {
   const {createModPreferences} = load('modPreferencesCore.ts'); let disk;
   const prefs = createModPreferences({wallpaper: true, storage: true}, {read: async () => null, write: async value => { disk = value; }});
   await prefs.load();
@@ -190,6 +192,8 @@ test('Settings opens the mod menu; both switches persist and hide disabled contr
     '../components/AppText': {Text: 'Text'}, '../components/controls': {Btn: host('Button'), ToggleRow: host('Toggle')},
     '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n},
     './modPreferences': {modPreferences: prefs, useModPreferences: () => React.useSyncExternalStore(prefs.subscribe, prefs.getSnapshot)},
+    './extraCustomization': {extraCustomization: {set: async () => {}}, useExtraCustomization: () => ({enabled: false})},
+    './ExtraCustomizationMenu': {ExtraCustomizationMenu: host('ExtraCustomizationMenu')},
     './modOptions': {options: {wallpaper: true, storage: true}},
     './WallpaperControls': {WallpaperControls: host('WallpaperControls')}, './BackupTools': {BackupTools: host('BackupTools')},
     './PluralKitSettings': {PluralKitSettings: host('PluralKitSettings')},
@@ -209,13 +213,13 @@ test('Settings opens the mod menu; both switches persist and hide disabled contr
   await act(async () => renderer.root.findByType('Modal').props.onRequestClose());
   assert.equal(renderer.root.findAllByType('Modal').length, 1);
   await act(async () => renderer.root.findByType('PluralKitSettings').props.onBusy(false));
-  for (const label of ['Wallpaper', 'Storage tools']) {
+  for (const label of ['Wallpaper', 'Storage tools', 'Allow No speaker']) {
     await act(async () => {
       renderer.root.findAllByType('Toggle').find(n => n.props.label === label).props.onToggle();
       await new Promise(setImmediate);
     });
   }
-  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: false});
+  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: false, noSpeaker: true, singleConfirm: true, deviceUnlock: false});
   assert.equal(renderer.root.findAllByType('WallpaperControls').length, 0);
   assert.equal(renderer.root.findAllByType('BackupTools').length, 0);
   await act(async () => renderer.root.findAllByType('Button').find(n => n.props.children === 'Done').props.onPress());

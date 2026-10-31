@@ -1,8 +1,10 @@
 import {compareVersions, parseVersion} from './updateCheckCore';
 import type {ModPreferences} from './modPreferencesCore';
+import {sanitizeExtraCustomization} from './extraCustomizationCore';
+import type {ExtraCustomization} from './extraCustomizationCore';
 
 export const CLOUD_MODS_KEY = 'ps:sparklecat:mods';
-export type ModSettings = {enabled: ModPreferences; pkFrontSyncEnabled: boolean; automaticUpdates: boolean};
+export type ModSettings = {enabled: ModPreferences; pkFrontSyncEnabled: boolean; automaticUpdates: boolean; extraCustomization?: ExtraCustomization};
 export type PatchTarget = {runtime: string; variant: string; version: string};
 export type CloudModRecord = {schema: 1; settings: ModSettings; automaticRestore: boolean; patches: PatchTarget[]};
 const variants = ['wallpaper', 'storage', 'wallpaper-storage'];
@@ -18,18 +20,23 @@ export function readCloudMods(raw: string | null): CloudModRecord | null {
   const s = r?.settings;
   if (r?.schema !== 1 || typeof r.automaticRestore !== 'boolean' ||
     typeof s?.enabled?.wallpaper !== 'boolean' || typeof s?.enabled?.storage !== 'boolean' ||
+    (s.enabled.noSpeaker !== undefined && typeof s.enabled.noSpeaker !== 'boolean') ||
+    (s.enabled.singleConfirm !== undefined && typeof s.enabled.singleConfirm !== 'boolean') ||
+    (s.enabled.deviceUnlock !== undefined && typeof s.enabled.deviceUnlock !== 'boolean') ||
     typeof s.pkFrontSyncEnabled !== 'boolean' || typeof s.automaticUpdates !== 'boolean' ||
     !Array.isArray(r.patches) || r.patches.length > 16 || !r.patches.every(validTarget) ||
     new Set(r.patches.map((p: PatchTarget) => `${p.runtime}/${p.variant}`)).size !== r.patches.length) {
     throw Error('Saved mod preferences use an invalid or unsupported format.');
   }
-  return {schema: 1, settings: {enabled: {wallpaper: s.enabled.wallpaper, storage: s.enabled.storage},
-    pkFrontSyncEnabled: s.pkFrontSyncEnabled, automaticUpdates: s.automaticUpdates},
+  return {schema: 1, settings: {enabled: {wallpaper: s.enabled.wallpaper, storage: s.enabled.storage, noSpeaker: s.enabled.noSpeaker === true,
+    singleConfirm: s.enabled.singleConfirm !== false, deviceUnlock: s.enabled.deviceUnlock === true},
+    pkFrontSyncEnabled: s.pkFrontSyncEnabled, automaticUpdates: s.automaticUpdates,
+    ...(s.extraCustomization === undefined ? {} : {extraCustomization: sanitizeExtraCustomization(s.extraCustomization)})},
     automaticRestore: r.automaticRestore,
     patches: r.patches.map((p: PatchTarget) => ({runtime: p.runtime, variant: p.variant, version: p.version}))};
 }
 
-export function createCloudMods(current: PatchTarget, available: ModPreferences, io: {
+export function createCloudMods(current: PatchTarget, available: Pick<ModPreferences, 'wallpaper' | 'storage'>, io: {
   load?(): Promise<unknown>;
   read(): Promise<string | null>; write(value: string): Promise<unknown>;
   local(): ModSettings; apply(settings: ModSettings): Promise<void>;
@@ -83,6 +90,7 @@ export function createCloudMods(current: PatchTarget, available: ModPreferences,
       try { await io.apply(saved.settings); } finally { applying = false; }
     }
     const next = rememberCurrent(saved || {schema: 1, settings: io.local(), automaticRestore: true, patches: []});
+    if (!next.settings.extraCustomization) next.settings.extraCustomization = io.local().extraCustomization;
     await persist(next);
   }).then(() => { if (!state.error) void retry(forceRestore); });
   const saveLocal = () => {
@@ -90,12 +98,18 @@ export function createCloudMods(current: PatchTarget, available: ModPreferences,
     const local = io.local();
     const previous = record?.settings;
     if (previous && local.pkFrontSyncEnabled === previous.pkFrontSyncEnabled && local.automaticUpdates === previous.automaticUpdates &&
+      JSON.stringify(local.extraCustomization) === JSON.stringify(previous.extraCustomization) &&
+      local.enabled.noSpeaker === previous.enabled.noSpeaker &&
+      local.enabled.singleConfirm === previous.enabled.singleConfirm && local.enabled.deviceUnlock === previous.enabled.deviceUnlock &&
       (!available.wallpaper || local.enabled.wallpaper === previous.enabled.wallpaper) &&
       (!available.storage || local.enabled.storage === previous.enabled.storage)) return Promise.resolve();
     return enqueue(async () => {
       const next = readCloudMods(await io.read()) || record;
       if (!next) return;
       next.settings = {...local, enabled: {
+        noSpeaker: local.enabled.noSpeaker,
+        singleConfirm: local.enabled.singleConfirm,
+        deviceUnlock: local.enabled.deviceUnlock,
         wallpaper: available.wallpaper ? local.enabled.wallpaper : next.settings.enabled.wallpaper,
         storage: available.storage ? local.enabled.storage : next.settings.enabled.storage,
       }};

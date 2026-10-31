@@ -1,0 +1,151 @@
+--- a/src/screens/ChatScreen.tsx
++++ b/src/screens/ChatScreen.tsx
+@@ -1,4 +1,6 @@
+-import React, {useState, useRef, useCallback, useMemo} from 'react';
++import {NO_SPEAKER_ID, withNoSpeaker} from '../mods/noSpeakerCore';
++import {useNoSpeaker} from '../mods/useNoSpeaker';
++import React, {useState, useEffect, useRef, useCallback, useMemo} from 'react';
+ import {View, TouchableOpacity, Alert, FlatList, Platform, Dimensions} from 'react-native';
+ import {Text, TextInput} from '../components/AppText';
+ import {Avatar} from '../components/Avatar';
+@@ -36,6 +38,7 @@
+ 
+ export const ChatScreen = ({onMentionPress}: Props) => {
+   const T = useTheme();
++  const noSpeaker = useNoSpeaker();
+   const members = useAppStore(s => s.members);
+   const channels = useAppStore(s => s.chatChannels);
+   const front = useAppStore(s => s.front);
+@@ -57,7 +60,12 @@
+   const {messages, messagesRef, saveMessages, clearMessages} = useChannelMessages(activeChannelId);
+   const [input, setInput] = useState('');
+   const [activeMemberId, setActiveMemberId] = useState<string | null>(members.find(m => !m.archived && !m.deleted && !m.isCustomFront)?.id || null);
+-  const speakerPools = useMemo(() => memberFacetPools(members, t), [members, t]);
++  useEffect(() => {
++    if (!noSpeaker.enabled && activeMemberId === NO_SPEAKER_ID) {
++      setActiveMemberId(members.find(m => !m.archived && !m.deleted && !m.isCustomFront)?.id || null);
++    }
++  }, [noSpeaker.enabled, activeMemberId, members]);
++  const speakerPools = useMemo(() => withNoSpeaker(memberFacetPools(members, t), noSpeaker.member, noSpeaker.enabled), [members, t, noSpeaker.member, noSpeaker.enabled]);
+   const speakerOrder = useCallback((rows: Member[], pool: PickerPool) => pool.kind === 'members' ? frontersFirst(rows, front) : rows, [front]);
+   const [showMemberPicker, setShowMemberPicker] = useState(false);
+   const [showChannelList, setShowChannelList] = useState(true);
+@@ -69,7 +77,7 @@
+   const flatListRef = useRef<FlatList>(null);
+   const isAtBottomRef = useRef(true);
+ 
+-  const memberMap = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
++  const memberMap = useMemo(() => new Map([...members, noSpeaker.member].map(m => [m.id, m])), [members, noSpeaker.member]);
+   const messageById = useMemo(() => new Map(messages.map(m => [m.id, m])), [messages]);
+   const activeChannel = channels.find(c => c.id === activeChannelId);
+   const activeMember = activeMemberId ? memberMap.get(activeMemberId) : undefined;
+--- a/src/screens/PollsScreen.tsx
++++ b/src/screens/PollsScreen.tsx
+@@ -1,3 +1,5 @@
++import {NO_SPEAKER_ID, withNoSpeaker} from '../mods/noSpeakerCore';
++import {useNoSpeaker} from '../mods/useNoSpeaker';
+ import React, {useState, useEffect, useCallback, useMemo} from 'react';
+ import {View, ScrollView, TouchableOpacity, Alert} from 'react-native';
+ import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
+@@ -23,18 +25,22 @@
+ 
+ export const PollsScreen = () => {
+   const T = useTheme();
++  const noSpeaker = useNoSpeaker();
+   const members = useAppStore(s => s.members);
+   const front = useAppStore(s => s.front);
+   const {t} = useTranslation();
+   const fs = fontScale(T);
+   const behavior = useKeyboardBehavior();
+-  const voterPools = useMemo(() => memberFacetPools(members, t), [members, t]);
++  const voterPools = useMemo(() => withNoSpeaker(memberFacetPools(members, t), noSpeaker.member, noSpeaker.enabled), [members, t, noSpeaker.member, noSpeaker.enabled]);
+   const [polls, setPolls] = useState<MemberPoll[]>([]);
+   const [showCreate, setShowCreate] = useState(false);
+   const [draft, setDraft] = useState<NewPoll>(BLANK_POLL);
+   const patch = (p: Partial<NewPoll>) => setDraft(d => ({...d, ...p}));
+   const {question, options, hideVoters, multiChoice} = draft;
+   const [voterId, setVoterId] = useState(() => defaultVoterId(members, front));
++  useEffect(() => {
++    if (!noSpeaker.enabled && voterId === NO_SPEAKER_ID) setVoterId(defaultVoterId(members, front));
++  }, [noSpeaker.enabled, voterId, members, front]);
+   const [voterPickerOpen, setVoterPickerOpen] = useState(false);
+ 
+   const load = useCallback(() => { store.get<MemberPoll[]>(KEYS.polls, []).then(p => setPolls(p || [])).catch(e => logError('polls', e)); }, []);
+@@ -78,7 +84,7 @@
+     ]);
+   };
+ 
+-  const getName = (id: string) => members.find(m => m.id === id)?.name || '?';
++  const getName = (id: string) => id === NO_SPEAKER_ID ? noSpeaker.member.name : members.find(m => m.id === id)?.name || '?';
+ 
+   return (
+     <KeyboardAvoidingView style={{flex: 1}} behavior={behavior}>
+--- a/src/screens/MailboxScreen.tsx
++++ b/src/screens/MailboxScreen.tsx
+@@ -1,3 +1,5 @@
++import {NO_SPEAKER_ID} from '../mods/noSpeakerCore';
++import {useNoSpeaker} from '../mods/useNoSpeaker';
+ import React, {useCallback, useEffect, useState} from 'react';
+ import {View, TouchableOpacity, Alert, AccessibilityInfo} from 'react-native';
+ import {KeyboardAwareScrollView} from 'react-native-keyboard-controller';
+@@ -23,6 +25,7 @@
+ 
+ export const MailboxScreen = ({onBack}: Props) => {
+   const T = useTheme();
++  const noSpeaker = useNoSpeaker();
+   const members = useAppStore(s => s.members);
+   const {t} = useTranslation();
+   const fs = fontScale(T);
+@@ -37,6 +40,9 @@
+   const [lockInput, setLockInput] = useState('');
+   const [composing, setComposing] = useState(false);
+   const [fromId, setFromId] = useState('');
++  useEffect(() => {
++    if (!noSpeaker.enabled && fromId === NO_SPEAKER_ID) setFromId('');
++  }, [noSpeaker.enabled, fromId]);
+   const [toId, setToId] = useState('');
+   const [text, setText] = useState('');
+ 
+@@ -155,14 +161,14 @@
+           </TouchableOpacity>
+         } />
+         <KeyboardAwareScrollView style={{flex: 1}} contentContainerStyle={{padding: 16, paddingTop: 4, paddingBottom: 24}} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+-          {msgs.length > 0 ? msgs.map(n => <MessageCard key={n.id} note={n} author={byId(n.authorId)} onTogglePin={togglePin} onDelete={del} />) : (
++          {msgs.length > 0 ? msgs.map(n => <MessageCard key={n.id} note={n} author={n.authorId === NO_SPEAKER_ID ? noSpeaker.member : byId(n.authorId)} onTogglePin={togglePin} onDelete={del} />) : (
+             <View style={{alignItems: 'center', paddingVertical: 40}}>
+               <Text style={{fontSize: fs(13), color: T.muted}}>{t('mailbox.emptyInbox')}</Text>
+             </View>
+           )}
+           <View style={{backgroundColor: T.surface, borderRadius: 10, borderWidth: 1, borderColor: T.border, padding: 12, marginTop: 8}}>
+             <Text accessibilityRole="header" style={{fontSize: fs(11), color: T.dim, marginBottom: 6}}>{t('mailbox.replyFrom', {name: owner?.name || '?'})}</Text>
+-            <MemberChips active={active} activeFacets={activeFacets} selected={fromId} onSelect={setFromId} />
++            <MemberChips active={active} activeFacets={activeFacets} selected={fromId} onSelect={setFromId} noSpeaker={noSpeaker.enabled ? noSpeaker.member : undefined} />
+             <View style={{flexDirection: 'row', gap: 8, alignItems: 'flex-end', marginTop: 8}}>
+               <TextInput value={text} onChangeText={setText} placeholder={t('mailbox.messagePlaceholder')} placeholderTextColor={T.muted} accessibilityLabel={t('mailbox.messagePlaceholder')} multiline
+                 style={{flex: 1, backgroundColor: T.bg, color: T.text, borderWidth: 1, borderColor: T.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: fs(13), minHeight: 48, textAlignVertical: 'top'}} />
+@@ -192,7 +198,7 @@
+         {composing && (
+           <View style={{backgroundColor: T.surface, borderRadius: 10, borderWidth: 1, borderColor: T.border, padding: 12, marginBottom: 16}}>
+             <Text accessibilityRole="header" style={{fontSize: fs(11), color: T.dim, marginBottom: 6}}>{t('mailbox.from')}</Text>
+-            <MemberChips active={active} activeFacets={activeFacets} selected={fromId} onSelect={setFromId} />
++            <MemberChips active={active} activeFacets={activeFacets} selected={fromId} onSelect={setFromId} noSpeaker={noSpeaker.enabled ? noSpeaker.member : undefined} />
+             <Text accessibilityRole="header" style={{fontSize: fs(11), color: T.dim, marginTop: 10, marginBottom: 6}}>{t('mailbox.to')}</Text>
+             <MemberChips active={active} activeFacets={activeFacets} selected={toId} onSelect={setToId} allowAll excludeId={fromId} />
+             <TextInput value={text} onChangeText={setText} placeholder={t('mailbox.messagePlaceholder')} placeholderTextColor={T.muted} accessibilityLabel={t('mailbox.messagePlaceholder')} multiline
+@@ -241,7 +247,7 @@
+   );
+ };
+ 
+-function MemberChips({selected, onSelect, allowAll = false, excludeId, active, activeFacets}: {selected: string; onSelect: (id: string) => void; allowAll?: boolean; excludeId?: string; active: Member[]; activeFacets: Member[]}) {
++function MemberChips({selected, onSelect, allowAll = false, excludeId, active, activeFacets, noSpeaker}: {selected: string; onSelect: (id: string) => void; allowAll?: boolean; excludeId?: string; active: Member[]; activeFacets: Member[]; noSpeaker?: Member}) {
+   const T = useTheme();
+   const {t} = useTranslation();
+   const fs = fontScale(T);
+@@ -257,6 +263,7 @@
+   );
+   return (
+     <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 4}}>
++      {noSpeaker && chip(noSpeaker)}
+       {allowAll && active.length > 0 && (
+         <TouchableOpacity onPress={() => onSelect(ALL_RECIPIENTS)} activeOpacity={0.7}
+           accessibilityRole="button" accessibilityState={{selected: selected === ALL_RECIPIENTS}} accessibilityLabel={allLabel}

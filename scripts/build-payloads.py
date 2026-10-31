@@ -48,6 +48,11 @@ def main():
         if wallpaper:
             run('git', 'apply', str(ROOT / 'payload/wallpaper-pr-24.patch'))
         run('git', 'apply', str(ROOT / 'payload/pluralkit-pr-11.patch'))
+        run('git', 'apply', str(ROOT / 'payload/no-speaker.patch'))
+        run('git', 'apply', str(ROOT / 'payload/confirm-once.patch'))
+        run('git', 'apply', str(ROOT / 'payload/device-unlock.patch'))
+        run('git', 'apply', str(ROOT / 'payload/lock-icon.patch'))
+        run('git', 'apply', str(ROOT / 'payload/extra-customization.patch'))
         shutil.copytree(ROOT / 'payload/mods', SOURCE / 'src/mods', dirs_exist_ok=True)
         assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', release['version'])
         assert re.fullmatch(r'[a-z0-9.-]{1,80}', release['runtime'])

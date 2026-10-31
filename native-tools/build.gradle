@@ -6,9 +6,16 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20240303'
 }
+configurations { reactAndroid }
+dependencies { reactAndroid 'com.facebook.react:react-android:0.86.0:debug@aar' }
+tasks.register('extractReactClasses', Copy) {
+    from({ zipTree(configurations.reactAndroid.singleFile) }) { include 'classes.jar' }
+    into(layout.buildDirectory.dir('react-android'))
+}
 application { mainClass = 'dev.sparklecat.tools.PatchHost' }
-def loaderTests = tasks.register('loaderTestSource', Copy) {
+def loaderTests = tasks.register('loaderTestSource', Sync) {
     from('../payload/native')
+    include 'BundleLoader.java'
     into(layout.buildDirectory.dir('generated/loader-test'))
     filter { line -> line.replace('@RUNTIME@', 'plural-star-1.23.3-mods-1').replace('@VARIANT@', 'wallpaper-storage').replace('@VERSION@', '0.4.1') }
 }

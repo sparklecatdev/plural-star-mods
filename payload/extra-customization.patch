@@ -1,0 +1,375 @@
+--- a/src/app/useAppTheme.ts
++++ b/src/app/useAppTheme.ts
+@@ -5,8 +5,10 @@
+ import type {CustomPalette, ThemeColors} from '../theme';
+ import {fontChoiceOf} from '../utils';
+ import type {AppSettings} from '../utils';
++import {applyExtraColors, useExtraCustomization} from '../mods/extraCustomization';
+ 
+ export const useAppTheme = (appSettings: AppSettings, palettes: CustomPalette[], activePaletteId: string): ThemeColors => {
++  const extra = useExtraCustomization();
+   const [overridesTick, setOverridesTick] = useState(0);
+   useEffect(() => { setTerminologyOverrides(appSettings.terminology); setOverridesTick(n => n + 1); }, [appSettings.terminology]);
+   useEffect(() => { setTierNameOverrides(appSettings.tierNames); setOverridesTick(n => n + 1); }, [appSettings.tierNames]);
+@@ -21,5 +23,8 @@
+     const pal = allPals.find(p => p.id === activePaletteId) || BUILTIN_PALETTES[0];
+     return {...deriveTheme(pal.bg, pal.accent, pal.text, pal.mid), textScale: appSettings.textScale || 1};
+   }, [activePaletteId, palettes, appSettings.textScale]);
+-  return useMemo(() => ({...paletteTheme, overridesTick}), [paletteTheme, overridesTick]);
++  return useMemo(() => {
++    const theme = {...paletteTheme, overridesTick};
++    return applyExtraColors(theme, extra);
++  }, [paletteTheme, overridesTick, extra]);
+ };
+--- a/src/app/TabHost.tsx
++++ b/src/app/TabHost.tsx
+@@ -5,6 +5,7 @@
+ import {useUiStore} from '../store/uiStore';
+ import {log} from '../utils/log';
+ import {registerTabControl} from './navigation';
++import {useExtraCustomization} from '../mods/extraCustomization';
+ 
+ export type TabMemory = {tab: Tab; mounted: Tab[]};
+ 
+@@ -16,6 +17,7 @@
+ );
+ 
+ export function TabHost({isSinglet, screens, memory}: {isSinglet: boolean; screens: Record<Tab, React.ReactNode>; memory: React.RefObject<TabMemory>}) {
++  const extra = useExtraCustomization();
+   const [tab, setTab] = useState<Tab>(memory.current.tab);
+   const [shownTab, setShownTab] = useState<Tab>(memory.current.tab);
+   const [mountedTabs, setMountedTabs] = useState<Tab[]>(memory.current.mounted);
+@@ -31,6 +33,7 @@
+       setShownTab(id);
+     });
+   }, []);
++  useEffect(() => { if (extra.enabled && extra.hiddenTabs.includes(tab)) goTab('front'); }, [extra, tab, goTab]);
+   useEffect(() => { registerTabControl({goTab, currentTab: () => tabRef.current}); return () => registerTabControl(null); }, [goTab]);
+   const onReselectHub = useUiStore(s => s.reselectHub);
+   useEffect(() => { memory.current = {tab: shownTab, mounted: mountedTabs}; }, [memory, shownTab, mountedTabs]);
+--- a/src/components/TabBar.tsx
++++ b/src/components/TabBar.tsx
+@@ -5,6 +5,7 @@
+ import {AccentText} from './AccentText';
+ import {useTheme} from '../themeContext';
+ import {fontScale} from '../theme';
++import {useExtraCustomization} from '../mods/extraCustomization';
+ 
+ export type Tab = 'front' | 'members' | 'hub' | 'journal' | 'history';
+ 
+@@ -17,6 +18,7 @@
+   const {t} = useTranslation();
+   const insets = useSafeAreaInsets();
+   const C = useTheme();
++  const extra = useExtraCustomization();
+   const fs = fontScale(C);
+   const tabLabel = (id: Tab): string => {
+     if (isSinglet && id === 'front') return t('tabs.status');
+@@ -26,12 +28,12 @@
+   };
+   return (
+     <View style={[styles.tabBar, {backgroundColor: C.surface, borderTopColor: C.border}]} accessibilityRole="tablist" accessibilityLabel={t('a11y.mainNav')}>
+-      {TAB_IDS.map(id => (
++      {TAB_IDS.filter(id => !extra.enabled || !extra.hiddenTabs.includes(id)).map(id => (
+         <TouchableOpacity key={id} onPress={() => onPressTab(id)} activeOpacity={0.7} accessibilityRole="tab" accessibilityState={{selected: tab === id}} accessibilityLabel={tabLabel(id)} style={[styles.tabBtn, {paddingBottom: 8 + insets.bottom}]}>
+           <View style={{height: fs(24), justifyContent: 'center', marginBottom: 2}}>
+             <AccentText style={{color: tab === id ? C.accent : C.dim, fontSize: fs(18), lineHeight: fs(22), textAlign: 'center', includeFontPadding: false, textAlignVertical: 'center'}} maxFontSizeMultiplier={1.2}>{TAB_ICONS[id]}</AccentText>
+           </View>
+-          <AccentText style={[styles.tabLabel, {color: tab === id ? C.accent : C.dim, fontSize: Math.min(fs(9), 12), textAlign: 'center'}]} numberOfLines={2} maxFontSizeMultiplier={1.2}>{tabLabel(id)}</AccentText>
++          {(!extra.enabled || !extra.hideTabLabels) && <AccentText style={[styles.tabLabel, {color: tab === id ? C.accent : C.dim, fontSize: Math.min(fs(9), 12), textAlign: 'center'}]} numberOfLines={2} maxFontSizeMultiplier={1.2}>{tabLabel(id)}</AccentText>}
+         </TouchableOpacity>
+       ))}
+     </View>
+--- a/src/components/AppHeader.tsx
++++ b/src/components/AppHeader.tsx
+@@ -6,12 +6,14 @@
+ import {AccentText} from './AccentText';
+ import {Fonts, readableAccent} from '../theme';
+ import {useTheme} from '../themeContext';
++import {useExtraCustomization} from '../mods/extraCustomization';
+ 
+ const HIT_SLOP = {top: 8, bottom: 8, left: 8, right: 8};
+ 
+ export const AppHeader = ({systemName, canLock, onLock, onOpenSettings, onOpenProfile}: {systemName: string; canLock: boolean; onLock: () => void; onOpenSettings: () => void; onOpenProfile?: () => void}) => {
+   const {t} = useTranslation();
+   const C = useTheme();
++  const extra = useExtraCustomization();
+   const insets = useSafeAreaInsets();
+   const title = (
+     <AccentText
+@@ -25,7 +27,7 @@
+   return (
+     <View style={{backgroundColor: C.bg, paddingTop: Platform.OS === 'ios' ? Math.max(insets.top - 6, 0) : Math.max(StatusBar.currentHeight || 0, insets.top || 0, 28)}}>
+       <View style={[styles.header, {borderBottomColor: C.border, backgroundColor: C.bg}]}>
+-        {onOpenProfile ? (
++        {extra.enabled && extra.hideSystemName ? <View style={styles.titleBox} /> : onOpenProfile ? (
+           <TouchableOpacity
+             onPress={onOpenProfile}
+             activeOpacity={0.7}
+--- a/src/screens/FrontScreen.tsx
++++ b/src/screens/FrontScreen.tsx
+@@ -28,6 +28,7 @@
+   FRONT_TIER_KEYS,
+ } from '../utils';
+ import {TierCard} from './front/TierCard';
++import {useExtraCustomization} from '../mods/extraCustomization';
+ 
+ const FRONT_SORTS: [FrontSortMode, string][] = [
+   ['added', 'frontSort.added'],
+@@ -38,6 +39,7 @@
+ 
+ export const FrontScreen = () => {
+   const T = useTheme();
++  const extra = useExtraCustomization();
+   const onSetFront = useUiStore(s => s.openSetFront);
+   const onEditDetails = useUiStore(s => s.openEditFrontDetail);
+   const onOpenMember = useUiStore(s => s.openMemberById);
+@@ -97,13 +99,13 @@
+         }}>
+ 
+         <View style={{marginBottom: 16}}>
+-          <Text
++          {(!extra.enabled || !extra.hideFrontTitle) && <Text
+             accessibilityRole="header"
+             style={[s.heading, {color: T.text, marginBottom: 10, fontSize: fs(22)}]}
+             numberOfLines={1}
+             maxFontSizeMultiplier={1.2}>
+             {t('front.currentlyFronting')}
+-          </Text>
++          </Text>}
+           <TouchableOpacity
+             onPress={onSetFront}
+             accessibilityRole="button"
+@@ -121,7 +123,7 @@
+           </TouchableOpacity>
+         </View>
+ 
+-        {!empty && (
++        {!empty && (!extra.enabled || !extra.hideFrontSort) && (
+           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 14, flexGrow: 0}}>
+             <View style={{flexDirection: 'row', gap: 6, paddingHorizontal: 2}}>
+               {FRONT_SORTS.map(([mode, key]) => {
+--- a/src/screens/HubScreen.tsx
++++ b/src/screens/HubScreen.tsx
+@@ -26,6 +26,7 @@
+ import {WhiteboardScreen} from './WhiteboardScreen';
+ import {ColorsScreen} from './ColorsScreen';
+ import {NetworkScreen} from './NetworkScreen';
++import {useExtraCustomization} from '../mods/extraCustomization';
+ 
+ type HubTile = 'share' | 'retroHistory' | 'statistics' | 'chat' | 'customFields' | 'systemManager' | 'archive' | 'polls' | 'systemMap' | 'mailbox' | 'network' | 'whiteboard' | 'colors' | 'planner' | 'discord' | 'credits' | 'supportPS';
+ 
+@@ -76,6 +77,7 @@
+ 
+ export const HubScreen = ({singlet = false, selfId}: Props) => {
+   const T = useTheme();
++  const extra = useExtraCustomization();
+   const openMemberById = useUiStore(s => s.openMemberById);
+   const systemMapRelCount = useUiStore(s => s.systemMapRelCount);
+   const setSystemMapRelCount = useUiStore(s => s.setSystemMapRelCount);
+@@ -101,6 +103,9 @@
+   const [tileReorderOn, setTileReorderOn] = useState(false);
+   const [tileDrag, setTileDrag] = useState<TileDrag | null>(null);
+   const tileDragRef = useRef<TileDrag | null>(null);
++  useEffect(() => {
++    if (extra.enabled && extra.hideHubReorder) { setTileReorderOn(false); setTileDrag(null); tileDragRef.current = null; }
++  }, [extra.enabled, extra.hideHubReorder]);
+   const tileReorderOnRef = useRef(false);
+   tileReorderOnRef.current = tileReorderOn;
+   const tileOrderRef = useRef<HubTile[]>(DEFAULT_TILE_ORDER);
+@@ -277,7 +282,8 @@
+     {id: 'discord', icon: '💬', label: t('hub.discord')},
+     {id: 'supportPS', icon: '☕', label: t('hub.supportPS')},
+   ];
+-  const tiles = singlet ? allTiles.filter(tile => !SINGLET_HIDDEN_TILES.has(tile.id)) : allTiles;
++  const tiles = allTiles.filter(tile => (!singlet || !SINGLET_HIDDEN_TILES.has(tile.id)) &&
++    (!extra.enabled || !extra.hiddenTiles.includes(tile.id)));
+ 
+   const handleTilePress = (tile: {id: HubTile}) => {
+     const url = EXTERNAL_TILES[tile.id];
+@@ -300,6 +306,6 @@
+   const tileCols = (T.textScale || 1) * osFontCap >= 1.4 ? 2 : 3;
+   tileColsRef.current = tileCols;
+   const tileWidth = tileCols === 2 ? '48%' : '31%';
+-  const labelReserve = Math.round(fs(30) * osFontCap);
++  const labelReserve = extra.enabled && extra.hideTileLabels ? 0 : Math.round(fs(30) * osFontCap);
+   const iconCap = Math.min(PixelRatio.getFontScale() || 1, 1.2);
+   const tileHeight = Math.max(104, Math.round(10 + fs(32) * iconCap + 6 + labelReserve + 10 + 4));
+@@ -309,12 +315,12 @@
+       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 20}}>
+-        <Text
++        {(!extra.enabled || !extra.hideHubTitle) && <Text
+           accessibilityRole="header"
+           style={tileTitle(T)}
+           numberOfLines={1}
+           maxFontSizeMultiplier={1.2}>
+           {t('hub.title')}
+-        </Text>
+-        <ReorderLockButton on={tileReorderOn} onToggle={() => setTileReorderOn(v => !v)} />
++        </Text>}
++        {(!extra.enabled || !extra.hideHubReorder) && <ReorderLockButton on={tileReorderOn} onToggle={() => setTileReorderOn(v => !v)} />}
+       </View>
+       <View
+         onLayout={e => { gridWRef.current = e.nativeEvent.layout.width; }}
+@@ -360,7 +366,7 @@
+                 </View>
+               )}
+               <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{fontSize: fs(26), lineHeight: fs(32), color: T.accent, textAlign: 'center', includeFontPadding: false}} maxFontSizeMultiplier={1.2}>{tile.icon}</Text>
+-              <Text style={{fontSize: fs(11), lineHeight: fs(15), minHeight: labelReserve, fontWeight: '600', color: T.text, textAlign: 'center', textAlignVertical: 'center', includeFontPadding: false}} numberOfLines={2} maxFontSizeMultiplier={1.3}>{tile.label}</Text>
++              {(!extra.enabled || !extra.hideTileLabels) && <Text style={{fontSize: fs(11), lineHeight: fs(15), minHeight: labelReserve, fontWeight: '600', color: T.text, textAlign: 'center', textAlignVertical: 'center', includeFontPadding: false}} numberOfLines={2} maxFontSizeMultiplier={1.3}>{tile.label}</Text>}
+             </TouchableOpacity>
+           );
+         })}
+--- a/src/screens/MembersScreen.tsx
++++ b/src/screens/MembersScreen.tsx
+@@ -29,6 +29,7 @@
+ import {DeletedMembersFooter} from './members/DeletedMembersFooter';
+ import {MembersEmpty} from './members/MembersEmpty';
+ import {countByTab, filterMembers, letterIndex, railLettersFor, tabOf} from './members/memberList';
++import {useExtraCustomization} from '../mods/extraCustomization';
+ 
+ const TAB_TEXT: Record<MemberTab, {add: string; addShort: string; count: string; countFiltered: string}> = {
+   active: {add: 'members.add', addShort: 'modal.member', count: 'members.countFronters', countFiltered: 'members.countFiltered'},
+@@ -42,6 +43,7 @@
+ 
+ export const MembersScreen = ({archiveOnly = false}: Props) => {
+   const T = useTheme();
++  const extra = useExtraCustomization();
+   const savedSortMode = useAppStore(s => s.appSettings.memberSortMode);
+   const savedListFields = useAppStore(s => s.appSettings.memberListFields);
+   const openNewMember = useUiStore(s => s.openNewMember);
+@@ -100,6 +102,12 @@
+     return () => clearTimeout(timer);
+   }, [browseGroups]);
+   const searchRef = useRef<React.ComponentRef<typeof TextInput>>(null);
++  useEffect(() => {
++    if (!extra.enabled) return;
++    if (extra.hideMemberGroupFilter) setActiveGroup(null);
++    if (extra.hideMemberTagFilter) setActiveTag(null);
++    if (extra.hideMemberSearch) { setQuery(''); searchRef.current?.clear(); }
++  }, [extra.enabled, extra.hideMemberGroupFilter, extra.hideMemberTagFilter, extra.hideMemberSearch]);
+   const listRef = useRef<FlashListRef<Member>>(null);
+   const [showTop, setShowTop] = useState(false);
+   const scrollToTop = (animated: boolean) => {
+@@ -361,11 +369,11 @@
+         counts={tabCounts}
+         right={showReorder ? <ReorderLockButton on={reorderOn} onToggle={() => setReorderOn(v => !v)} /> : undefined} />
+ 
+-      <SortChips value={sortMode} onChange={changeSortMode} />
+-      <GroupFilterChips groups={groups} choices={groupChoices} active={activeGroup} onChange={setActiveGroup} />
+-      <TagFilterChips tags={allTags} active={activeTag} onChange={setActiveTag} />
+-
+-      {tabMembers.length > 3 && (
++      {(!extra.enabled || !extra.hideMemberSort) && <SortChips value={sortMode} onChange={changeSortMode} />}
++      {(!extra.enabled || !extra.hideMemberGroupFilter) && <GroupFilterChips groups={groups} choices={groupChoices} active={activeGroup} onChange={setActiveGroup} />}
++      {(!extra.enabled || !extra.hideMemberTagFilter) && <TagFilterChips tags={allTags} active={activeTag} onChange={setActiveTag} />}
++
++      {tabMembers.length > 3 && (!extra.enabled || !extra.hideMemberSearch) && (
+         <TextInput ref={searchRef} defaultValue="" onChangeText={setQuery} accessibilityLabel={t('members.search')} placeholder={t('members.search')} placeholderTextColor={T.muted}
+           autoCorrect={false} autoComplete="off" spellCheck={false} textContentType="none"
+           style={[ms.search, {backgroundColor: T.surface, color: T.text, borderColor: T.border, fontSize: fs(13)}]} />
+@@ -405,7 +413,7 @@
+         }
+       />
+       <AlphaRail show={showRail} letters={railLetters} color={T.dim} onJump={jumpToLetter} />
+-      {showTop && (
++      {showTop && (!extra.enabled || !extra.hideMemberBackToTop) && (
+         <TouchableOpacity onPress={() => scrollToTop(true)} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel={t('members.backToTop')}
+           style={{position: 'absolute', right: 16, bottom: 24, width: 44, height: 44, borderRadius: 22, backgroundColor: T.accent, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, elevation: 4}}>
+           <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{fontSize: fs(20), fontWeight: '700', color: T.bg}} allowFontScaling={false}>↑</Text>
+--- a/src/screens/JournalScreen.tsx
++++ b/src/screens/JournalScreen.tsx
+@@ -22,6 +22,7 @@
+ import {pickerPool} from '../picker/memberPicker';
+ import {filterJournal, filterTags, journalAuthorIds} from '../journal/journal';
+ import {EntryAction, EntryViewer, ExportMenu, JournalEntryRow, TemplateCards} from './journal/JournalParts';
++import {useExtraCustomization} from '../mods/extraCustomization';
+ 
+ const togglePinned = (e: JournalEntry) => { saveEntry({...e, pinned: !e.pinned}).catch(reportSaveError); };
+ 
+@@ -43,6 +44,7 @@
+ 
+ export const JournalScreen = () => {
+   const T = useTheme();
++  const extra = useExtraCustomization();
+   const openJournal = useUiStore(s => s.openJournal);
+   const onMentionPress = useUiStore(s => s.openMemberById);
+   const onAdd = () => openJournal(null);
+@@ -67,6 +69,11 @@
+   const [showTagResults, setShowTagResults] = useState(false);
+   const [subTab, setSubTab] = useState<JournalSubTab>('entries');
+   const [editingTemplate, setEditingTemplate] = useState<JournalTemplate | 'new' | null>(null);
++  useEffect(() => {
++    if (!extra.enabled) return;
++    if (extra.hideJournalTagFilter) { setActiveTag(null); setTagSearch(''); setShowTagResults(false); }
++    if (extra.hideJournalAuthorFilter) setActiveAuthor(null);
++  }, [extra.enabled, extra.hideJournalTagFilter, extra.hideJournalAuthorFilter]);
+ 
+   const handleSaveTemplate = async (tpl: JournalTemplate) => {
+     await saveJournalTemplates(upsertById(templates, tpl));
+@@ -192,13 +199,13 @@
+   const listHeader = (
+     <>
+       <View style={s.headerRow}>
+-        <Text
++        {(!extra.enabled || !extra.hideJournalTitle) && <Text
+           accessibilityRole="header"
+           style={[s.heading, {color: T.text, flex: 1, marginRight: 8, fontSize: fs(22)}]}
+           numberOfLines={1}
+           maxFontSizeMultiplier={1.2}>
+           {t('journal.title')}
+-        </Text>
++        </Text>}
+         <TouchableOpacity
+           onPress={() => subTab === 'entries' ? onAdd() : setEditingTemplate('new')}
+           activeOpacity={0.7}
+@@ -222,7 +229,7 @@
+         <TemplateCards templates={templates} onEdit={setEditingTemplate} />
+       ) : (
+         <>
+-          {allTags.length > 0 && (
++          {allTags.length > 0 && (!extra.enabled || !extra.hideJournalTagFilter) && (
+             <View style={{marginBottom: 8}}>
+               <View style={{flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4}}>
+                 {activeTag && (
+@@ -256,7 +263,7 @@
+             </View>
+           )}
+ 
+-          {(activeAuthors.length > 0 || facetAuthors.length > 0) && (
++          {(activeAuthors.length > 0 || facetAuthors.length > 0) && (!extra.enabled || !extra.hideJournalAuthorFilter) && (
+             <View style={{marginBottom: 14}}>
+               <MemberPicker pools={authorPools} selected={activeAuthor} onPick={m => setActiveAuthor(activeAuthor === m.id ? null : m.id)} requireSearch selectedChips
+                 maxResults={Infinity} listMaxHeight={140} searchLabel={t('journal.searchAuthors')} />
+--- a/src/screens/HistoryScreen.tsx
++++ b/src/screens/HistoryScreen.tsx
+@@ -20,6 +20,7 @@
+ import {sectionLabel} from '../components/controls';
+ import {FrontHistoryRow, MemberEvent, MemberSummary, TierDetails, eventDetails, frontHistoryRows, hasEntry, memberEvents, mergedFrontSessions, sessionsTotalMs, summarizeMemberEvents} from '../history/memberHistory';
+ import {FrontHistoryEntryRow, MemberEventRow, MemberSummaryCards} from './history/HistoryRows';
++import {useExtraCustomization} from '../mods/extraCustomization';
+ 
+ type SubTab = 'front' | 'member' | 'timeline';
+ 
+@@ -36,6 +37,7 @@
+ 
+ export const HistoryScreen = ({singlet = false, selfId, readOnly = false, historyOverride, membersOverride, journalOverride}: Props) => {
+   const T = useTheme();
++  const extra = useExtraCustomization();
+   useMinuteTick();
+   const storeHistory = useAppStore(s => s.history);
+   const storeJournal = useAppStore(s => s.journal);
+@@ -150,11 +152,11 @@
+       <View style={{backgroundColor: T.bg, paddingHorizontal: 16, paddingTop: landscape ? 6 : 16}}>
+-        <Text
++        {(!extra.enabled || !extra.hideHistoryTitle) && <Text
+           accessibilityRole="header"
+           style={[s.heading, {color: T.text, fontSize: fs(22)}, landscape && {fontSize: fs(15)}]}
+           numberOfLines={1}
+           maxFontSizeMultiplier={1.2}>
+           {t('history.title')}
+-        </Text>
++        </Text>}
+         <View style={{flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: T.border, marginTop: 4}}>
+           {SUB_TABS.map(tab => (
+             <TouchableOpacity key={tab} onPress={() => setSubTab(tab)} activeOpacity={0.7}

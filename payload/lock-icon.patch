@@ -1,0 +1,21 @@
+diff --git a/src/components/AppHeader.tsx b/src/components/AppHeader.tsx
+--- a/src/components/AppHeader.tsx
++++ b/src/components/AppHeader.tsx
+@@ -39,7 +39,7 @@ export const AppHeader = ({systemName, canLock, onLock, onOpenSettings, onOpenPr
+           <View style={styles.titleBox}>{title}</View>
+         )}
+         <View style={styles.headerRight} accessibilityRole="toolbar" accessibilityLabel={t('a11y.toolbar')}>
+-          <TouchableOpacity
++          {canLock && <TouchableOpacity
+             onPress={onLock}
+             disabled={!canLock}
+             activeOpacity={canLock ? 0.7 : 1}
+@@ -49,7 +49,7 @@ export const AppHeader = ({systemName, canLock, onLock, onOpenSettings, onOpenPr
+             hitSlop={HIT_SLOP}
+             style={styles.settingsBtn}>
+             <Text style={[styles.settingsIcon, {color: canLock ? C.dim : C.muted, opacity: canLock ? 1 : 0.35}]} maxFontSizeMultiplier={1.2} allowFontScaling={false} importantForAccessibility="no" accessibilityElementsHidden>🔒</Text>
+-          </TouchableOpacity>
++          </TouchableOpacity>}
+           <TouchableOpacity onPress={onOpenSettings} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('a11y.settings')} hitSlop={HIT_SLOP} style={styles.settingsBtn}>
+             <Text style={[styles.settingsIcon, {color: C.dim}]} maxFontSizeMultiplier={1.2} allowFontScaling={false} importantForAccessibility="no" accessibilityElementsHidden>⚙</Text>
+           </TouchableOpacity>

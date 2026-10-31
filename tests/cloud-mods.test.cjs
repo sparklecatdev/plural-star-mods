@@ -18,11 +18,12 @@ function load(name, imports = {}, generated = false) {
   return exports;
 }
 const versions = load('updateCheckCore.ts');
-const {CLOUD_MODS_KEY, readCloudMods, createCloudMods} = load('cloudModsCore.ts', {'./updateCheckCore': versions});
+const extra = load('extraCustomizationCore.ts');
+const {CLOUD_MODS_KEY, readCloudMods, createCloudMods} = load('cloudModsCore.ts', {'./updateCheckCore': versions, './extraCustomizationCore': extra});
 const {createModPreferences} = load('modPreferencesCore.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
 const current = {runtime: 'plural-star-1.23.3-mods-1', variant: 'wallpaper-storage', version: '0.4.2'};
-const settings = () => ({enabled: {wallpaper: true, storage: true}, pkFrontSyncEnabled: false, automaticUpdates: true});
+const settings = () => ({enabled: {wallpaper: true, storage: true, noSpeaker: false, singleConfirm: true, deviceUnlock: false}, pkFrontSyncEnabled: false, automaticUpdates: true});
 const record = () => ({schema: 1, settings: settings(), automaticRestore: true, patches: [{...current}]});
 function harness(saved = null, available = {wallpaper: true, storage: true}) {
   let disk = saved === null ? null : JSON.stringify(saved), local = settings(), failRead = false, failWrite = false, failRestore = false;
@@ -42,12 +43,28 @@ function harness(saved = null, available = {wallpaper: true, storage: true}) {
 test('cloud records reject malformed, oversized, future, and duplicate data; executable fields are discarded', () => {
   for (const raw of ['{', 'null', 'x'.repeat(16385), JSON.stringify({...record(), schema: 2}),
     JSON.stringify({...record(), settings: {...settings(), automaticUpdates: 'yes'}}),
+    JSON.stringify({...record(), settings: {...settings(), enabled: {...settings().enabled, noSpeaker: 'yes'}}}),
     JSON.stringify({...record(), patches: [{...current, version: '../evil'}]}),
     JSON.stringify({...record(), patches: [current, current]})]) assert.throws(() => readCloudMods(raw));
   const untrusted = {...record(), code: 'evil()', token: 'secret', url: 'https://evil.test',
     patches: [{...current, url: 'https://evil.test', sha256: 'fake'}]};
   assert.deepEqual(plain(readCloudMods(JSON.stringify(untrusted))), record());
   assert.equal(readCloudMods(null), null);
+});
+
+test('legacy cloud records use toggle defaults; a later change syncs', async () => {
+  const saved = record();
+  delete saved.settings.enabled.noSpeaker;
+  delete saved.settings.enabled.singleConfirm;
+  delete saved.settings.enabled.deviceUnlock;
+  assert.deepEqual(plain(readCloudMods(JSON.stringify(saved)).settings.enabled), settings().enabled);
+  const h = harness(saved); await h.controller.sync();
+  assert.equal(h.local().enabled.noSpeaker, false);
+  const next = settings(); next.enabled.noSpeaker = true; h.change(next);
+  await h.controller.saveLocal();
+  assert.equal(JSON.parse(h.disk()).settings.enabled.noSpeaker, true);
+  const other = harness(JSON.parse(h.disk())); await other.controller.sync();
+  assert.equal(other.local().enabled.noSpeaker, true);
 });
 
 test('first start creates a cloud-compatible record; unchanged starts do not write again', async () => {
@@ -142,7 +159,7 @@ test('restoring switches cancels a pending storage restore and commits both swit
   const prefs = createModPreferences({wallpaper: true, storage: true}, {read: async () => null,
     beforeDisable: async id => { actions.push('cancel-' + id); }, write: async text => { actions.push(JSON.parse(text)); }});
   await prefs.setPreferences({wallpaper: false, storage: false});
-  assert.deepEqual(plain(actions), ['cancel-wallpaper', 'cancel-storage', {wallpaper: false, storage: false}]);
+  assert.deepEqual(plain(actions), ['cancel-wallpaper', 'cancel-storage', {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: true, deviceUnlock: false}]);
 });
 
 test('upstream cloud and linked-device snapshots include the dedicated mod record', async () => {
@@ -172,6 +189,7 @@ test('runtime restore preserves credentials and preferences while leaving execut
     './updateCheck': {updateChecker: {load: async () => {}}},
     './modOptions': {options: settings().enabled, payloadVersion: current.version, patchRuntime: current.runtime, patchVariant: current.variant},
     './cloudModsCore': {CLOUD_MODS_KEY, createCloudMods},
+    './extraCustomization': {extraCustomization: {load: async () => {}, getSnapshot: () => extra.DEFAULT_EXTRA_CUSTOMIZATION, set: async () => {}}},
   });
   await cloudMods.sync(); await cloudMods.retry();
   assert.deepEqual(plain(appSettings), {pkToken: 'private', language: 'de', pkFrontSyncEnabled: true});
