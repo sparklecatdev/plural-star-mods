@@ -72,10 +72,10 @@ public final class CompatibilityPack {
             Set<String> names = new HashSet<>();
             for (Enumeration<? extends ZipEntry> entries = zip.entries(); entries.hasMoreElements();) {
                 String name = entries.nextElement().getName();
-                if (!Arrays.asList("provenance.json", "wallpaper-storage.bundle", "wallpaper-storage.dex", "source.zip").contains(name) || !names.add(name))
+                if (!Arrays.asList("provenance.json", "wallpaper-storage.bundle", "wallpaper-storage.dex", "primary.dex", "source.zip").contains(name) || !names.add(name))
                     throw new IOException("Invalid compatibility pack contents.");
             }
-            if (names.size() != 4) throw new IOException("Compatibility pack is incomplete.");
+            if (names.size() != 4 && names.size() != 5) throw new IOException("Compatibility pack is incomplete.");
             ByteArrayOutputStream data = new ByteArrayOutputStream();
             try (InputStream in = zip.getInputStream(zip.getEntry("provenance.json"))) { ApkPatcher.copy(in, data, 16384); }
             JSONObject info = new JSONObject(data.toString(StandardCharsets.UTF_8.name()));
@@ -84,7 +84,10 @@ public final class CompatibilityPack {
                 version != null && !version.equals(patchVersion) || !runtime.matches("[a-z0-9.-]{1,80}") ||
                 !info.getString("upstream").matches("[0-9a-f]{40}") || !"javascript".equals(info.getString("bundle_format")))
                 throw new IOException("Compatibility pack does not match this APK.");
-            for (String name : Arrays.asList("wallpaper-storage.bundle", "wallpaper-storage.dex", "source.zip")) {
+            List<String> files = new ArrayList<>(Arrays.asList("wallpaper-storage.bundle", "wallpaper-storage.dex", "source.zip"));
+            if (names.contains("primary.dex")) files.add("primary.dex");
+            for (String name : files) {
+                if (!names.contains(name)) throw new IOException("Compatibility pack is incomplete.");
                 String expected = info.getJSONObject("files").getString(name);
                 if (!expected.matches("[0-9a-f]{64}")) throw new IOException("Invalid compatibility checksum.");
                 java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");

@@ -63,6 +63,41 @@ def main():
         run('git', 'apply', str(ROOT / 'payload/device-unlock.patch'))
         run('git', 'apply', str(ROOT / 'payload/extra-customization.patch'))
         run('git', 'apply', str(ROOT / 'payload/lock-icon.patch'))
+        run('git', 'apply', str(ROOT / 'payload/rest-mode-pr-25.patch'))
+        types = SOURCE / 'src/model/types.ts'
+        text = types.read_text()
+        marker = '  notificationsEnabled: boolean;'
+        assert text.count(marker) == 1
+        types.write_text("import type {RestMode} from './restMode';\n" + text.replace(marker, marker + '\n  restMode?: RestMode;'))
+        actions = SOURCE / 'src/store/actions.ts'
+        text = actions.read_text()
+        marker = "import {reschedulePlannerNotifications} from '../services/reminders';"
+        assert text.count(marker) == 1
+        text = text.replace(marker, marker + "\nimport {validRestMode} from '../model/restMode';\nimport {syncNotificationSettings} from '../services/restMode';")
+        marker = ('  await commitAppSettings(current => ({...d, backgroundImage: current.backgroundImage}));'
+                  if wallpaper else '  setAppSettings(d);\n  await store.set(KEYS.settings, d);')
+        assert text.count(marker) == 1
+        replacement = """  if (!validRestMode(d.restMode)) throw new Error(i18n.t('notification.restInvalid'));
+  await syncNotificationSettings(d);
+  try {
+    PERSIST_SETTINGS
+  } catch (e) {
+    await syncNotificationSettings(appSettings);
+    throw e;
+  }
+  if (JSON.stringify(d.restMode) !== JSON.stringify(appSettings.restMode) || d.notificationsEnabled !== appSettings.notificationsEnabled) {
+    await reschedulePlannerNotifications(useAppStore.getState().planner);
+  }"""
+        persist = ('await commitAppSettings(current => ({...d, backgroundImage: current.backgroundImage}));'
+                   if wallpaper else 'await store.set(KEYS.settings, d);\n    setAppSettings(d);')
+        text = text.replace(marker, replacement.replace('PERSIST_SETTINGS', persist))
+        actions.write_text(text)
+        if wallpaper:
+            test = SOURCE / 'scripts/background-settings.test.js'
+            text = test.read_text()
+            marker = "    '../utils/mediaMigrations': {}, '../services/reminders': {}, '../mailbox/mailbox': {},"
+            assert text.count(marker) == 1
+            test.write_text(text.replace(marker, marker + "\n    '../model/restMode': {validRestMode: () => true}, '../services/restMode': {syncNotificationSettings: async () => {}},"))
         # Keep tier customization opt-in and leave hidden tier data untouched.
         theme = SOURCE / 'src/theme.ts'
         text = theme.read_text()

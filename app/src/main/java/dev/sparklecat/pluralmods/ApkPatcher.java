@@ -32,6 +32,9 @@ public final class ApkPatcher {
         patch(source, output, SOURCE_SHA256, payload, nativeCode, signer, progress);
     }
     public static void patch(File source, File output, String expectedSha256, Payload payload, Payload nativeCode, ApkSigner.SignerConfig signer, Progress progress) throws Exception {
+        patch(source, output, expectedSha256, payload, nativeCode, null, signer, progress);
+    }
+    public static void patch(File source, File output, String expectedSha256, Payload payload, Payload nativeCode, Payload primaryNativeCode, ApkSigner.SignerConfig signer, Progress progress) throws Exception {
         progress.update("Verifying the original APK…");
         if (expectedSha256 == null || !expectedSha256.matches("[0-9a-f]{64}") || source.length() > MAX_APK || !expectedSha256.equals(sha256(source)))
             throw new IOException("This APK does not match the supported release. Use Download Plural Star to get a compatible official copy.");
@@ -40,7 +43,7 @@ public final class ApkPatcher {
         try {
             progress.update("Applying mods…");
             if (nativeCode == null) throw new IOException("The patch update loader is missing.");
-            rewrite(source, unsigned, payload, nativeCode);
+            rewrite(source, unsigned, payload, nativeCode, primaryNativeCode);
             progress.update("Preparing the app for installation…");
             new ApkSigner.Builder(Collections.singletonList(signer)).setInputApk(unsigned).setOutputApk(signed)
                 .setMinSdkVersion(24).setV1SigningEnabled(false).setV2SigningEnabled(true).setV3SigningEnabled(false)
@@ -64,9 +67,12 @@ public final class ApkPatcher {
         rewrite(source, output, payload, null);
     }
     static void rewrite(File source, File output, Payload payload, Payload nativeCode) throws IOException {
+        rewrite(source, output, payload, nativeCode, null);
+    }
+    static void rewrite(File source, File output, Payload payload, Payload nativeCode, Payload primaryNativeCode) throws IOException {
         try (ZipFile input = new ZipFile(source); CountingStream count = new CountingStream(new BufferedOutputStream(new FileOutputStream(output))); ZipOutputStream zip = new ZipOutputStream(count)) {
             Set<String> seen = new HashSet<>();
-            boolean found = false, foundNative = false;
+            boolean found = false, foundNative = false, foundPrimary = false;
             Enumeration<? extends ZipEntry> entries = input.entries();
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
@@ -75,11 +81,12 @@ public final class ApkPatcher {
                 if (signatureEntry(name)) continue;
                 ZipEntry next = new ZipEntry(name);
                 next.setTime(946684800000L); // Year 2000 stays in the DOS range in every timezone; avoid extended timestamps.
-                if (name.equals(BUNDLE) || name.equals("classes2.dex") && nativeCode != null) {
+                if (name.equals(BUNDLE) || name.equals("classes2.dex") && nativeCode != null || name.equals("classes.dex") && primaryNativeCode != null) {
                     boolean isBundle = name.equals(BUNDLE);
-                    if (isBundle) found = true; else foundNative = true;
+                    boolean isPrimary = name.equals("classes.dex");
+                    if (isBundle) found = true; else if (isPrimary) foundPrimary = true; else foundNative = true;
                     zip.putNextEntry(next);
-                    try (InputStream in = (isBundle ? payload : nativeCode).open()) { copy(in, zip, 32L * 1024 * 1024); }
+                    try (InputStream in = (isBundle ? payload : isPrimary ? primaryNativeCode : nativeCode).open()) { copy(in, zip, 32L * 1024 * 1024); }
                 } else {
                     next.setMethod(entry.getMethod());
                     if (entry.getMethod() == ZipEntry.STORED) {
@@ -106,6 +113,7 @@ public final class ApkPatcher {
             }
             if (!found) throw new IOException("The original APK has no React Native bundle.");
             if (nativeCode != null && !foundNative) throw new IOException("The original APK has no supported native host.");
+            if (primaryNativeCode != null && !foundPrimary) throw new IOException("The original APK has no primary native code.");
         }
     }
     public static long copy(InputStream in, OutputStream out, long max) throws IOException {

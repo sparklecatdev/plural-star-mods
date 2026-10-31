@@ -92,7 +92,7 @@ def stage():
     source = io.BytesIO(archive)
     with zipfile.ZipFile(source, 'a', compression=zipfile.ZIP_DEFLATED) as zip_source:
         zip_source.writestr('compatibility-base.json', json.dumps(base, indent=2) + '\n')
-    files = {name: (payloads / name).read_bytes() for name in ('wallpaper-storage.bundle', 'wallpaper-storage.dex')}
+    files = {name: (payloads / name).read_bytes() for name in ('wallpaper-storage.bundle', 'wallpaper-storage.dex', 'primary.dex')}
     files['source.zip'] = source.getvalue()
     if any(not data or len(data) > (16 if name == 'source.zip' else 32) * 1024 * 1024 for name, data in files.items()):
         raise ValueError('Compatibility pack contents exceed their limits')

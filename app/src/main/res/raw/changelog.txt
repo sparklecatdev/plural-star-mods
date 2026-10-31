@@ -1,1 +1,1 @@
-Biometric or device unlock now works in newly patched apps. Rebuild your patched app with this patcher to enable it.
+Adds support for scheduled notification rest mode. Rebuild the patched app to use it.

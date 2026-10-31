@@ -211,6 +211,7 @@ test('Settings opens the mod menu; switches persist and hide disabled controls',
     './modOptions': {options: {wallpaper: true, storage: true}},
     './WallpaperControls': {WallpaperControls: host('WallpaperControls')}, './BackupTools': {BackupTools: host('BackupTools')},
     './PluralKitSettings': {PluralKitSettings: host('PluralKitSettings')},
+    './RestModeSettings': {RestModeSettings: host('RestModeSettings')},
     './CloudModSettings': {CloudModSettings: host('CloudModSettings')},
     './ModSupport': {ModSupport: host('ModSupport')}, './CustomMods': {CustomMods: host('CustomMods')},
   });

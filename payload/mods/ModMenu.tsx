@@ -16,6 +16,7 @@ import {ModSupport} from './ModSupport';
 import {CustomMods} from './CustomMods';
 import {extraCustomization, useExtraCustomization} from './extraCustomization';
 import {ExtraCustomizationMenu} from './ExtraCustomizationMenu';
+import {RestModeSettings} from './RestModeSettings';
 
 export function ModSettingsButton() {
   const [open, setOpen] = useState(false);
@@ -73,6 +74,7 @@ function ModMenu({onClose}: {onClose: () => void}) {
         <ToggleRow label="Extra Customization" desc="Hide tabs and features, simplify screens, and adjust more colors." value={extra.enabled} disabled={busy || saving || pkBusy}
           onToggle={() => { void extraCustomization.set({...extra, enabled: !extra.enabled}).catch(e => setError(String(e))); }} />
         {extra.enabled && <Btn variant="ghost" disabled={busy || saving || pkBusy} onPress={() => setExtraOpen(true)}>Open Extra Customization</Btn>}
+        <RestModeSettings disabled={busy || saving || pkBusy} />
         <PluralKitSettings disabled={busy || saving} onBusy={setPkBusy} />
         {enabled.syncPreferences && <CloudModSettings disabled={busy || saving || pkBusy} />}
         <CustomMods disabled={busy || saving || pkBusy} />

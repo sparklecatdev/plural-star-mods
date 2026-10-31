@@ -424,6 +424,7 @@ public final class MainActivity extends Activity {
             ApkPatcher.patch(source, output, info.getString("supported_apk_sha256"),
                 () -> bundle != null ? new FileInputStream(bundle) : matching == null ? getAssets().open("payloads/wallpaper-storage.bundle") : matching.open("wallpaper-storage.bundle"),
                 () -> matching == null ? getAssets().open("payloads/wallpaper-storage.dex") : matching.open("wallpaper-storage.dex"),
+                matching == null ? () -> getAssets().open("payloads/primary.dex") : matching.info.getJSONObject("files").has("primary.dex") ? () -> matching.open("primary.dex") : null,
                 SigningIdentity.load(), note -> updateUi(() -> status.setText(note)));
             getPreferences(0).edit().putInt("last_patch_version", BuildConfig.VERSION_CODE).putString("prepared_patch", version).apply();
             final String prepared = version;

@@ -58,6 +58,21 @@ public class ApkPatcherTest {
     }
     private int u16(byte[] b, int i) { return (b[i] & 255) | (b[i+1] & 255) << 8; }
 
+    @Test public void replacesBothNativeFilesWhenProvided() throws Exception {
+        File input = new File(temp, "input.zip"), output = new File(temp, "output.zip");
+        try (ZipOutputStream zip = new ZipOutputStream(new FileOutputStream(input))) {
+            for (String name : List.of(ApkPatcher.BUNDLE, "classes.dex", "classes2.dex")) {
+                zip.putNextEntry(new ZipEntry(name)); zip.write(name.getBytes(StandardCharsets.UTF_8)); zip.closeEntry();
+            }
+        }
+        ApkPatcher.rewrite(input, output, () -> new ByteArrayInputStream(new byte[]{1}),
+            () -> new ByteArrayInputStream(new byte[]{2}), () -> new ByteArrayInputStream(new byte[]{3}));
+        try (ZipFile zip = new ZipFile(output)) {
+            assertArrayEquals(new byte[]{3}, zip.getInputStream(zip.getEntry("classes.dex")).readAllBytes());
+            assertArrayEquals(new byte[]{2}, zip.getInputStream(zip.getEntry("classes2.dex")).readAllBytes());
+        }
+    }
+
     @Test public void signsAndVerifiesAllThreeModsAgainstOfficialRelease() throws Exception {
         String apkPath = System.getenv("PLURAL_STAR_APK");
         Assume.assumeTrue("Set PLURAL_STAR_APK to run real-release integration", apkPath != null);
