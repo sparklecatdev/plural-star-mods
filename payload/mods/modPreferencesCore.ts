@@ -1,4 +1,4 @@
-export type ModId = 'wallpaper' | 'storage' | 'noSpeaker' | 'singleConfirm' | 'deviceUnlock';
+export type ModId = 'wallpaper' | 'storage' | 'noSpeaker' | 'singleConfirm' | 'deviceUnlock' | 'groupView' | 'hideLockIcon' | 'syncPreferences';
 export type ModPreferences = Record<ModId, boolean>;
 export const MOD_PREFERENCES_KEY = 'sparklecat:mods';
 
@@ -7,7 +7,7 @@ export function createModPreferences(available: Pick<ModPreferences, 'wallpaper'
   read(): Promise<string | null>; write(value: string): Promise<unknown>;
   beforeDisable?(id: ModId): Promise<unknown>;
 }) {
-  let state: ModPreferences = {...available, noSpeaker: false, singleConfirm: true, deviceUnlock: false};
+  let state: ModPreferences = {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, hideLockIcon: false, syncPreferences: false};
   let loaded: Promise<void> | undefined;
   let pending: Promise<void> = Promise.resolve();
   const listeners = new Set<() => void>();
@@ -16,18 +16,21 @@ export function createModPreferences(available: Pick<ModPreferences, 'wallpaper'
     let saved: Partial<ModPreferences> | null = {};
     try { saved = raw ? JSON.parse(raw) : {}; } catch { /* Use defaults for malformed preferences. */ }
     publish({
-      wallpaper: available.wallpaper && saved?.wallpaper !== false,
-      storage: available.storage && saved?.storage !== false,
+      wallpaper: available.wallpaper && saved?.wallpaper === true,
+      storage: available.storage && saved?.storage === true,
       noSpeaker: saved?.noSpeaker === true,
-      singleConfirm: saved?.singleConfirm !== false,
+      singleConfirm: saved?.singleConfirm === true,
       deviceUnlock: saved?.deviceUnlock === true,
+      groupView: saved?.groupView === true,
+      hideLockIcon: saved?.hideLockIcon === true,
+      syncPreferences: saved?.syncPreferences === true,
     });
   }).catch(error => { loaded = undefined; throw error; });
   const setPreferences = (values: Partial<ModPreferences>): Promise<void> => {
     const save = pending.then(async () => {
       await load();
       const next = {...state};
-      for (const id of ['wallpaper', 'storage', 'noSpeaker', 'singleConfirm', 'deviceUnlock'] as ModId[]) {
+      for (const id of ['wallpaper', 'storage', 'noSpeaker', 'singleConfirm', 'deviceUnlock', 'groupView', 'hideLockIcon', 'syncPreferences'] as ModId[]) {
         if (typeof values[id] !== 'boolean') continue;
         next[id] = (id === 'wallpaper' || id === 'storage' ? available[id] : true) && values[id]!;
         if (!next[id]) await io.beforeDisable?.(id);

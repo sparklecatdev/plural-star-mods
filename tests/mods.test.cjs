@@ -25,11 +25,11 @@ test('mod switches persist independently and survive concurrent changes and rela
   const prefs = createModPreferences(both, io);
   let updates = 0; const unsubscribe = prefs.subscribe(() => updates++);
   await Promise.all([prefs.setEnabled('wallpaper', false), prefs.setEnabled('storage', false)]);
-  assert.deepEqual(plain(prefs.getSnapshot()), {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: true, deviceUnlock: false});
+  assert.deepEqual(plain(prefs.getSnapshot()), {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, hideLockIcon: false, syncPreferences: false});
   const reopened = createModPreferences(both, io); await reopened.load();
-  assert.deepEqual(plain(reopened.getSnapshot()), {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: true, deviceUnlock: false});
+  assert.deepEqual(plain(reopened.getSnapshot()), {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, hideLockIcon: false, syncPreferences: false});
   await reopened.setEnabled('wallpaper', true);
-  assert.deepEqual(JSON.parse(disk), {wallpaper: true, storage: false, noSpeaker: false, singleConfirm: true, deviceUnlock: false});
+  assert.deepEqual(JSON.parse(disk), {wallpaper: true, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, hideLockIcon: false, syncPreferences: false});
   assert.equal(updates, 3); unsubscribe();
 });
 
@@ -40,11 +40,11 @@ test('No speaker is opt-in and survives relaunch without changing other switches
   await prefs.load();
   assert.equal(prefs.getSnapshot().noSpeaker, false);
   await prefs.setEnabled('noSpeaker', true);
-  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: true, noSpeaker: true, singleConfirm: true, deviceUnlock: false});
+  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: true, noSpeaker: true, singleConfirm: false, deviceUnlock: false, groupView: false, hideLockIcon: false, syncPreferences: false});
   const reopened = createModPreferences(both, io); await reopened.load();
   assert.equal(reopened.getSnapshot().noSpeaker, true);
   await reopened.setEnabled('noSpeaker', false);
-  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: true, noSpeaker: false, singleConfirm: true, deviceUnlock: false});
+  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: true, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, hideLockIcon: false, syncPreferences: false});
 });
 
 test('confirmation and device unlock toggles persist independently', async () => {
@@ -64,16 +64,16 @@ test('failed switch save keeps the committed state and later changes still work'
   const prefs = createModPreferences(both, {read: async () => null, write: async () => { if (fail) throw Error('disk full'); }});
   await prefs.load();
   const original = prefs.getSnapshot();
-  await assert.rejects(prefs.setEnabled('wallpaper', false), /disk full/);
+  await assert.rejects(prefs.setEnabled('wallpaper', true), /disk full/);
   assert.equal(prefs.getSnapshot(), original);
-  fail = false; await prefs.setEnabled('wallpaper', false);
-  assert.equal(prefs.getSnapshot().wallpaper, false);
+  fail = false; await prefs.setEnabled('wallpaper', true);
+  assert.equal(prefs.getSnapshot().wallpaper, true);
 });
 
 test('unavailable features cannot be enabled and malformed preferences use defaults', async () => {
   const prefs = createModPreferences({wallpaper: false, storage: true}, {read: async () => '{bad', write: async () => {}});
   await prefs.load(); await prefs.setEnabled('wallpaper', true);
-  assert.deepEqual(plain(prefs.getSnapshot()), {wallpaper: false, storage: true, noSpeaker: false, singleConfirm: true, deviceUnlock: false});
+  assert.deepEqual(plain(prefs.getSnapshot()), {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, hideLockIcon: false, syncPreferences: false});
 });
 
 test('disabling storage cancels a queued restore before committing the disabled switch', async () => {
@@ -83,7 +83,7 @@ test('disabling storage cancels a queued restore before committing the disabled 
   await prefs.setEnabled('storage', false);
   assert.deepEqual(actions, ['cancel-storage', 'saved']);
   assert.equal(prefs.getSnapshot().storage, false);
-  const blocked = createModPreferences(both, {read: async () => null,
+  const blocked = createModPreferences(both, {read: async () => '{"storage":true}',
     beforeDisable: async () => { throw Error('cancel failed'); }, write: async () => assert.fail('must not disable')});
   await assert.rejects(blocked.setEnabled('storage', false), /cancel failed/);
   assert.equal(blocked.getSnapshot().storage, true);
@@ -150,4 +150,14 @@ test('interruption after restore commit keeps startup blocked until the queue is
 test('canceling a pending restore keeps the running app data untouched', async () => {
   const h = queueHarness(); await h.queue.queue(snapshot()); await h.queue.cancel(); await h.queue.apply();
   assert.deepEqual(h.actions, ['recover']); assert.equal(h.files.size, 0);
+});
+
+test('all features default off and explicit choices survive relaunch', async () => {
+  let disk = null;
+  const io = {read: async () => disk, write: async value => { disk = value; }};
+  const prefs = createModPreferences(both, io); await prefs.load();
+  assert.ok(Object.values(prefs.getSnapshot()).every(value => value === false));
+  for (const id of ['groupView', 'hideLockIcon', 'syncPreferences', 'singleConfirm']) await prefs.setEnabled(id, true);
+  const reopened = createModPreferences(both, io); await reopened.load();
+  for (const id of ['groupView', 'hideLockIcon', 'syncPreferences', 'singleConfirm']) assert.equal(reopened.getSnapshot()[id], true);
 });

@@ -29,18 +29,18 @@ Building or modifying the project? See the [developer guide](fordevs.md).
 - **Settings mod menu:** open **Settings → sparklecat's mods** to enable or disable included features. Switches save automatically; turning wallpaper off keeps the selected image, and turning storage tools off cancels a pending restore.
 - **Quick launch:** a short sparkle animation leads straight into Plural Star. Reduced-motion settings are respected. Release notes appear after updates; mod controls stay in Settings.
 - **Real APK patching:** verify the official APK, install the mod bundle and compatibility loader, align stored ZIP entries, sign with a persistent device key, verify the generated signature, then save or install the result.
-- **All patches included:** every patched APK includes wallpaper, storage tools, and PluralKit front sync. Enable features in Settings.
+- **All patches included:** every patched APK includes wallpaper, storage tools, PluralKit front sync, enhanced group view, and more. Mod switches are off by default; enable features under Settings → sparklecat's mods.
 - **PluralKit front sync:** opt in under Settings → sparklecat's mods and enter your PluralKit token to mirror primary front changes using imported PluralKit member IDs. Adapted from the closed [PR #11](https://github.com/ByHanyou/Plural-Star/pull/11).
 - **Offline source access:** save the complete patcher source ZIP from inside the patcher, including the wallpaper patch, payload build scripts, and exact upstream inputs.
 - **Latest upstream support:** the download resolves the newest stable official release. A scheduled build checks new releases every six hours and publishes matching compatibility packs when the mods and APK checks pass. No patcher update is needed for a compatible upstream release.
 - **Independent patch updates:** a themed notice at app startup opens the patcher, which downloads verified compatible patches and rebuilds the installed app. Patch releases do not require a new patcher release. The patcher also has its own APK updater.
 - **Changelogs and support:** themed release notes appear once after each installed update and can be reopened from **What's new**. Update notices include published release notes. Join the patches Discord or preview and share diagnostics under **Settings → sparklecat's mods → Help and community**, or in the patcher's **Help and community** section. Reports include versions and feature/update status; patcher reports also include device details, compatibility, and the last 20 operation outcomes. No tokens, account data, private paths, or raw error messages are included. Reports are only sent when you choose to share them.
-- **Mod sync:** mod preferences and patch versions travel with the existing cloud save and linked-device sync. Preferences restore automatically; the patcher installs patch updates.
+- **Mod sync:** opt in on each device to sync mod preferences and patch versions with existing cloud saves and linked devices. The patcher installs patch updates.
 - **No root or account required.** Included patches work offline; app downloads and update checks use GitHub over HTTPS. The patched Plural Star retains its original networking behavior.
 
 ## Custom mods
 
-Create, import, and manage small local SparkleScript mods under **Settings → sparklecat's mods → Custom mods**. The in-app editor works offline. See [SparkleScript](SPARKLESCRIPT.md) for syntax, examples, permissions, and current limits.
+Create, import, and manage small local SparkleScript mods under **Settings → sparklecat's mods → Custom mods**. Write or edit scripts in a text editor, then import them into the app. See [SparkleScript](SPARKLESCRIPT.md) for syntax, examples, permissions, and current limits.
 
 ## Suggestions
 
@@ -89,7 +89,7 @@ Keep the patcher installed and retain its app data so its per-device signing key
 
 ## Mod sync
 
-Connect Plural Star's existing cloud storage or linked-device sync. Mod switches, PluralKit front sync, and installed patch versions are saved with your app data. Controls are under **Settings → sparklecat's mods → Mod sync**.
+Connect Plural Star's existing cloud storage or linked-device sync, then enable **Sync mod preferences** under **Settings → sparklecat's mods** on each device. Mod switches, PluralKit front sync, and installed patch versions are saved with your app data. The restore control appears when sync is enabled.
 
 After restoring your save on a patched installation, preferences apply automatically. A newer saved patch version directs you to the patcher to update that device. Use **Restore mod preferences** to retry preference restoration manually.
 
@@ -114,7 +114,7 @@ ps_avatars       ps_avatars_full   ps_banners      ps_bio_images
 ps_chat_media    ps_mirror_gifs    ps_backgrounds  ps_backup
 ```
 
-Cache, Android permissions, system notification schedules, and files outside these managed directories are excluded. Device-local mod preference files are excluded; the mod sync record carries those choices and restores them after startup. Notification schedules are managed by the app after startup; confirm reminders after moving devices. Snapshots support **32 MiB of encoded payload** and up to 10,000 media files; use Plural Star's standard export for larger libraries. If data or media change during saving, the operation asks you to retry.
+Cache, Android permissions, system notification schedules, and files outside these managed directories are excluded. Device-local mod preference files are excluded; the mod sync record carries those choices when sync is enabled. Notification schedules are managed by the app after startup; confirm reminders after moving devices. Snapshots support **32 MiB of encoded payload** and up to 10,000 media files; use Plural Star's standard export for larger libraries. If data or media change during saving, the operation asks you to retry.
 
 Format v1 uses scrypt (`N=32768, r=8, p=1`, 16-byte random salt) and XSalsa20-Poly1305 secretbox (32-byte key, 24-byte random nonce). Ciphertext is authenticated before any restore writes. Paths, storage keys, format, and size are validated. Media is staged and old directories/records are retained in a private recovery journal until commit. An interrupted restore is rolled back before opening Plural Star. Device-local media paths are rebased during restore.
 

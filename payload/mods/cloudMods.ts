@@ -5,19 +5,23 @@ import {store} from '../storage';
 import {useAppStore} from '../store/appStore';
 import {saveAppSettings} from '../store/actions';
 import {NetworkManager} from '../network/NetworkManager';
-import {modPreferences} from './modPreferences';
+import {modPreferences, useModPreferences} from './modPreferences';
 import {extraCustomization} from './extraCustomization';
 import {updateChecker} from './updateCheck';
 import {options, payloadVersion, patchRuntime, patchVariant} from './modOptions';
 import {CLOUD_MODS_KEY, createCloudMods} from './cloudModsCore';
 
 export const cloudMods = createCloudMods({version: payloadVersion, runtime: patchRuntime, variant: patchVariant}, options, {
+  enabled: () => modPreferences.getSnapshot().syncPreferences,
   load: () => Promise.all([modPreferences.load(), extraCustomization.load(), updateChecker.load()]),
   read: () => AsyncStorage.getItem(CLOUD_MODS_KEY),
   write: text => store.setRaw(CLOUD_MODS_KEY, text),
-  local: () => ({enabled: {...modPreferences.getSnapshot()},
+  local: () => {
+    const {syncPreferences: _syncPreferences, ...enabled} = modPreferences.getSnapshot();
+    return {enabled,
     pkFrontSyncEnabled: useAppStore.getState().appSettings.pkFrontSyncEnabled === true,
-    automaticUpdates: true, extraCustomization: extraCustomization.getSnapshot()}),
+    automaticUpdates: true, extraCustomization: extraCustomization.getSnapshot()};
+  },
   apply: async settings => {
     await modPreferences.setPreferences(settings.enabled);
     if (settings.extraCustomization) await extraCustomization.set(settings.extraCustomization);
@@ -33,8 +37,9 @@ export const useCloudMods = () => useSyncExternalStore(cloudMods.subscribe, clou
 
 // Called only after upstream hydration, setup, and the app lock have completed.
 export function useModCloudSync(enabled: boolean) {
+  const syncEnabled = useModPreferences().syncPreferences;
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !syncEnabled) return;
     let stopped = false;
     const off: (() => void)[] = [];
     off.push(NetworkManager.onSyncApplied(keys => { if (keys.includes(CLOUD_MODS_KEY)) void cloudMods.sync(); }));
@@ -46,5 +51,5 @@ export function useModCloudSync(enabled: boolean) {
       off.push(modPreferences.subscribe(save), extraCustomization.subscribe(save), updateChecker.subscribe(save), useAppStore.subscribe(save));
     });
     return () => { stopped = true; off.forEach(fn => fn()); };
-  }, [enabled]);
+  }, [enabled, syncEnabled]);
 }

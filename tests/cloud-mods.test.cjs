@@ -23,7 +23,7 @@ const {CLOUD_MODS_KEY, readCloudMods, createCloudMods} = load('cloudModsCore.ts'
 const {createModPreferences} = load('modPreferencesCore.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
 const current = {runtime: 'plural-star-1.23.3-mods-1', variant: 'wallpaper-storage', version: '0.4.2'};
-const settings = () => ({enabled: {wallpaper: true, storage: true, noSpeaker: false, singleConfirm: true, deviceUnlock: false}, pkFrontSyncEnabled: false, automaticUpdates: true});
+const settings = () => ({enabled: {wallpaper: true, storage: true, noSpeaker: false, singleConfirm: true, deviceUnlock: false, groupView: false, hideLockIcon: false}, pkFrontSyncEnabled: false, automaticUpdates: true});
 const record = () => ({schema: 1, settings: settings(), automaticRestore: true, patches: [{...current}]});
 function harness(saved = null, available = {wallpaper: true, storage: true}) {
   let disk = saved === null ? null : JSON.stringify(saved), local = settings(), failRead = false, failWrite = false, failRestore = false;
@@ -57,7 +57,7 @@ test('legacy cloud records use toggle defaults; a later change syncs', async () 
   delete saved.settings.enabled.noSpeaker;
   delete saved.settings.enabled.singleConfirm;
   delete saved.settings.enabled.deviceUnlock;
-  assert.deepEqual(plain(readCloudMods(JSON.stringify(saved)).settings.enabled), settings().enabled);
+  assert.deepEqual(plain(readCloudMods(JSON.stringify(saved)).settings.enabled), {...settings().enabled, singleConfirm: false});
   const h = harness(saved); await h.controller.sync();
   assert.equal(h.local().enabled.noSpeaker, false);
   const next = settings(); next.enabled.noSpeaker = true; h.change(next);
@@ -159,7 +159,7 @@ test('restoring switches cancels a pending storage restore and commits both swit
   const prefs = createModPreferences({wallpaper: true, storage: true}, {read: async () => null,
     beforeDisable: async id => { actions.push('cancel-' + id); }, write: async text => { actions.push(JSON.parse(text)); }});
   await prefs.setPreferences({wallpaper: false, storage: false});
-  assert.deepEqual(plain(actions), ['cancel-wallpaper', 'cancel-storage', {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: true, deviceUnlock: false}]);
+  assert.deepEqual(plain(actions), ['cancel-wallpaper', 'cancel-storage', {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, hideLockIcon: false, syncPreferences: false}]);
 });
 
 test('upstream cloud and linked-device snapshots include the dedicated mod record', async () => {
@@ -184,7 +184,7 @@ test('runtime restore preserves credentials and preferences while leaving execut
     '../store/appStore': {useAppStore: {getState: () => ({appSettings})}},
     '../store/actions': {saveAppSettings: async next => { appSettings = next; }},
     '../network/NetworkManager': {},
-    './modPreferences': {modPreferences: {load: async () => {}, getSnapshot: () => enabled,
+    './modPreferences': {modPreferences: {load: async () => {}, getSnapshot: () => ({...enabled, syncPreferences: true}),
       setPreferences: async next => { enabled = next; }}},
     './updateCheck': {updateChecker: {load: async () => {}}},
     './modOptions': {options: settings().enabled, payloadVersion: current.version, patchRuntime: current.runtime, patchVariant: current.variant},
@@ -197,4 +197,17 @@ test('runtime restore preserves credentials and preferences while leaving execut
   assert.equal(!!cloudMods.getSnapshot().error, false);
   assert.match(cloudMods.getSnapshot().message, /patcher/);
   assert.equal(JSON.parse(disk).patches[0].version, '0.4.9');
+});
+
+test('sync opt-in is local and disabled sync does not read or apply cloud settings', async () => {
+  const raw = record(); raw.settings.enabled.syncPreferences = true;
+  assert.equal('syncPreferences' in readCloudMods(JSON.stringify(raw)).settings.enabled, false);
+  let enabled = false, reads = 0, applies = 0;
+  const controller = createCloudMods(current, {wallpaper: true, storage: true}, {
+    enabled: () => enabled, read: async () => { reads++; return JSON.stringify(record()); },
+    write: async () => {}, local: settings, apply: async () => { applies++; }, restore: async () => {},
+  });
+  await controller.sync(); assert.equal(reads, 0); assert.equal(applies, 0);
+  enabled = true; await controller.sync(); assert.equal(applies, 1);
+  enabled = false; await controller.sync(); assert.equal(applies, 1);
 });

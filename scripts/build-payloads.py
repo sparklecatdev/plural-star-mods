@@ -56,9 +56,38 @@ def main():
         run('git', 'apply', str(ROOT / 'payload/no-speaker.patch'))
         run('git', 'apply', str(ROOT / 'payload/confirm-once.patch'))
         run('git', 'apply', str(ROOT / 'payload/device-unlock.patch'))
-        run('git', 'apply', str(ROOT / 'payload/lock-icon.patch'))
         run('git', 'apply', str(ROOT / 'payload/extra-customization.patch'))
+        run('git', 'apply', str(ROOT / 'payload/lock-icon.patch'))
+        group_pane = SOURCE / 'src/screens/systemManager/GroupBrowsePane.tsx'
+        classic = group_pane.read_text()
         run('git', 'apply', '--unidiff-zero', str(ROOT / 'payload/group-view.patch'))
+        (group_pane.parent / 'ClassicGroupBrowsePane.tsx').write_text(classic)
+        enhanced = group_pane.read_text()
+        assert enhanced.count('showAllAtRoot={showAllAtRoot}') == 1
+        enhanced = enhanced.replace('showAllAtRoot={showAllAtRoot}', 'showAllAtRoot={showAllAtRoot} enhanced')
+        (group_pane.parent / 'EnhancedGroupBrowsePane.tsx').write_text(enhanced)
+        group_pane.write_text("""import React from 'react';
+import {GroupBrowsePane as Classic} from './ClassicGroupBrowsePane';
+import {GroupBrowsePane as Enhanced} from './EnhancedGroupBrowsePane';
+import {useModPreferences} from '../../mods/modPreferences';
+export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
+  useModPreferences().groupView ? <Enhanced {...props} /> : <Classic {...props} />;
+""")
+        browser = SOURCE / 'src/components/GroupBrowser.tsx'
+        text = browser.read_text()
+        assert text.count('  showAllAtRoot?: boolean;') == 1 and text.count('  showAllAtRoot,') == 1
+        text = text.replace('  showAllAtRoot?: boolean;', '  showAllAtRoot?: boolean;\n  enhanced?: boolean;')
+        text = text.replace('  showAllAtRoot,', '  showAllAtRoot,\n  enhanced,')
+        target = 'sortMembers(browseId === null ? cfListable : inFolder(cfListable), sort)'
+        assert text.count(target) == 1
+        browser.write_text(text.replace(target, 'browseId === null && !enhanced ? [] : ' + target))
+        card = SOURCE / 'src/screens/members/MemberCard.tsx'
+        text = card.read_text()
+        target = '  const memberTags = m.tags || [];'
+        assert text.count(target) == 1
+        text = "import {useModPreferences} from '../../mods/modPreferences';\n" + text
+        text = text.replace(target, '  const showGroupTags = useModPreferences().groupView;\n' + target)
+        card.write_text(text.replace('{memberTags.length > 0 && (', '{showGroupTags && memberTags.length > 0 && ('))
         shutil.copytree(ROOT / 'payload/mods', SOURCE / 'src/mods', dirs_exist_ok=True)
         assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', release['version'])
         assert re.fullmatch(r'[a-z0-9.-]{1,80}', release['runtime'])

@@ -219,7 +219,12 @@ test('Settings opens the mod menu; switches persist and hide disabled controls',
   assert.equal(renderer.root.findAllByType('Modal').length, 0);
   await act(async () => renderer.root.findByType('Button').props.onPress());
   assert.equal(renderer.root.findAllByType('Modal').length, 1);
-  assert.equal(renderer.root.findAllByType('WallpaperControls').length, 1);
+  assert.equal(renderer.root.findAllByType('WallpaperControls').length, 0);
+  assert.equal(renderer.root.findAllByType('CloudModSettings').length, 0);
+  for (const label of ['Wallpaper', 'Storage tools', 'Sync mod preferences']) {
+    await act(async () => { renderer.root.findAllByType('Toggle').find(n => n.props.label === label).props.onToggle(); await new Promise(setImmediate); });
+  }
+  assert.equal(renderer.root.findAllByType('CloudModSettings').length, 1);
   assert.equal(renderer.root.findAllByType('PluralKitSettings').length, 1);
   await act(async () => renderer.root.findByType('PluralKitSettings').props.onBusy(true));
   assert.equal(renderer.root.findByType('BackupTools').props.disabled, true);
@@ -227,15 +232,16 @@ test('Settings opens the mod menu; switches persist and hide disabled controls',
   await act(async () => renderer.root.findByType('Modal').props.onRequestClose());
   assert.equal(renderer.root.findAllByType('Modal').length, 1);
   await act(async () => renderer.root.findByType('PluralKitSettings').props.onBusy(false));
-  for (const label of ['Wallpaper', 'Storage tools', 'Allow No speaker']) {
+  for (const label of ['Wallpaper', 'Storage tools', 'Allow No speaker', 'Enhanced group view', 'Hide inactive lock icon', 'Sync mod preferences']) {
     await act(async () => {
       renderer.root.findAllByType('Toggle').find(n => n.props.label === label).props.onToggle();
       await new Promise(setImmediate);
     });
   }
-  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: false, noSpeaker: true, singleConfirm: true, deviceUnlock: false});
+  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: false, noSpeaker: true, singleConfirm: false, deviceUnlock: false, groupView: true, hideLockIcon: true, syncPreferences: false});
   assert.equal(renderer.root.findAllByType('WallpaperControls').length, 0);
   assert.equal(renderer.root.findAllByType('BackupTools').length, 0);
+  assert.equal(renderer.root.findAllByType('CloudModSettings').length, 0);
   await act(async () => renderer.root.findAllByType('Button').find(n => n.props.children === 'Done').props.onPress());
   assert.equal(renderer.root.findAllByType('Modal').length, 0);
   await act(async () => renderer.unmount());
@@ -460,12 +466,13 @@ test('mod support previews before sharing and opens the patches community', asyn
   await act(async () => renderer.unmount());
 });
 
-test('custom mods can be written in app, saved disabled, and enabled after appearance permission', async () => {
+test('custom mods import disabled and can be enabled after appearance permission', async () => {
   const {parseSparkle} = load('sparkleScriptCore.ts'); const rows = []; const dialogs = [];
+  const source = 'mod "Lilac" version "1.0.0" { allow appearance when tap { accent "#abcdef" } }';
   const {CustomMods} = load('CustomMods.tsx', {
-    'react-native': {View: 'View', Alert: {alert: (title, message, buttons) => { dialogs.push(title); if (title === 'Allow appearance changes?') buttons[1].onPress(); }}},
-    '@react-native-documents/picker': {pick: async () => [], keepLocalCopy: async () => [], isErrorWithCode: () => false, errorCodes: {}},
-    'react-native-blob-util': {fs: {}}, '../components/AppText': {Text: 'Text', TextInput: 'TextInput'},
+    'react-native': {View: 'View', Linking: {}, Share: {}, Alert: {alert: (title, message, buttons) => { dialogs.push(title); if (title === 'Allow appearance changes?') buttons[1].onPress(); }}},
+    '@react-native-documents/picker': {pick: async () => [{uri: 'file://script', size: source.length}], keepLocalCopy: async () => [{status: 'success', localUri: 'file://script'}], isErrorWithCode: () => false, errorCodes: {}},
+    'react-native-blob-util': {fs: {stat: async () => ({size: source.length}), readFile: async () => source, exists: async () => false}}, '../components/AppText': {Text: 'Text'},
     '../components/controls': {Btn: host('Button'), ToggleRow: host('Toggle')},
     '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n},
     './sparkleScriptCore': {parseSparkle},
@@ -474,10 +481,47 @@ test('custom mods can be written in app, saved disabled, and enabled after appea
   });
   let renderer;
   await act(async () => { renderer = create(React.createElement(CustomMods, {disabled: false})); });
-  await act(async () => renderer.root.findByType('TextInput').props.onChangeText('mod "Lilac" version "1.0.0" { allow appearance when tap { accent "#abcdef" } }'));
-  await act(async () => renderer.root.findAllByType('Button').find(n => n.props.children === 'Save custom mod').props.onPress());
+  await act(async () => renderer.root.findAllByType('Button').find(n => n.props.children === 'Import .sparkle').props.onPress());
   assert.equal(rows.length, 1); assert.equal(rows[0].enabled, false);
   await act(async () => renderer.root.findByType('Toggle').props.onToggle());
-  assert.equal(rows[0].enabled, true); assert.deepEqual(dialogs, ['Mod saved', 'Allow appearance changes?']);
+  assert.equal(rows[0].enabled, true); assert.deepEqual(dialogs, ['Mod imported', 'Allow appearance changes?']);
+  await act(async () => renderer.unmount());
+});
+
+test('group view chooses the classic or enhanced pane from the saved switch', async () => {
+  let enabled = false;
+  const {GroupBrowsePane} = load('src/screens/systemManager/GroupBrowsePane.tsx', {
+    './ClassicGroupBrowsePane': {GroupBrowsePane: host('Classic')},
+    './EnhancedGroupBrowsePane': {GroupBrowsePane: host('Enhanced')},
+    '../../mods/modPreferences': {useModPreferences: () => ({groupView: enabled})},
+  }, true);
+  let renderer;
+  await act(async () => { renderer = create(React.createElement(GroupBrowsePane, {example: 'kept'})); });
+  assert.equal(renderer.root.findByType('Classic').props.example, 'kept');
+  enabled = true;
+  await act(async () => renderer.update(React.createElement(GroupBrowsePane, {example: 'kept'})));
+  assert.equal(renderer.root.findByType('Enhanced').props.example, 'kept');
+  await act(async () => renderer.unmount());
+});
+
+test('inactive lock button hides only when its switch is enabled', async () => {
+  let hide = false;
+  const {AppHeader} = load('src/components/AppHeader.tsx', {
+    'react-native': {View: 'View', TouchableOpacity: 'TouchableOpacity', StyleSheet: {create: x => x}, StatusBar: {}, Platform: {OS: 'android'}},
+    './AppText': {Text: 'Text'}, './AccentText': {AccentText: host('AccentText')},
+    'react-native-safe-area-context': {useSafeAreaInsets: () => ({top: 0})},
+    'react-i18next': {useTranslation: () => ({t: x => x})},
+    '../theme': {Fonts: {}, readableAccent: () => '#fff'}, '../themeContext': {useTheme: () => theme},
+    '../mods/extraCustomization': {useExtraCustomization: () => ({enabled: false})},
+    '../mods/modPreferences': {useModPreferences: () => ({hideLockIcon: hide})},
+  }, true);
+  let renderer; const props = {systemName: 'System', canLock: false, onLock: () => {}, onOpenSettings: () => {}};
+  await act(async () => { renderer = create(React.createElement(AppHeader, props)); });
+  assert.equal(renderer.root.findAllByProps({accessibilityLabel: 'a11y.lockApp'}).length, 1);
+  hide = true;
+  await act(async () => renderer.update(React.createElement(AppHeader, props)));
+  assert.equal(renderer.root.findAllByProps({accessibilityLabel: 'a11y.lockApp'}).length, 0);
+  await act(async () => renderer.update(React.createElement(AppHeader, {...props, canLock: true})));
+  assert.equal(renderer.root.findAllByProps({accessibilityLabel: 'a11y.lockApp'}).length, 1);
   await act(async () => renderer.unmount());
 });

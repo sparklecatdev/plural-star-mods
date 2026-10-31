@@ -1,21 +1,20 @@
-diff --git a/src/components/AppHeader.tsx b/src/components/AppHeader.tsx
 --- a/src/components/AppHeader.tsx
 +++ b/src/components/AppHeader.tsx
-@@ -39,7 +39,7 @@ export const AppHeader = ({systemName, canLock, onLock, onOpenSettings, onOpenPr
-           <View style={styles.titleBox}>{title}</View>
-         )}
+@@ -9,2 +9,3 @@
+ import {useExtraCustomization} from '../mods/extraCustomization';
++import {useModPreferences} from '../mods/modPreferences';
+ 
+@@ -16,2 +17,3 @@
+   const extra = useExtraCustomization();
++  const {hideLockIcon} = useModPreferences();
+   const insets = useSafeAreaInsets();
+@@ -43,3 +45,3 @@
          <View style={styles.headerRight} accessibilityRole="toolbar" accessibilityLabel={t('a11y.toolbar')}>
 -          <TouchableOpacity
-+          {canLock && <TouchableOpacity
++          {(!hideLockIcon || canLock) && <TouchableOpacity
              onPress={onLock}
-             disabled={!canLock}
-             activeOpacity={canLock ? 0.7 : 1}
-@@ -49,7 +49,7 @@ export const AppHeader = ({systemName, canLock, onLock, onOpenSettings, onOpenPr
-             hitSlop={HIT_SLOP}
-             style={styles.settingsBtn}>
+@@ -53,3 +55,3 @@
              <Text style={[styles.settingsIcon, {color: canLock ? C.dim : C.muted, opacity: canLock ? 1 : 0.35}]} maxFontSizeMultiplier={1.2} allowFontScaling={false} importantForAccessibility="no" accessibilityElementsHidden>🔒</Text>
 -          </TouchableOpacity>
 +          </TouchableOpacity>}
            <TouchableOpacity onPress={onOpenSettings} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('a11y.settings')} hitSlop={HIT_SLOP} style={styles.settingsBtn}>
-             <Text style={[styles.settingsIcon, {color: C.dim}]} maxFontSizeMultiplier={1.2} allowFontScaling={false} importantForAccessibility="no" accessibilityElementsHidden>⚙</Text>
-           </TouchableOpacity>
