@@ -56,6 +56,7 @@ def main():
         storage = 'storage' in variant
         if wallpaper:
             run('git', 'apply', str(ROOT / 'payload/wallpaper-pr-24.patch'))
+        run('git', 'apply', '--unidiff-zero', str(ROOT / 'payload/profile-palettes-pr-23.patch'))
         run('git', 'apply', str(ROOT / 'payload/pluralkit-pr-11.patch'))
         run('git', 'apply', str(ROOT / 'payload/no-speaker.patch'))
         run('git', 'apply', str(ROOT / 'payload/confirm-once.patch'))

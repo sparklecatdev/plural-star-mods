@@ -1,0 +1,441 @@
+diff --git a/src/appInfo.ts b/src/appInfo.ts
+index 4ba13f8..c93fdff 100644
+--- a/src/appInfo.ts
++++ b/src/appInfo.ts
+@@ -9,0 +10 @@ export const CREDITS: {name: string; roleKey: string; url: string}[] = [
++  {name: 'sparklecatdev', roleKey: 'hub.creditCoDeveloper', url: 'https://github.com/sparklecatdev'},
+@@ -11 +11,0 @@ export const CREDITS: {name: string; roleKey: string; url: string}[] = [
+-  {name: 'sparklecatdev', roleKey: 'hub.creditIos', url: 'https://github.com/sparklecatdev'},
+diff --git a/src/components/PaletteColorField.tsx b/src/components/PaletteColorField.tsx
+new file mode 100644
+index 0000000..04d04b7
+--- /dev/null
++++ b/src/components/PaletteColorField.tsx
+@@ -0,0 +1,29 @@
++import React, {useState} from 'react';
++import {View, TouchableOpacity} from 'react-native';
++import {Text} from './AppText';
++import {ColorPickerModal} from './ColorPickerModal';
++import {fontScale} from '../theme';
++import type {ThemeColors} from '../theme';
++import {isValidHex, normalizeHex} from '../utils';
++
++export const PaletteColorField = ({label, value, onChange, T}: {label: string; value: string; onChange: (v: string) => void; T: ThemeColors}) => {
++  const fs = fontScale(T);
++  const [open, setOpen] = useState(false);
++  const valid = isValidHex(normalizeHex(value));
++  return (
++    <View style={{flex: 1}}>
++      <Text style={{fontSize: fs(9), letterSpacing: 1, textTransform: 'uppercase', color: T.dim, marginBottom: 4, fontWeight: '600'}}>{label}</Text>
++      <TouchableOpacity onPress={() => setOpen(true)} activeOpacity={0.7}
++        accessibilityRole="button" accessibilityLabel={label} accessibilityValue={{text: value}}
++        hitSlop={{top: 15, bottom: 15}} style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
++        <View style={{width: 20, height: 20, borderRadius: 4, backgroundColor: valid ? normalizeHex(value) : '#333', borderWidth: 1, borderColor: T.border}} />
++        <View style={{flex: 1, backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5}}>
++          <Text style={{fontSize: fs(12), fontFamily: 'monospace', color: T.text}} numberOfLines={1}>{value}</Text>
++        </View>
++      </TouchableOpacity>
++      <ColorPickerModal visible={open} title={label} value={value}
++        onSave={hex => { onChange(hex); setOpen(false); }}
++        onClose={() => setOpen(false)} />
++    </View>
++  );
++};
+diff --git a/src/components/ProfilePalettePicker.tsx b/src/components/ProfilePalettePicker.tsx
+new file mode 100644
+index 0000000..bd2a1d5
+--- /dev/null
++++ b/src/components/ProfilePalettePicker.tsx
+@@ -0,0 +1,83 @@
++import React, {useState} from 'react';
++import {View, TouchableOpacity} from 'react-native';
++import {useTranslation} from 'react-i18next';
++import {Text} from './AppText';
++import {PaletteColorField} from './PaletteColorField';
++import {BUILTIN_PALETTES, fontScale, normalizeProfilePalette, sameProfilePalette, profileWindowTheme} from '../theme';
++import type {CustomPalette, ProfilePalette, ThemeColors} from '../theme';
++import {useAppStore} from '../store/appStore';
++
++interface Props {
++  T: ThemeColors;
++  value?: ProfilePalette;
++  onChange: (palette: ProfilePalette | undefined) => void;
++  legacyBackground?: boolean;
++}
++
++export const ProfilePalettePicker = ({T, value, onChange, legacyBackground = false}: Props) => {
++  const {t} = useTranslation();
++  const fs = fontScale(T);
++  const saved = useAppStore((s: {palettes: CustomPalette[]}) => s.palettes);
++  const [open, setOpen] = useState(false);
++  const palette = normalizeProfilePalette(value);
++  const choices = [...BUILTIN_PALETTES, ...saved].filter(p => normalizeProfilePalette(p));
++  const label = (p: typeof choices[number]) => p.id === '__dark__'
++    ? t('modal.paletteObsidian') : p.id === '__light__' ? t('modal.paletteSteel') : p.name;
++  const matched = palette ? choices.find(p => sameProfilePalette(p, palette)) : undefined;
++  const selectedLabel = matched ? label(matched) : palette ? t('profilePalette.custom')
++    : legacyBackground ? t('profilePalette.colorBackground') : t('profilePalette.appTheme');
++  const preview = profileWindowTheme(T, palette);
++  const swatches = (p: ProfilePalette) => (
++    <View style={{flexDirection: 'row', gap: 3}} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
++      {[p.bg, p.accent, p.text, p.mid].map((color, i) => (
++        <View key={i} style={{width: 16, height: 16, borderRadius: 4, backgroundColor: color, borderWidth: 1, borderColor: T.border}} />
++      ))}
++    </View>
++  );
++
++  return (
++    <View style={{marginBottom: 14}}>
++      <Text accessibilityRole="header" style={{fontSize: fs(12), fontWeight: '600', color: T.text, marginBottom: 6}}>{t('profilePalette.title')}</Text>
++      <Text style={{fontSize: fs(11), color: T.muted, marginBottom: 10}}>{t('profilePalette.hint')}</Text>
++      <TouchableOpacity onPress={() => setOpen(v => !v)} accessibilityRole="button"
++        accessibilityLabel={t('profilePalette.title')} accessibilityValue={{text: selectedLabel}} accessibilityState={{expanded: open}}
++        style={{flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface}}>
++        {palette ? swatches(palette) : null}
++        <Text style={{flex: 1, fontSize: fs(13), color: T.text}}>{selectedLabel}</Text>
++        <Text style={{color: T.dim}} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{open ? '▲' : '▼'}</Text>
++      </TouchableOpacity>
++      {open ? (
++        <View style={{gap: 8, marginTop: 8}}>
++          {[undefined, ...choices].map((p, i) => {
++            const selected = p ? !!palette && sameProfilePalette(palette, p) : !palette && !legacyBackground;
++            return (
++              <TouchableOpacity key={p?.id || `app-${i}`} onPress={() => {onChange(normalizeProfilePalette(p)); setOpen(false);}}
++                accessibilityRole="button" accessibilityLabel={p ? label(p) : t('profilePalette.appTheme')} accessibilityState={{selected}}
++                style={{flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: selected ? T.accent : T.border, backgroundColor: T.surface}}>
++                {p ? swatches(p) : null}
++                <Text style={{flex: 1, fontSize: fs(13), color: T.text}}>{p ? label(p) : t('profilePalette.appTheme')}</Text>
++                {selected ? <Text style={{color: T.accent}} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">✓</Text> : null}
++              </TouchableOpacity>
++            );
++          })}
++        </View>
++      ) : null}
++      {palette ? (
++        <>
++          <View style={{flexDirection: 'row', gap: 12, marginTop: 14}}>
++            <PaletteColorField label={t('modal.palBg')} value={palette.bg} onChange={bg => onChange({...palette, bg})} T={T} />
++            <PaletteColorField label={t('modal.palAccent')} value={palette.accent} onChange={accent => onChange({...palette, accent})} T={T} />
++          </View>
++          <View style={{flexDirection: 'row', gap: 12, marginTop: 14}}>
++            <PaletteColorField label={t('modal.palText')} value={palette.text} onChange={text => onChange({...palette, text})} T={T} />
++            <PaletteColorField label={t('modal.palMid')} value={palette.mid} onChange={mid => onChange({...palette, mid})} T={T} />
++          </View>
++          <View style={{marginTop: 14, padding: 14, backgroundColor: preview.bg, borderRadius: 10, borderWidth: 1, borderColor: preview.border}}>
++            <Text style={{fontSize: fs(14), color: preview.accent, fontWeight: '600'}}>{t('profilePalette.preview')}</Text>
++            <Text style={{fontSize: fs(12), color: preview.text, marginTop: 6}}>{t('profilePalette.previewText')}</Text>
++          </View>
++        </>
++      ) : null}
++    </View>
++  );
++};
+diff --git a/src/components/SystemProfileCard.tsx b/src/components/SystemProfileCard.tsx
+index 0aa0893..d0970a9 100644
+--- a/src/components/SystemProfileCard.tsx
++++ b/src/components/SystemProfileCard.tsx
+@@ -0,0 +1 @@
++import {useModPreferences} from '../mods/modPreferences';
+@@ -7,2 +8,3 @@ import {getInitials} from '../utils';
+-import {fontScale, initialOn} from '../theme';
+-import {useTheme} from '../themeContext';
++import {fontScale, initialOn, profileWindowTheme, normalizeProfilePalette} from '../theme';
++import type {ProfilePalette} from '../theme';
++import {ThemeProvider, useTheme} from '../themeContext';
+@@ -11,0 +14 @@ interface Props {
++  palette?: ProfilePalette;
+@@ -20,2 +23,5 @@ interface Props {
+-export const SystemProfileCard = ({name, description, avatar, banner, children, bottomInset = 0, embedded = false}: Props) => {
+-  const T = useTheme();
++export const SystemProfileCard = ({name, palette, description, avatar, banner, children, bottomInset = 0, embedded = false}: Props) => {
++  const {profilePalettes} = useModPreferences();
++  const baseT = useTheme();
++  const colored = profilePalettes && !!normalizeProfilePalette(palette);
++  const T = profileWindowTheme(baseT, profilePalettes ? palette : undefined);
+@@ -25 +31 @@ export const SystemProfileCard = ({name, description, avatar, banner, children,
+-    <>
++    <ThemeProvider value={T}>
+@@ -29 +35 @@ export const SystemProfileCard = ({name, description, avatar, banner, children,
+-      <View style={{paddingHorizontal: embedded ? 0 : 16, paddingTop: banner || embedded ? 0 : 20}}>
++      <View style={{paddingHorizontal: embedded && !colored ? 0 : 16, paddingTop: banner || (embedded && !colored) ? 0 : 20}}>
+@@ -56 +62 @@ export const SystemProfileCard = ({name, description, avatar, banner, children,
+-    </>
++    </ThemeProvider>
+@@ -58 +64,2 @@ export const SystemProfileCard = ({name, description, avatar, banner, children,
+-  if (embedded) return inner;
++  if (embedded && !colored) return inner;
++  if (embedded) return <View style={{backgroundColor: T.bg, borderRadius: 14, overflow: 'hidden', paddingBottom: 14}}>{inner}</View>;
+@@ -60 +67 @@ export const SystemProfileCard = ({name, description, avatar, banner, children,
+-    <ScrollView style={{flex: 1}} contentContainerStyle={{paddingBottom: 24 + bottomInset}}>
++    <ScrollView style={{flex: 1, backgroundColor: T.bg}} contentContainerStyle={{paddingBottom: 24 + bottomInset}}>
+diff --git a/src/i18n/en.json b/src/i18n/en.json
+index 36eb8a6..6c58ce6 100644
+--- a/src/i18n/en.json
++++ b/src/i18n/en.json
+@@ -671,0 +672 @@
++    "creditCoDeveloper": "Co-developer",
+@@ -1487,0 +1489,9 @@
++  "profilePalette": {
++    "title": "Profile Palette",
++    "hint": "Choose a saved palette or customize its colors for this profile window. Friends you share this profile with will see the same palette.",
++    "custom": "Custom Palette",
++    "appTheme": "Use App Theme",
++    "colorBackground": "Color Background",
++    "preview": "Palette Preview",
++    "previewText": "This palette applies only to this profile."
++  },
+diff --git a/src/modals/MemberModal.tsx b/src/modals/MemberModal.tsx
+index dbc609e..eb55af1 100644
+--- a/src/modals/MemberModal.tsx
++++ b/src/modals/MemberModal.tsx
+@@ -0,0 +1 @@
++import {useModPreferences} from '../mods/modPreferences';
+@@ -7,0 +9 @@ import {Sheet} from '../components/Sheet';
++import {ProfilePalettePicker} from '../components/ProfilePalettePicker';
+@@ -10 +12 @@ import {ColorPickerModal} from '../components/ColorPickerModal';
+-import {fontScale, ensureReadable, initialOn, inkOn, profileTheme} from '../theme';
++import {fontScale, ensureReadable, initialOn, inkOn, profileWindowTheme, normalizeProfilePalette, sameProfilePalette} from '../theme';
+@@ -67,2 +69,3 @@ export const MemberModal = ({visible, member, members, groups, settings, onSave,
+-  const bgOn = readOnly && !!f.profileBg && isValidHex(f.color);
+-  const T = React.useMemo(() => (bgOn ? profileTheme(baseT, f.color) : baseT), [bgOn, baseT, f.color]);
++  const {profilePalettes} = useModPreferences();
++  const bgOn = readOnly && ((profilePalettes && !!normalizeProfilePalette(f.profilePalette)) || (!!f.profileBg && isValidHex(f.color)));
++  const T = React.useMemo(() => readOnly ? profileWindowTheme(baseT, profilePalettes ? f.profilePalette : undefined, f.profileBg ? f.color : undefined) : baseT, [readOnly, baseT, profilePalettes, f.profilePalette, f.profileBg, f.color]);
+@@ -93 +96,3 @@ export const MemberModal = ({visible, member, members, groups, settings, onSave,
+-      const same = cur.banner === member.banner && cur.avatar === member.avatar && had.length === next.length
++      const same = cur.banner === member.banner && cur.avatar === member.avatar
++        && cur.color === member.color && cur.profileBg === member.profileBg
++        && sameProfilePalette(cur.profilePalette, member.profilePalette) && had.length === next.length
+@@ -95 +100 @@ export const MemberModal = ({visible, member, members, groups, settings, onSave,
+-      return same ? cur : {...cur, banner: member.banner, avatar: member.avatar, customFields: member.customFields};
++      return same ? cur : {...cur, banner: member.banner, avatar: member.avatar, color: member.color, profileBg: member.profileBg, profilePalette: normalizeProfilePalette(member.profilePalette), customFields: member.customFields};
+@@ -373 +378 @@ export const MemberModal = ({visible, member, members, groups, settings, onSave,
+-              <TouchableOpacity onPress={() => set('profileBg', !f.profileBg)} activeOpacity={0.8}
++              <TouchableOpacity onPress={() => { if (profilePalettes) set('profilePalette', undefined); set('profileBg', !f.profileBg); }} activeOpacity={0.8}
+@@ -390,0 +396,3 @@ export const MemberModal = ({visible, member, members, groups, settings, onSave,
++          {profilePalettes && <ProfilePalettePicker T={T} value={f.profilePalette} legacyBackground={!!f.profileBg}
++            onChange={profilePalette => { set('profilePalette', profilePalette); set('profileBg', false); }} />}
++
+diff --git a/src/modals/SystemProfileModal.tsx b/src/modals/SystemProfileModal.tsx
+index d955297..aabc19c 100644
+--- a/src/modals/SystemProfileModal.tsx
++++ b/src/modals/SystemProfileModal.tsx
+@@ -0,0 +1 @@
++import {useModPreferences} from '../mods/modPreferences';
+@@ -5,0 +7 @@ import {Sheet} from '../components/Sheet';
++import {ProfilePalettePicker} from '../components/ProfilePalettePicker';
+@@ -12,2 +14,2 @@ import {SystemInfo} from '../utils';
+-import {fontScale} from '../theme';
+-import {useTheme} from '../themeContext';
++import {fontScale, profileWindowTheme, normalizeProfilePalette, sameProfilePalette} from '../theme';
++import {ThemeProvider, useTheme} from '../themeContext';
+@@ -27 +29,2 @@ export const SystemProfileModal = ({visible, system, onSave, onClose}: Props) =>
+-  const T = useTheme();
++  const {profilePalettes} = useModPreferences();
++  const baseT = useTheme();
+@@ -29 +32 @@ export const SystemProfileModal = ({visible, system, onSave, onClose}: Props) =>
+-  const fs = fontScale(T);
++  const fs = fontScale(baseT);
+@@ -30,0 +34 @@ export const SystemProfileModal = ({visible, system, onSave, onClose}: Props) =>
++  const T = mode === 'read' ? profileWindowTheme(baseT, profilePalettes ? system.profilePalette : undefined) : baseT;
+@@ -45 +49,2 @@ export const SystemProfileModal = ({visible, system, onSave, onClose}: Props) =>
+-    (f.banner || '') !== (system.banner || '');
++    (f.banner || '') !== (system.banner || '') ||
++    !sameProfilePalette(f.profilePalette, system.profilePalette);
+@@ -54 +59 @@ export const SystemProfileModal = ({visible, system, onSave, onClose}: Props) =>
+-      await onSave({...system, name: f.name, description: f.description, avatar: f.avatar, banner: f.banner});
++      await onSave({...system, name: f.name, description: f.description, avatar: f.avatar, banner: f.banner, profilePalette: normalizeProfilePalette(f.profilePalette)});
+@@ -86,0 +92 @@ export const SystemProfileModal = ({visible, system, onSave, onClose}: Props) =>
++    <ThemeProvider value={T}>
+@@ -104,0 +111 @@ export const SystemProfileModal = ({visible, system, onSave, onClose}: Props) =>
++          palette={system.profilePalette}
+@@ -149,0 +157,2 @@ export const SystemProfileModal = ({visible, system, onSave, onClose}: Props) =>
++          {profilePalettes && <ProfilePalettePicker T={T} value={f.profilePalette} onChange={profilePalette => setF(x => ({...x, profilePalette}))} />}
++
+@@ -154,0 +164 @@ export const SystemProfileModal = ({visible, system, onSave, onClose}: Props) =>
++    </ThemeProvider>
+diff --git a/src/modals/system/PaletteSection.tsx b/src/modals/system/PaletteSection.tsx
+index e86ffea..6e45ad3 100644
+--- a/src/modals/system/PaletteSection.tsx
++++ b/src/modals/system/PaletteSection.tsx
+@@ -10 +10 @@ import {uid, upsertById, hexOr, isValidHex, normalizeHex} from '../../utils';
+-import {ColorPickerModal} from '../../components/ColorPickerModal';
++import {PaletteColorField as HexField} from '../../components/PaletteColorField';
+@@ -14,23 +13,0 @@ import {sectionLabel} from '../../components/controls';
+-const HexField = ({label, value, onChange}: {label: string; value: string; onChange: (v: string) => void}) => {
+-  const T = useTheme();
+-  const fs = fontScale(T);
+-  const [open, setOpen] = useState(false);
+-  const valid = isValidHex(normalizeHex(value));
+-  return (
+-    <View style={{flex: 1}}>
+-      <Text style={sectionLabel(T, {fontSize: fs(9), marginBottom: 4})}>{label}</Text>
+-      <TouchableOpacity onPress={() => setOpen(true)} activeOpacity={0.7}
+-        accessibilityRole="button" accessibilityLabel={label} accessibilityValue={{text: value}}
+-        hitSlop={{top: 15, bottom: 15}} style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
+-        <View style={{width: 20, height: 20, borderRadius: 4, backgroundColor: valid ? normalizeHex(value) : '#333', borderWidth: 1, borderColor: T.border}} />
+-        <View style={{flex: 1, backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5}}>
+-          <Text style={{fontSize: fs(12), fontFamily: 'monospace', color: T.text}} numberOfLines={1}>{value}</Text>
+-        </View>
+-      </TouchableOpacity>
+-      <ColorPickerModal visible={open} title={label} value={value}
+-        onSave={hex => { onChange(hex); setOpen(false); }}
+-        onClose={() => setOpen(false)} />
+-    </View>
+-  );
+-};
+-
+@@ -134,2 +111,2 @@ export const PaletteSection = ({palettes, activePaletteId, onSavePalettes, onSel
+-              <HexField label={t('modal.palBg')} value={palBg} onChange={setPalBg} />
+-              <HexField label={t('modal.palAccent')} value={palAccent} onChange={setPalAccent} />
++              <HexField T={T} label={t('modal.palBg')} value={palBg} onChange={setPalBg} />
++              <HexField T={T} label={t('modal.palAccent')} value={palAccent} onChange={setPalAccent} />
+@@ -138,2 +115,2 @@ export const PaletteSection = ({palettes, activePaletteId, onSavePalettes, onSel
+-              <HexField label={t('modal.palText')} value={palText} onChange={setPalText} />
+-              <HexField label={t('modal.palMid')} value={palMid} onChange={setPalMid} />
++              <HexField T={T} label={t('modal.palText')} value={palText} onChange={setPalText} />
++              <HexField T={T} label={t('modal.palMid')} value={palMid} onChange={setPalMid} />
+diff --git a/src/model/types.ts b/src/model/types.ts
+index 8944e7e..0d2f91f 100644
+--- a/src/model/types.ts
++++ b/src/model/types.ts
+@@ -2 +2 @@ import type {SupportedLanguage} from '../i18n/i18n';
+-import type {CustomPalette} from '../themeColors';
++import type {CustomPalette, ProfilePalette} from '../themeColors';
+@@ -5,0 +6 @@ export interface SystemInfo {
++  profilePalette?: ProfilePalette;
+@@ -94,0 +96 @@ export interface Member {
++  profilePalette?: ProfilePalette;
+diff --git a/src/network/mirror/build.ts b/src/network/mirror/build.ts
+index db5a612..61c013a 100644
+--- a/src/network/mirror/build.ts
++++ b/src/network/mirror/build.ts
+@@ -0,0 +1 @@
++import {normalizeProfilePalette} from '../../themeColors';
+@@ -128,0 +130 @@ const buildSystemProfile = async (src: MirrorSource): Promise<MirrorPart<MirrorS
++      profilePalette: normalizeProfilePalette(sys.profilePalette),
+@@ -237,0 +240,2 @@ const buildMembers = async (src: MirrorSource, buckets: PrivacyBucket[], peerId:
++      profileBg: m.profileBg === true || undefined,
++      profilePalette: normalizeProfilePalette(m.profilePalette),
+diff --git a/src/network/mirror/view.ts b/src/network/mirror/view.ts
+index 34a90dd..0b7d18b 100644
+--- a/src/network/mirror/view.ts
++++ b/src/network/mirror/view.ts
+@@ -0,0 +1 @@
++import {normalizeProfilePalette} from '../../themeColors';
+@@ -12,0 +14,2 @@ export const mirrorToMember = (mm: MirrorMember, media: ReadonlyMap<string, stri
++  profileBg: mm.profileBg === true,
++  profilePalette: normalizeProfilePalette(mm.profilePalette),
+diff --git a/src/network/types.ts b/src/network/types.ts
+index 9ea5b99..8715672 100644
+--- a/src/network/types.ts
++++ b/src/network/types.ts
+@@ -0,0 +1 @@
++import type {ProfilePalette} from '../themeColors';
+@@ -145,0 +147,2 @@ export interface MirrorMember {
++  profilePalette?: ProfilePalette;
++  profileBg?: boolean;
+@@ -160,0 +164 @@ export interface MirrorSystemProfile {
++  profilePalette?: ProfilePalette;
+diff --git a/src/screens/MirrorScreen.tsx b/src/screens/MirrorScreen.tsx
+index e699083..bb1c7d1 100644
+--- a/src/screens/MirrorScreen.tsx
++++ b/src/screens/MirrorScreen.tsx
+@@ -0,0 +1 @@
++import {useModPreferences} from '../mods/modPreferences';
+@@ -11,2 +12,2 @@ import {SystemProfileCard} from '../components/SystemProfileCard';
+-import {fontScale} from '../theme';
+-import {useTheme} from '../themeContext';
++import {fontScale, profileWindowTheme} from '../theme';
++import {ThemeProvider, useTheme} from '../themeContext';
+@@ -44 +45,2 @@ export const MirrorScreen = ({visible, peerId, displayName, feature, onClose}: P
+-  const T = useTheme();
++  const {profilePalettes} = useModPreferences();
++  const baseT = useTheme();
+@@ -47 +49 @@ export const MirrorScreen = ({visible, peerId, displayName, feature, onClose}: P
+-  const fs = fontScale(T);
++  const fs = fontScale(baseT);
+@@ -49,0 +52,2 @@ export const MirrorScreen = ({visible, peerId, displayName, feature, onClose}: P
++  const systemProfile = feature === 'systemProfile' && !entry?.none ? mirrorProfileOf(entry?.data) : null;
++  const T = profileWindowTheme(baseT, profilePalettes ? systemProfile?.profilePalette : undefined);
+@@ -178,0 +183 @@ export const MirrorScreen = ({visible, peerId, displayName, feature, onClose}: P
++          palette={sp?.profilePalette}
+@@ -223,0 +229 @@ export const MirrorScreen = ({visible, peerId, displayName, feature, onClose}: P
++    <ThemeProvider value={T}>
+@@ -291,0 +298 @@ export const MirrorScreen = ({visible, peerId, displayName, feature, onClose}: P
++    </ThemeProvider>
+diff --git a/src/screens/ProfileScreen.tsx b/src/screens/ProfileScreen.tsx
+index c36f995..3509936 100644
+--- a/src/screens/ProfileScreen.tsx
++++ b/src/screens/ProfileScreen.tsx
+@@ -0,0 +1 @@
++import {useModPreferences} from '../mods/modPreferences';
+@@ -5 +6 @@ import {useTranslation} from 'react-i18next';
+-import {Fonts, fontScale, initialOn, profileTheme} from '../theme';
++import {Fonts, fontScale, initialOn, profileWindowTheme, normalizeProfilePalette} from '../theme';
+@@ -21 +22,2 @@ export const ProfileScreen = ({member}: Props) => {
+-  const T = useTheme();
++  const {profilePalettes} = useModPreferences();
++  const baseT = useTheme();
+@@ -30 +32 @@ export const ProfileScreen = ({member}: Props) => {
+-  const fs = fontScale(T);
++  const fs = fontScale(baseT);
+@@ -33,3 +35,3 @@ export const ProfileScreen = ({member}: Props) => {
+-  const bgColor = member?.profileBg && isValidHex(member.color) ? member.color : null;
+-  const bgOn = !!bgColor;
+-  const P = useMemo(() => (bgColor ? profileTheme(T, bgColor) : T), [bgColor, T]);
++  const bgOn = (profilePalettes && !!normalizeProfilePalette(member?.profilePalette)) || (!!member?.profileBg && isValidHex(member.color));
++  const P = useMemo(() => profileWindowTheme(baseT, profilePalettes ? member?.profilePalette : undefined, member?.profileBg ? member.color : undefined), [baseT, profilePalettes, member?.profilePalette, member?.profileBg, member?.color]);
++  const T = profilePalettes && subTab === 'profile' ? P : baseT;
+diff --git a/src/theme.ts b/src/theme.ts
+index 966ece1..c705f54 100644
+--- a/src/theme.ts
++++ b/src/theme.ts
+@@ -3 +3 @@ import type {FrontTierKey} from './utils';
+-import {deriveColors, profileColors, readableAccentColor, DARK_PALETTE} from './themeColors';
++import {deriveColors, profileColors, readableAccentColor, DARK_PALETTE, normalizeProfilePalette} from './themeColors';
+@@ -6,0 +7,2 @@ export {hexToRgb, initialOn, ensureReadable, textFloor, inkOn, DARK_PALETTE, LIG
++export {normalizeProfilePalette, sameProfilePalette} from './themeColors';
++export type {ProfilePalette} from './themeColors';
+@@ -16,0 +19,7 @@ export const profileTheme = (base: ThemeColors, color: string): ThemeColors => (
++export const profileWindowTheme = (base: ThemeColors, palette: unknown, legacyColor?: string): ThemeColors => {
++  const p = normalizeProfilePalette(palette);
++  if (p) return {...deriveTheme(p.bg, p.accent, p.text, p.mid), textScale: base.textScale};
++  if (typeof legacyColor === 'string' && /^#[0-9a-f]{6}$/i.test(legacyColor)) return profileTheme(base, legacyColor);
++  return base;
++};
++
+diff --git a/src/themeColors.ts b/src/themeColors.ts
+index ce21ac2..75b36a0 100644
+--- a/src/themeColors.ts
++++ b/src/themeColors.ts
+@@ -30,0 +31,20 @@ export interface CustomPalette {
++export type ProfilePalette = Pick<CustomPalette, 'bg' | 'accent' | 'text' | 'mid'>;
++
++// Store colors on the profile so it is independent of the owner's saved palettes.
++// Also validate palettes received from friends or restored from backups.
++export const normalizeProfilePalette = (value: unknown): ProfilePalette | undefined => {
++  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
++  const p = value as Record<string, unknown>;
++  const hex = (v: unknown): v is string => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
++  if (!hex(p.bg) || !hex(p.accent) || !hex(p.text) || !hex(p.mid)) return undefined;
++  return {bg: p.bg.toUpperCase(), accent: p.accent.toUpperCase(), text: p.text.toUpperCase(), mid: p.mid.toUpperCase()};
++};
++
++export const sameProfilePalette = (a: unknown, b: unknown): boolean => {
++  const left = normalizeProfilePalette(a);
++  const right = normalizeProfilePalette(b);
++  return left && right
++    ? left.bg === right.bg && left.accent === right.accent && left.text === right.text && left.mid === right.mid
++    : !left && !right;
++};
++
+diff --git a/src/utils/members.ts b/src/utils/members.ts
+index e63ed32..0b6c9fb 100644
+--- a/src/utils/members.ts
++++ b/src/utils/members.ts
+@@ -0,0 +1 @@
++import {normalizeProfilePalette} from '../themeColors';
+@@ -51,0 +53,2 @@ export const cloneMemberFrom = (f: Member, sel: CloneSelection): Member => ({
++  profileBg: sel.color ? f.profileBg : undefined,
++  profilePalette: sel.color ? normalizeProfilePalette(f.profilePalette) : undefined,
