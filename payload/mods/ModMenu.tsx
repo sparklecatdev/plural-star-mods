@@ -7,7 +7,7 @@ import {useTheme} from '../themeContext';
 import {fontScale} from '../theme';
 import {modPreferences, useModPreferences} from './modPreferences';
 import type {ModId} from './modPreferencesCore';
-import {options} from './modOptions';
+import {nativeUnlockSupported, options} from './modOptions';
 import {WallpaperControls} from './WallpaperControls';
 import {BackupTools} from './BackupTools';
 import {PluralKitSettings} from './PluralKitSettings';
@@ -61,7 +61,7 @@ function ModMenu({onClose}: {onClose: () => void}) {
           onToggle={() => { void toggle('noSpeaker'); }} />
         <ToggleRow label="Single confirmation" desc="Show one confirmation when an action would otherwise ask repeatedly." value={enabled.singleConfirm} disabled={busy || saving || pkBusy}
           onToggle={() => { void toggle('singleConfirm'); }} />
-        <ToggleRow label="Biometric or device unlock" desc="Use your phone's screen lock when available. Your app password remains available." value={enabled.deviceUnlock} disabled={busy || saving || pkBusy}
+        <ToggleRow label="Biometric or device unlock" desc={nativeUnlockSupported ? "Use your phone's screen lock when available. Your app password remains available." : "Requires a newer patcher."} value={nativeUnlockSupported && enabled.deviceUnlock} disabled={!nativeUnlockSupported || busy || saving || pkBusy}
           onToggle={() => { void toggle('deviceUnlock'); }} />
         <ToggleRow label="Extra Customization" desc="Hide tabs and features, simplify screens, and adjust more colors." value={extra.enabled} disabled={busy || saving || pkBusy}
           onToggle={() => { void extraCustomization.set({...extra, enabled: !extra.enabled}).catch(e => setError(String(e))); }} />

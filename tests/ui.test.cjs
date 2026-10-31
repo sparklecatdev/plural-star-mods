@@ -122,6 +122,7 @@ function rootHarness({password = null, reduceMotion = false, recoveryError = fal
     './modPreferences': {modPreferences: {load: async () => {}}, useModPreferences: () => ({deviceUnlock: false})},
     './extraCustomization': {extraCustomization: {load: async () => {}}},
     './useDeviceUnlock': {useDeviceUnlock: () => ({available: false, prompt: async () => {}})},
+    './modOptions': {nativeUnlockSupported: true},
     './updateCheck': {updateChecker: {check: async () => {}}, confirmPatchLaunch: async () => {}},
     './storageSnapshot': {recoverBeforeStart: async () => { await recovered; if (recoveryError) throw Error('restore failed'); },
       retryStoragePreparation: async () => {}, recovery: {recover: async () => {}}, restoreQueue: {cancel: async () => {}}},

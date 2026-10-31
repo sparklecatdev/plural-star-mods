@@ -19,8 +19,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--variant', choices=['wallpaper', 'storage', 'wallpaper-storage'])
     parser.add_argument('--patches-only', action='store_true', help='Build patch updates without the APK creation loader or Android SDK.')
+    parser.add_argument('--legacy-runtime', action='store_true', help='Build patches for the previous native runtime.')
     args = parser.parse_args()
     base, release = load()
+    if args.legacy_runtime:
+        if not args.patches_only or not release.get('legacy_runtime'):
+            parser.error('--legacy-runtime requires --patches-only and a configured legacy runtime')
+        release['runtime'] = release['legacy_runtime']
     commit = base['commit']
     SOURCE.parent.mkdir(exist_ok=True)
     if not SOURCE.exists():
@@ -57,7 +62,7 @@ def main():
         shutil.copytree(ROOT / 'payload/mods', SOURCE / 'src/mods', dirs_exist_ok=True)
         assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', release['version'])
         assert re.fullmatch(r'[a-z0-9.-]{1,80}', release['runtime'])
-        (SOURCE / 'src/mods/modOptions.ts').write_text('export const options = ' + json.dumps({'wallpaper': wallpaper, 'storage': storage}) + ';\nexport const payloadVersion = ' + json.dumps(release['version']) + ';\nexport const patchRuntime = ' + json.dumps(release['runtime']) + ';\nexport const patchVariant = ' + json.dumps(variant) + ';\n')
+        (SOURCE / 'src/mods/modOptions.ts').write_text('export const options = ' + json.dumps({'wallpaper': wallpaper, 'storage': storage}) + ';\nexport const payloadVersion = ' + json.dumps(release['version']) + ';\nexport const patchRuntime = ' + json.dumps(release['runtime']) + ';\nexport const patchVariant = ' + json.dumps(variant) + ';\nexport const nativeUnlockSupported = ' + json.dumps(not args.legacy_runtime) + ';\n')
         # Install the entry point into Settings for every payload combination.
         settings = SOURCE / 'src/modals/SystemModal.tsx'
         settings_text = settings.read_text()

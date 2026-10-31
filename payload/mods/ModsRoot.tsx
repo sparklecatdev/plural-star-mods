@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {modPreferences, useModPreferences} from './modPreferences';
 import {extraCustomization} from './extraCustomization';
 import {useDeviceUnlock} from './useDeviceUnlock';
+import {nativeUnlockSupported} from './modOptions';
 import {recovery, recoverBeforeStart, restoreQueue, retryStoragePreparation} from './storageSnapshot';
 import {setToolsOpen, waitForStorageIdle} from './toolsState';
 import {updateChecker, confirmPatchLaunch} from './updateCheck';
@@ -44,7 +45,7 @@ export default function ModsRoot() {
   const [unlockInput, setUnlockInput] = useState('');
   const [working, setWorking] = useState(false);
   const deviceUnlockEnabled = useModPreferences().deviceUnlock;
-  const deviceAuth = useDeviceUnlock(ready && gatePassword !== null && deviceUnlockEnabled, () => {
+  const deviceAuth = useDeviceUnlock(nativeUnlockSupported && ready && gatePassword !== null && deviceUnlockEnabled, () => {
     setUnlockInput(''); setGatePassword(null); setError('');
   });
   const finishAnimation = useCallback(() => setAnimationDone(true), []);
