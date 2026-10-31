@@ -285,3 +285,11 @@ test('sync opt-in is local and disabled sync does not read or apply cloud settin
   enabled = true; await controller.sync(); assert.equal(applies, 1);
   enabled = false; await controller.sync(); assert.equal(applies, 1);
 });
+
+test('experimental control collapsing defaults off and syncs only valid preferences', () => {
+  assert.equal(extra.sanitizeExtraCustomization(null).autoCollapseControls, false);
+  assert.equal(extra.sanitizeExtraCustomization({autoCollapseControls: 'true'}).autoCollapseControls, false);
+  const saved = record();
+  saved.settings.extraCustomization = {enabled: true, autoCollapseControls: true};
+  assert.equal(readCloudMods(JSON.stringify(saved)).settings.extraCustomization.autoCollapseControls, true);
+});

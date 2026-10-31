@@ -91,6 +91,21 @@ def main():
             text = text.replace('  const T = useTheme();', '  const T = useTheme();\n  const extra = useExtraCustomization();')
             text = text.replace(target, target.replace('FRONT_TIER_KEYS.map', 'FRONT_TIER_KEYS.filter(tier => !extra.enabled || !extra.hiddenFrontTiers.includes(tier)).map'))
             component.write_text(text)
+        # Collapse optional page controls only when the experimental preference is enabled.
+        for relative, start, end, label in [
+            ('src/screens/FrontScreen.tsx', "        {!empty && (!extra.enabled || !extra.hideFrontSort) && (", "\n\n        {empty || !front ? (", 'sorting'),
+            ('src/screens/MembersScreen.tsx', "      {(!extra.enabled || !extra.hideMemberSort) && <SortChips", "\n\n      {tabMembers.length > 3", 'sorting and filters'),
+            ('src/screens/JournalScreen.tsx', "          {allTags.length > 0 && (!extra.enabled || !extra.hideJournalTagFilter) && (", "\n        </>\n      )}", 'filters'),
+            ('src/screens/front/TierCard.tsx', "        <TouchableOpacity onPress={() => onEditDetails(tierKey)}", "\n      </View>\n    </View>\n  );", 'front note'),
+        ]:
+            component = SOURCE / relative
+            text = component.read_text()
+            assert text.count(start) == 1 and text.count(end) == 1, relative
+            begin = text.index(start)
+            finish = text.index(end, begin)
+            prefix = '../../mods/CollapsibleControls' if '/front/' in relative else '../mods/CollapsibleControls'
+            text = "import {CollapsibleControls} from '" + prefix + "';\n" + text[:begin] + '<CollapsibleControls label="' + label + '">\n' + text[begin:finish] + '\n</CollapsibleControls>' + text[finish:]
+            component.write_text(text)
         # Keep the controls visible while allowing their backgrounds to be transparent.
         header = SOURCE / 'src/components/AppHeader.tsx'
         text = header.read_text()

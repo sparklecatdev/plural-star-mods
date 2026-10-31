@@ -46,7 +46,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
-  const toggle = (key: 'hideHeaderBorder' | 'hideTabBarBorder' | 'hideTabIcons' | 'hideTileIcons' | 'transparentHubTiles' | 'hideHubTileBorders' | 'fullScreenWallpaper' | 'transparentHeader' | 'transparentTabBar' | 'hideTabLabels' | 'hideTileLabels' | 'hideSystemName' | 'hideFrontTitle' | 'hideFrontSort' | 'hideHubTitle'
+  const toggle = (key: 'autoCollapseControls' | 'hideHeaderBorder' | 'hideTabBarBorder' | 'hideTabIcons' | 'hideTileIcons' | 'transparentHubTiles' | 'hideHubTileBorders' | 'fullScreenWallpaper' | 'transparentHeader' | 'transparentTabBar' | 'hideTabLabels' | 'hideTileLabels' | 'hideSystemName' | 'hideFrontTitle' | 'hideFrontSort' | 'hideHubTitle'
     | 'hideHubReorder' | 'hideMemberSort' | 'hideMemberGroupFilter' | 'hideMemberTagFilter' | 'hideMemberSearch'
     | 'hideMemberBackToTop' | 'hideJournalTitle' | 'hideJournalTagFilter' | 'hideJournalAuthorFilter' | 'hideHistoryTitle') => {
     void save({...prefs, [key]: !prefs[key]});
@@ -72,6 +72,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
           <Btn variant="ghost" disabled={busy} onPress={onClose}>Done</Btn>
         </View>
         <Text style={{color: T.dim, fontSize: fs(14)}}>Hide what you do not use and adjust more of the app's colors.</Text>
+        <BaseToggleRow label="Auto-collapse page controls (experimental)" desc="Collapse sorting, filtering, and front note controls until opened." value={prefs.autoCollapseControls} disabled={busy} onToggle={() => toggle('autoCollapseControls')} />
         {section('Background and bars')}
         {options.wallpaper && <ToggleRow label="Extend wallpaper across the whole screen" value={prefs.fullScreenWallpaper} disabled={busy} onToggle={() => toggle('fullScreenWallpaper')} />}
         <ToggleRow label="Transparent top bar" value={prefs.transparentHeader} disabled={busy} onToggle={() => toggle('transparentHeader')} />

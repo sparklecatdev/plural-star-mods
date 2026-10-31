@@ -11,6 +11,7 @@ export type ElementColorOption = typeof ELEMENT_COLOR_OPTIONS[number];
 export type ColorOption = typeof COLOR_OPTIONS[number];
 export type ExtraCustomization = {
   enabled: boolean;
+  autoCollapseControls: boolean;
   hiddenFrontTiers: FrontTierOption[];
   frontTierNames: Partial<Record<FrontTierOption, string>>;
   frontTierColors: Partial<Record<FrontTierOption, string>>;
@@ -50,7 +51,7 @@ export type ExtraCustomization = {
   colors: Partial<Record<ColorOption, string>>;
 };
 export const DEFAULT_EXTRA_CUSTOMIZATION: ExtraCustomization = {
-  cards: {}, hiddenFrontTiers: [], frontTierNames: {}, frontTierColors: {},
+  autoCollapseControls: false, cards: {}, hiddenFrontTiers: [], frontTierNames: {}, frontTierColors: {},
   hideHeaderBorder: false, hideTabBarBorder: false, hideTabIcons: false, hideTileIcons: false,
   transparentHubTiles: false, hideHubTileBorders: false, hubColumns: 0, tileRadius: 14,
   wallpaperDim: 0.78, wallpaperFit: 'cover', elementColors: {},
@@ -106,7 +107,7 @@ export function sanitizeExtraCustomization(value: unknown): ExtraCustomization {
     wallpaperDim: v.wallpaperDim === 0 || v.wallpaperDim === 0.25 || v.wallpaperDim === 0.5 || v.wallpaperDim === 0.9 ? v.wallpaperDim : 0.78,
     wallpaperFit: v.wallpaperFit === 'contain' || v.wallpaperFit === 'stretch' ? v.wallpaperFit : 'cover',
     elementColors,
-    enabled: v.enabled === true,
+    enabled: v.enabled === true, autoCollapseControls: v.autoCollapseControls === true,
     fullScreenWallpaper: v.fullScreenWallpaper === true, transparentHeader: v.transparentHeader === true,
     transparentTabBar: v.transparentTabBar === true,
     // Keep Front and Hub available so settings and primary navigation remain reachable.
