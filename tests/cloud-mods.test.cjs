@@ -23,7 +23,7 @@ const {CLOUD_MODS_KEY, readCloudMods, createCloudMods} = load('cloudModsCore.ts'
 const {createModPreferences} = load('modPreferencesCore.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
 const current = {runtime: 'plural-star-1.23.3-mods-1', variant: 'wallpaper-storage', version: '0.4.2'};
-const settings = () => ({enabled: {wallpaper: true, storage: true, noSpeaker: false, singleConfirm: true, deviceUnlock: false, groupView: false, profilePalettes: false, hideLockIcon: false}, pkFrontSyncEnabled: false, automaticUpdates: true});
+const settings = () => ({enabled: {wallpaper: true, storage: true, noSpeaker: false, singleConfirm: true, deviceUnlock: false, groupView: false, profilePalettes: false, hideLockIcon: false, chatKeyboardFix: false}, pkFrontSyncEnabled: false, automaticUpdates: true});
 const record = () => ({schema: 1, settings: settings(), automaticRestore: true, patches: [{...current}]});
 function harness(saved = null, available = {wallpaper: true, storage: true}) {
   let disk = saved === null ? null : JSON.stringify(saved), local = settings(), failRead = false, failWrite = false, failRestore = false;
@@ -158,6 +158,20 @@ test('legacy cloud records use toggle defaults; a later change syncs', async () 
   assert.equal(other.local().enabled.noSpeaker, true);
 });
 
+test('chat keyboard fix syncs and rejects malformed values', async () => {
+  const saved = record();
+  delete saved.settings.enabled.chatKeyboardFix;
+  assert.equal(readCloudMods(JSON.stringify(saved)).settings.enabled.chatKeyboardFix, false);
+  saved.settings.enabled.chatKeyboardFix = 'yes';
+  assert.throws(() => readCloudMods(JSON.stringify(saved)), /invalid/);
+  saved.settings.enabled.chatKeyboardFix = true;
+  const h = harness(saved); await h.controller.sync();
+  assert.equal(h.local().enabled.chatKeyboardFix, true);
+  const next = settings(); next.enabled.chatKeyboardFix = false; h.change(next);
+  await h.controller.saveLocal();
+  assert.equal(JSON.parse(h.disk()).settings.enabled.chatKeyboardFix, false);
+});
+
 test('first start creates a cloud-compatible record; unchanged starts do not write again', async () => {
   const h = harness(); await h.controller.sync();
   assert.deepEqual(JSON.parse(h.disk()), record());
@@ -250,7 +264,7 @@ test('restoring switches cancels a pending storage restore and commits both swit
   const prefs = createModPreferences({wallpaper: true, storage: true}, {read: async () => null,
     beforeDisable: async id => { actions.push('cancel-' + id); }, write: async text => { actions.push(JSON.parse(text)); }});
   await prefs.setPreferences({wallpaper: false, storage: false});
-  assert.deepEqual(plain(actions), ['cancel-wallpaper', 'cancel-storage', {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, hideLockIcon: false, syncPreferences: false}]);
+  assert.deepEqual(plain(actions), ['cancel-wallpaper', 'cancel-storage', {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, hideLockIcon: false, syncPreferences: false}]);
 });
 
 test('upstream cloud and linked-device snapshots include the dedicated mod record', async () => {

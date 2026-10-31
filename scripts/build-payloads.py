@@ -64,6 +64,13 @@ def main():
         run('git', 'apply', str(ROOT / 'payload/extra-customization.patch'))
         run('git', 'apply', str(ROOT / 'payload/lock-icon.patch'))
         run('git', 'apply', str(ROOT / 'payload/rest-mode-pr-25.patch'))
+        # On Android, avoid applying chat's manual keyboard lift on top of system panning.
+        chat = SOURCE / 'src/screens/ChatScreen.tsx'
+        text = "import {useModPreferences} from '../mods/modPreferences';\n" + chat.read_text()
+        target = '  const keyboardLift = Math.max(0, kbHeight - gapBelow);'
+        assert text.count(target) == 1
+        text = text.replace(target, "  const chatKeyboardFix = useModPreferences().chatKeyboardFix;\n  const keyboardLift = chatKeyboardFix && Platform.OS === 'android' ? 0 : Math.max(0, kbHeight - gapBelow);")
+        chat.write_text(text)
         # Allow an optional sheet background opacity without fading its contents.
         sheet = SOURCE / 'src/components/Sheet.tsx'
         text = "import {useExtraCustomization} from '../mods/extraCustomization';\n" + sheet.read_text()

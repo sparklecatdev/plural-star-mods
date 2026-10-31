@@ -274,7 +274,7 @@ test('Settings opens the mod menu; switches persist and hide disabled controls',
       await new Promise(setImmediate);
     });
   }
-  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: false, noSpeaker: true, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, hideLockIcon: true, syncPreferences: false});
+  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: false, noSpeaker: true, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, hideLockIcon: true, chatKeyboardFix: false, syncPreferences: false});
   assert.equal(renderer.root.findAllByType('WallpaperControls').length, 0);
   assert.equal(renderer.root.findAllByType('BackupTools').length, 0);
   assert.equal(renderer.root.findAllByType('CloudModSettings').length, 0);

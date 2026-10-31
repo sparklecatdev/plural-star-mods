@@ -1,2 +1,2 @@
-export const changelogVersion = '0.4.26';
-export const changelog = '• Adjust the opacity of settings and profile panel backgrounds.';
+export const changelogVersion = '0.4.27';
+export const changelog = '• Added an optional fix for System Chat moving too high when the keyboard opens on Android.\n• Organized Extra Customization into expandable sections.';

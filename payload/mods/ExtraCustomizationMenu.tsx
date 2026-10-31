@@ -31,6 +31,19 @@ const COLOR_NAMES: Partial<Record<ColorOption, string>> = {
 
 const ELEMENT_COLOR_NAMES: Record<ElementColorOption, string> = {header: 'Top bar', tabBar: 'Bottom bar', tabActive: 'Selected tab', tabInactive: 'Unselected tabs', hubTile: 'Hub tile', hubTileBorder: 'Hub tile border'};
 
+function Section({title, children}: {title: string; children: React.ReactNode}) {
+  const T = useTheme(); const fs = fontScale(T);
+  const [expanded, setExpanded] = useState(false);
+  return <View style={{gap: 10}}>
+    <TouchableOpacity accessibilityRole="button" accessibilityState={{expanded}} onPress={() => setExpanded(!expanded)}
+      style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderColor: T.border}}>
+      <Text style={{flex: 1, color: T.text, fontWeight: '700', fontSize: fs(17)}}>{title}</Text>
+      <Text style={{color: T.dim}}>{expanded ? '−' : '+'}</Text>
+    </TouchableOpacity>
+    {expanded && <View style={{gap: 12}}>{children}</View>}
+  </View>;
+}
+
 function OpacitySlider({value, disabled, onChange}: {value: number; disabled: boolean; onChange: (value: number) => void}) {
   const T = useTheme();
   const [draft, setDraft] = useState<number | null>(null);
@@ -97,7 +110,6 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
     <Text style={{color: T.text, fontSize: fs(14)}}>{label}</Text>
     <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 6}}>{values.map(([name, value]) => <Btn key={name} variant={prefs[key] === value ? 'solid' : 'ghost'} disabled={busy} onPress={() => { void save({...prefs, [key]: value}); }}>{name}</Btn>)}</View>
   </View>;
-  const section = (title: string) => <Text accessibilityRole="header" style={{color: T.text, fontWeight: '700', fontSize: fs(17), marginTop: 12}}>{title}</Text>;
   return <Modal visible animationType="slide" onRequestClose={() => { if (!busy && !picker && !elementPicker && !cardPicker && !tierPicker) onClose(); }}>
     <SafeAreaView style={{flex: 1, backgroundColor: T.bg}}>
       <ScrollView contentContainerStyle={{padding: 24, gap: 14}} keyboardShouldPersistTaps="handled">
@@ -106,8 +118,10 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
           <Btn variant="ghost" disabled={busy} onPress={onClose}>Done</Btn>
         </View>
         <Text style={{color: T.dim, fontSize: fs(14)}}>Hide what you do not use and adjust more of the app's colors.</Text>
+        <Section title="Screen controls">
         <BaseToggleRow label="Auto-collapse page controls (experimental)" desc="Collapse sorting, filtering, and front note controls until opened." value={prefs.autoCollapseControls} disabled={busy} onToggle={() => toggle('autoCollapseControls')} />
-        {section('Background and bars')}
+        </Section>
+        <Section title="Background and bars">
         {options.wallpaper && <ToggleRow label="Extend wallpaper across the whole screen" value={prefs.fullScreenWallpaper} disabled={busy} onToggle={() => toggle('fullScreenWallpaper')} />}
         <ToggleRow label="Transparent top bar" value={prefs.transparentHeader} disabled={busy} onToggle={() => toggle('transparentHeader')} />
         <ToggleRow label="Transparent bottom bar" value={prefs.transparentTabBar} disabled={busy} onToggle={() => toggle('transparentTabBar')} />
@@ -116,7 +130,8 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         <ToggleRow label="Show bottom bar border" value={!prefs.hideTabBarBorder} disabled={busy} onToggle={() => toggle('hideTabBarBorder')} />
         {options.wallpaper && choices('wallpaperDim', 'Wallpaper dimming', [['None', 0], ['25%', 0.25], ['50%', 0.5], ['Default', 0.78], ['90%', 0.9]])}
         {options.wallpaper && choices('wallpaperFit', 'Wallpaper fit', [['Fill', 'cover'], ['Fit', 'contain'], ['Stretch', 'stretch']])}
-        {section('Navigation')}
+        </Section>
+        <Section title="Navigation">
         <BaseToggleRow label="Blank first page" desc="Open to an empty page and add it as the first navigation tab." value={prefs.blankStartPage} disabled={busy} onToggle={() => toggle('blankStartPage')} />
         {(['members', 'journal', 'history'] as const).map(id =>
           <ToggleRow key={id} label={`Show ${TAB_NAMES[id]} tab`} value={!prefs.hiddenTabs.includes(id)} disabled={busy}
@@ -124,30 +139,13 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         <ToggleRow label="Show tab labels" value={!prefs.hideTabLabels} disabled={busy} onToggle={() => toggle('hideTabLabels')} />
         <ToggleRow label="Show tab icons" value={!prefs.hideTabIcons} disabled={busy} onToggle={() => toggle('hideTabIcons')} />
         <Text style={{color: T.dim, fontSize: fs(13)}}>Icons stay visible if labels are hidden.</Text>
-        {section('Screens')}
+        </Section>
+        <Section title="Front screen">
         <ToggleRow label="Show system name in header" value={!prefs.hideSystemName} disabled={busy} onToggle={() => toggle('hideSystemName')} />
         <ToggleRow label="Show front title" value={!prefs.hideFrontTitle} disabled={busy} onToggle={() => toggle('hideFrontTitle')} />
         <ToggleRow label="Show front sorting" value={!prefs.hideFrontSort} disabled={busy} onToggle={() => toggle('hideFrontSort')} />
-        <ToggleRow label="Show hub title" value={!prefs.hideHubTitle} disabled={busy} onToggle={() => toggle('hideHubTitle')} />
-        <ToggleRow label="Show hub reorder control" value={!prefs.hideHubReorder} disabled={busy} onToggle={() => toggle('hideHubReorder')} />
-        <ToggleRow label="Show hub tile labels" value={!prefs.hideTileLabels} disabled={busy} onToggle={() => toggle('hideTileLabels')} />
-        <ToggleRow label="Show hub tile icons" value={!prefs.hideTileIcons} disabled={busy} onToggle={() => toggle('hideTileIcons')} />
-        <ToggleRow label="Transparent hub tiles" value={prefs.transparentHubTiles} disabled={busy} onToggle={() => toggle('transparentHubTiles')} />
-        <ToggleRow label="Show hub tile borders" value={!prefs.hideHubTileBorders} disabled={busy} onToggle={() => toggle('hideHubTileBorders')} />
-        {choices('hubColumns', 'Hub columns', [['Automatic', 0], ['1', 1], ['2', 2], ['3', 3]])}
-        {choices('tileRadius', 'Hub tile corners', [['Square', 0], ['Slight', 8], ['Default', 14], ['Round', 24]])}
-        <ToggleRow label="Minimal line hub icons" value={prefs.minimalHubIcons} disabled={busy} onToggle={() => toggle('minimalHubIcons')} />
-        <Text style={{color: T.dim, fontSize: fs(13)}}>Choose an image for any hub icon. Custom images take priority over the line icons and are stored on this device.</Text>
-        {TILE_OPTIONS.map(id => <View key={id} style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
-          {prefs.hubIconImages[id] && <Image source={{uri: prefs.hubIconImages[id]}} style={{width: 32, height: 32}} resizeMode="contain" />}
-          <Text style={{flex: 1, color: T.text}}>{TILE_NAMES[id]}</Text>
-          <Btn variant="ghost" disabled={busy} onPress={() => { void (async () => {
-            const uri = await pickAndSaveImage(src => saveBioImageFromUri(`hub-icon-${id}`, src));
-            if (uri) await save({...prefs, hubIconImages: {...prefs.hubIconImages, [id]: uri}});
-          })(); }}>Choose image</Btn>
-          {prefs.hubIconImages[id] && <Btn variant="ghost" disabled={busy} onPress={() => { const images = {...prefs.hubIconImages}; delete images[id]; void save({...prefs, hubIconImages: images}); }}>Reset</Btn>}
-        </View>)}
-        {section('Front tiers')}
+        </Section>
+        <Section title="Front tiers">
         <Text style={{color: T.dim, fontSize: fs(13)}}>Hidden tiers disappear from the front screen and front selection. Saved front data is kept.</Text>
         {FRONT_TIERS.map(tier => <View key={tier} style={{gap: 6}}>
           <ToggleRow label={`Show ${FRONT_TIER_NAMES[tier]}`} value={!prefs.hiddenFrontTiers.includes(tier)} disabled={busy} onToggle={() => {
@@ -162,7 +160,35 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
             <Text style={{flex: 1, color: T.text, fontSize: fs(14)}}>Color</Text><Text style={{color: T.dim}}>{prefs.frontTierColors[tier] || 'Default'}</Text>
           </TouchableOpacity>
         </View>)}
-        {section('Members')}
+        </Section>
+        <Section title="Hub appearance">
+        <ToggleRow label="Show hub title" value={!prefs.hideHubTitle} disabled={busy} onToggle={() => toggle('hideHubTitle')} />
+        <ToggleRow label="Show hub reorder control" value={!prefs.hideHubReorder} disabled={busy} onToggle={() => toggle('hideHubReorder')} />
+        <ToggleRow label="Show hub tile labels" value={!prefs.hideTileLabels} disabled={busy} onToggle={() => toggle('hideTileLabels')} />
+        <ToggleRow label="Show hub tile icons" value={!prefs.hideTileIcons} disabled={busy} onToggle={() => toggle('hideTileIcons')} />
+        <ToggleRow label="Transparent hub tiles" value={prefs.transparentHubTiles} disabled={busy} onToggle={() => toggle('transparentHubTiles')} />
+        <ToggleRow label="Show hub tile borders" value={!prefs.hideHubTileBorders} disabled={busy} onToggle={() => toggle('hideHubTileBorders')} />
+        {choices('hubColumns', 'Hub columns', [['Automatic', 0], ['1', 1], ['2', 2], ['3', 3]])}
+        {choices('tileRadius', 'Hub tile corners', [['Square', 0], ['Slight', 8], ['Default', 14], ['Round', 24]])}
+        </Section>
+        <Section title="Hub icons">
+        <ToggleRow label="Minimal line hub icons" value={prefs.minimalHubIcons} disabled={busy} onToggle={() => toggle('minimalHubIcons')} />
+        <Text style={{color: T.dim, fontSize: fs(13)}}>Choose an image for any hub icon. Custom images take priority over the line icons and are stored on this device.</Text>
+        {TILE_OPTIONS.map(id => <View key={id} style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+          {prefs.hubIconImages[id] && <Image source={{uri: prefs.hubIconImages[id]}} style={{width: 32, height: 32}} resizeMode="contain" />}
+          <Text style={{flex: 1, color: T.text}}>{TILE_NAMES[id]}</Text>
+          <Btn variant="ghost" disabled={busy} onPress={() => { void (async () => {
+            const uri = await pickAndSaveImage(src => saveBioImageFromUri(`hub-icon-${id}`, src));
+            if (uri) await save({...prefs, hubIconImages: {...prefs.hubIconImages, [id]: uri}});
+          })(); }}>Choose image</Btn>
+          {prefs.hubIconImages[id] && <Btn variant="ghost" disabled={busy} onPress={() => { const images = {...prefs.hubIconImages}; delete images[id]; void save({...prefs, hubIconImages: images}); }}>Reset</Btn>}
+        </View>)}
+        </Section>
+        <Section title="Hub features">
+        {TILE_OPTIONS.map(id => <ToggleRow key={id} label={TILE_NAMES[id]} value={!prefs.hiddenTiles.includes(id)} disabled={busy}
+          onToggle={() => toggleHidden('hiddenTiles', id)} />)}
+        </Section>
+        <Section title="Members">
         <BaseToggleRow label="Enhanced group view" desc="Show richer cards in both views, plus search, filters, and custom fronts in group view." value={enabled.groupView} disabled={busy} onToggle={() => {
           setBusy(true); setError('');
           void modPreferences.setEnabled('groupView', !enabled.groupView).catch(e => setError(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false));
@@ -172,13 +198,16 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         <ToggleRow label="Show tag filter" value={!prefs.hideMemberTagFilter} disabled={busy} onToggle={() => toggle('hideMemberTagFilter')} />
         <ToggleRow label="Show search" value={!prefs.hideMemberSearch} disabled={busy} onToggle={() => toggle('hideMemberSearch')} />
         <ToggleRow label="Show back-to-top button" value={!prefs.hideMemberBackToTop} disabled={busy} onToggle={() => toggle('hideMemberBackToTop')} />
-        {section('Journal')}
+        </Section>
+        <Section title="Journal">
         <ToggleRow label="Show title" value={!prefs.hideJournalTitle} disabled={busy} onToggle={() => toggle('hideJournalTitle')} />
         <ToggleRow label="Show tag filter" value={!prefs.hideJournalTagFilter} disabled={busy} onToggle={() => toggle('hideJournalTagFilter')} />
         <ToggleRow label="Show author filter" value={!prefs.hideJournalAuthorFilter} disabled={busy} onToggle={() => toggle('hideJournalAuthorFilter')} />
-        {section('History')}
+        </Section>
+        <Section title="History">
         <ToggleRow label="Show title" value={!prefs.hideHistoryTitle} disabled={busy} onToggle={() => toggle('hideHistoryTitle')} />
-        {section('Cards')}
+        </Section>
+        <Section title="Cards and panels">
         <BaseToggleRow label="Transparent cards throughout the app" desc="Remove the shared card background across screens. Individual card settings can override this." value={prefs.transparentAllCards} disabled={busy} onToggle={() => toggle('transparentAllCards')} />
         <Text style={{color: T.dim, fontSize: fs(13)}}>Sheet opacity controls how much of the page shows through settings and profile panels.</Text>
         <OpacitySlider value={prefs.sheetOpacity ?? 100} disabled={busy} onChange={value => { void save({...prefs, sheetOpacity: value}); }} />
@@ -187,8 +216,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         {CARD_AREAS.map(area => {
           const card = prefs.cards[area];
           const name = area[0].toUpperCase() + area.slice(1);
-          return <View key={area} style={{gap: 8}}>
-            <Text accessibilityRole="header" style={{color: T.text, fontWeight: '700', fontSize: fs(15)}}>{name} cards</Text>
+          return <Section key={area} title={`${name} cards`}>
             <ToggleRow label="Transparent background" value={card?.transparent === true} disabled={busy} onToggle={() => updateCard(area, {transparent: !card?.transparent})} />
             <ToggleRow label="Show border" value={!card?.hideBorder} disabled={busy} onToggle={() => updateCard(area, {hideBorder: !card?.hideBorder})} />
             {(['color', 'borderColor'] as const).map(key => <TouchableOpacity key={key} disabled={busy} accessibilityRole="button" accessibilityLabel={`Edit ${name} card ${key === 'color' ? 'background' : 'border'} color`} onPress={() => setCardPicker({area, key})} style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 9, gap: 12}}>
@@ -200,12 +228,10 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
               <Text style={{color: T.text, fontSize: fs(14)}}>{key === 'radius' ? 'Corners' : 'Spacing'}</Text>
               <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 6}}>{(key === 'radius' ? [['Default', null], ['Square', 0], ['Slight', 8], ['Round', 16], ['Extra round', 24]] : [['Default', null], ['Compact', 8], ['Medium', 12], ['Roomy', 20]]).map(([label, value]) => <Btn key={String(label)} variant={(card?.[key] ?? null) === value ? 'solid' : 'ghost'} disabled={busy} onPress={() => updateCard(area, {[key]: value})}>{String(label)}</Btn>)}</View>
             </View>)}
-          </View>;
+          </Section>;
         })}
-        {section('Hub features')}
-        {TILE_OPTIONS.map(id => <ToggleRow key={id} label={TILE_NAMES[id]} value={!prefs.hiddenTiles.includes(id)} disabled={busy}
-          onToggle={() => toggleHidden('hiddenTiles', id)} />)}
-        {section('Individual colors')}
+        </Section>
+        <Section title="Interface colors">
         {ELEMENT_COLOR_OPTIONS.map(key => <TouchableOpacity key={key} disabled={busy} accessibilityRole="button"
           accessibilityLabel={`Edit ${ELEMENT_COLOR_NAMES[key]} color`} onPress={() => setElementPicker(key)}
           style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 9, gap: 12}}>
@@ -213,7 +239,8 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
           <Text style={{flex: 1, color: T.text, fontSize: fs(14)}}>{ELEMENT_COLOR_NAMES[key]}</Text>
           <Text style={{color: T.dim, fontSize: fs(12)}}>{prefs.elementColors[key] || 'Default'}</Text>
         </TouchableOpacity>)}
-        {section('More colors')}
+        </Section>
+        <Section title="More colors">
         <Text style={{color: T.dim, fontSize: fs(13)}}>Base, accent, and text colors are in the regular palette editor.</Text>
         {COLOR_OPTIONS.map(key => <TouchableOpacity key={key} disabled={busy} accessibilityRole="button"
           accessibilityLabel={`Edit ${COLOR_NAMES[key] || key} color`} onPress={() => setPicker(key)}
@@ -222,6 +249,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
           <Text style={{flex: 1, color: T.text, fontSize: fs(14)}}>{COLOR_NAMES[key] || key[0].toUpperCase() + key.slice(1)}</Text>
           <Text style={{color: T.dim, fontSize: fs(12)}}>{prefs.colors[key] || 'Default'}</Text>
         </TouchableOpacity>)}
+        </Section>
         <Btn variant="ghost" disabled={busy} onPress={() => { void save({...DEFAULT_EXTRA_CUSTOMIZATION, enabled: true}); }}>Reset extra customization</Btn>
         {!!error && <Text accessibilityRole="alert" style={{color: T.danger, fontSize: fs(14)}}>{error}</Text>}
       </ScrollView>

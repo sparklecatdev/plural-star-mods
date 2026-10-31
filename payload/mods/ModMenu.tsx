@@ -61,6 +61,8 @@ function ModMenu({onClose}: {onClose: () => void}) {
         </View>}
         <ToggleRow label="Allow No speaker" desc="Choose No speaker in chat, polls, and mailbox senders. Polls use one shared No speaker vote." value={enabled.noSpeaker} disabled={busy || saving || pkBusy}
           onToggle={() => { void toggle('noSpeaker'); }} />
+        <ToggleRow label="Fix System Chat keyboard position" desc="On Android, let the system position chat when the keyboard opens." value={enabled.chatKeyboardFix} disabled={busy || saving || pkBusy}
+          onToggle={() => { void toggle('chatKeyboardFix'); }} />
         <ToggleRow label="Single confirmation" desc="Show one confirmation when an action would otherwise ask repeatedly." value={enabled.singleConfirm} disabled={busy || saving || pkBusy}
           onToggle={() => { void toggle('singleConfirm'); }} />
         <ToggleRow label="Biometric or device unlock" desc={nativeUnlockSupported ? "Use your phone's screen lock when available. Your app password remains available." : "Requires a newer patcher."} value={nativeUnlockSupported && enabled.deviceUnlock} disabled={!nativeUnlockSupported || busy || saving || pkBusy}
