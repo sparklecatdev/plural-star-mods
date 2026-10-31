@@ -83,7 +83,7 @@
          style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between', alignItems: 'flex-start'}}>
 +        {extra.enabled && extra.hubTabs.map(id => <TouchableOpacity key={`tab-${id}`} onPress={() => goTab(id as 'front' | 'members' | 'journal' | 'history')} accessibilityRole="button" accessibilityLabel={NAVIGATION_NAMES[id as keyof typeof NAVIGATION_NAMES]} style={{width: tileWidth, height: tileHeight, borderRadius: extra.tileRadius, borderWidth: extra.hideHubTileBorders ? 0 : 1, backgroundColor: extra.transparentHubTiles ? 'transparent' : extra.elementColors.hubTile || T.card, borderColor: extra.elementColors.hubTileBorder || T.border, alignItems: 'center', justifyContent: 'center', gap: 6}}>
 +          {(!extra.hideTileIcons || extra.hideTileLabels) && (extra.hubIconImages[id as keyof typeof extra.hubIconImages] ? <Image source={{uri: extra.hubIconImages[id as keyof typeof extra.hubIconImages]}} style={{width: fs(30), height: fs(30)}} resizeMode="contain" /> : <HubIcon id={id} color={T.accent} size={fs(30)} />)}
-+          {!extra.hideTileLabels && <Text style={{color: T.text, textAlign: 'center'}}>{NAVIGATION_NAMES[id as keyof typeof NAVIGATION_NAMES]}</Text>}
++          {!extra.hideTileLabels && <Text style={{fontSize: fs(11), lineHeight: fs(15), minHeight: labelReserve, fontWeight: '600', color: T.text, textAlign: 'center', textAlignVertical: 'center', includeFontPadding: false}} numberOfLines={2} maxFontSizeMultiplier={1.3}>{NAVIGATION_NAMES[id as keyof typeof NAVIGATION_NAMES]}</Text>}
 +        </TouchableOpacity>)}
          {orderedTiles.map((tile, i) => {
            const isDragged = tileDrag?.id === tile.id;
