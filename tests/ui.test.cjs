@@ -121,6 +121,7 @@ function rootHarness({password = null, reduceMotion = false, recoveryError = fal
     '@react-native-async-storage/async-storage': {getItem: async () => password ? JSON.stringify({appLockPassword: password}) : null},
     './modPreferences': {modPreferences: {load: async () => {}}, useModPreferences: () => ({deviceUnlock: false})},
     './extraCustomization': {extraCustomization: {load: async () => {}}},
+    './sparkleScripts': {loadScripts: async () => {}, runScripts: () => {}},
     './useDeviceUnlock': {useDeviceUnlock: () => ({available: false, prompt: async () => {}})},
     './modOptions': {nativeUnlockSupported: true},
     './updateCheck': {updateChecker: {check: async () => {}}, confirmPatchLaunch: async () => {}},
@@ -199,7 +200,7 @@ test('Settings opens the mod menu; switches persist and hide disabled controls',
     './WallpaperControls': {WallpaperControls: host('WallpaperControls')}, './BackupTools': {BackupTools: host('BackupTools')},
     './PluralKitSettings': {PluralKitSettings: host('PluralKitSettings')},
     './CloudModSettings': {CloudModSettings: host('CloudModSettings')},
-    './ModSupport': {ModSupport: host('ModSupport')},
+    './ModSupport': {ModSupport: host('ModSupport')}, './CustomMods': {CustomMods: host('CustomMods')},
   });
   let renderer;
   await act(async () => { renderer = create(React.createElement(ModSettingsButton)); });
@@ -444,5 +445,27 @@ test('mod support previews before sharing and opens the patches community', asyn
   assert.equal(calls[1], 'https://discord.gg/Pf2F2BawKV');
   await act(async () => renderer.update(React.createElement(ModSupport, {disabled: true})));
   assert.ok(renderer.root.findAllByType('Button').filter(n => n.props.children !== 'Close diagnostics').every(n => n.props.disabled));
+  await act(async () => renderer.unmount());
+});
+
+test('custom mods can be written in app, saved disabled, and enabled after appearance permission', async () => {
+  const {parseSparkle} = load('sparkleScriptCore.ts'); const rows = []; const dialogs = [];
+  const {CustomMods} = load('CustomMods.tsx', {
+    'react-native': {View: 'View', Alert: {alert: (title, message, buttons) => { dialogs.push(title); if (title === 'Allow appearance changes?') buttons[1].onPress(); }}},
+    '@react-native-documents/picker': {pick: async () => [], keepLocalCopy: async () => [], isErrorWithCode: () => false, errorCodes: {}},
+    'react-native-blob-util': {fs: {}}, '../components/AppText': {Text: 'Text', TextInput: 'TextInput'},
+    '../components/controls': {Btn: host('Button'), ToggleRow: host('Toggle')},
+    '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n},
+    './sparkleScriptCore': {parseSparkle},
+    './sparkleScripts': {listScripts: () => rows.slice(), loadScripts: async () => {}, runScripts: () => {},
+      saveScripts: async update => { const next = update(rows.slice()); rows.splice(0, rows.length, ...next); }},
+  });
+  let renderer;
+  await act(async () => { renderer = create(React.createElement(CustomMods, {disabled: false})); });
+  await act(async () => renderer.root.findByType('TextInput').props.onChangeText('mod "Lilac" version "1.0.0" { allow appearance when tap { accent "#abcdef" } }'));
+  await act(async () => renderer.root.findAllByType('Button').find(n => n.props.children === 'Save custom mod').props.onPress());
+  assert.equal(rows.length, 1); assert.equal(rows[0].enabled, false);
+  await act(async () => renderer.root.findByType('Toggle').props.onToggle());
+  assert.equal(rows[0].enabled, true); assert.deepEqual(dialogs, ['Mod saved', 'Allow appearance changes?']);
   await act(async () => renderer.unmount());
 });

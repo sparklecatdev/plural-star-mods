@@ -24,6 +24,7 @@ Do not change a published release's assets in place. Advance the appropriate ver
 | --- | --- |
 | Supported offline original and payload version | `payload/base.json`, `payload/release.json`, `scripts/base_config.py` |
 | Upstream integration and build order | `scripts/build-payloads.py`, `payload/*.patch` |
+| Custom mod interpreter and editor | `payload/mods/sparkleScriptCore.ts`, `sparkleScripts.ts`, `CustomMods.tsx`; see `SPARKLESCRIPT.md` |
 | Patched-app screens and behavior | `payload/mods/*.tsx`, `payload/mods/*.ts` |
 | Feature defaults, persistence, and cloud sync | `payload/mods/modPreferencesCore.ts`, `modPreferences.ts`, `cloudModsCore.ts`, `cloudMods.ts` |
 | Extra interface controls | `payload/mods/extraCustomizationCore.ts`, `extraCustomization.ts`, `ExtraCustomizationMenu.tsx` |

@@ -38,6 +38,10 @@ Building or modifying the project? See the [developer guide](fordevs.md).
 - **Mod sync:** mod preferences and patch versions travel with the existing cloud save and linked-device sync. Preferences restore automatically; the patcher installs patch updates.
 - **No root or account required.** Included patches work offline; app downloads and update checks use GitHub over HTTPS. The patched Plural Star retains its original networking behavior.
 
+## Custom mods
+
+Create, import, and manage small local SparkleScript mods under **Settings → sparklecat's mods → Custom mods**. The in-app editor works offline. See [SparkleScript](SPARKLESCRIPT.md) for syntax, examples, permissions, and current limits.
+
 ## Suggestions
 
 Have a feature in mind? Message **sparklecatdev** directly, join the [patches Discord](https://discord.gg/Pf2F2BawKV), or [open a GitHub issue](https://github.com/sparklecatdev/plural-star-mods/issues/new). Suggestions for custom features and features missing from the official app are welcome.

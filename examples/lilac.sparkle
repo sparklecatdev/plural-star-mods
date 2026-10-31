@@ -1,0 +1,8 @@
+mod "Lilac Accent" version "1.0.0" {
+  describe "Change the accent background"
+  allow appearance
+  when tap {
+    accent "#A578C0"
+    show "Your accent is now lilac."
+  }
+}

@@ -118,6 +118,7 @@ def main():
             run('node', '--test', 'scripts/background-settings.test.js', 'scripts/restore-settings.test.js')
         run('node', str(ROOT / 'tests/storage.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/mods.test.cjs'), str(SOURCE))
+        run('node', str(ROOT / 'tests/sparklescript.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/cloud-mods.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/ui.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/updates.test.cjs'), str(SOURCE))
