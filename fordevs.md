@@ -2,6 +2,39 @@
 
 This is the maintainer's map of the repository. Read the relevant source before changing it. `README.md` describes the user-facing behavior; this file describes where that behavior comes from and how to build, test, and release it. The exact supported inputs and versions are in `payload/base.json`, `payload/release.json`, and `app/build.gradle`, not in this guide.
 
+**Important:** When adding new features, update the feature list in README.md to reflect the new capabilities.
+
+## Feature Implementation Guide
+
+For detailed guidance on implementing new features in this patcher, please see the [Patcher Feature Implementation Guide](patcher-feature-implementation-guide.md). This document provides:
+
+- Architecture overview and code patterns
+- Step-by-step implementation process  
+- Security considerations and testing requirements
+- Version management procedures
+- Integration points with existing systems
+
+## Repository Structure
+
+### Android Application (`app/`)
+- Main patching logic in `MainActivity.java`
+- APK modification functionality in `ApkPatcher.java` 
+- Update handling in `UpdateClient.java` and `UpdatePolicy.java`
+- Compatibility pack handling in `CompatibilityPack.java`
+
+### Mod Payloads (`payload/mods/`)
+- Core mod functionality with settings persistence  
+- PluralKit synchronization features
+- Extra customization options
+- Patch installation logic
+- Update discovery mechanisms
+- Mod menu interface in `ModMenu.tsx`
+
+### Native Components (`payload/native/`, `native-tools/`)
+- Runtime bundle loading and rollback support
+- Biometric/device unlock functionality (added in v0.6.1)
+- Android-specific integration points
+
 ## What this repository builds
 
 The **patcher** is the Android app in `app/` (`dev.sparklecat.pluralmods`). It obtains a verified official Plural Star APK, replaces its React Native bundle and `classes2.dex`, signs the result with a key held in Android Keystore on that device, and offers the APK to Android's installer. It does not change Plural Star's package identity. The patcher's publisher key is separate from the per-device key used for patched APKs.
