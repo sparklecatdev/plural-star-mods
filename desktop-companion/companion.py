@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Show a public PluralKit front in the local Discord client's activity."""
+"""Show Plural Star cloud fronters in Discord activity."""
 import json
 import os
 import queue
@@ -8,46 +8,12 @@ import socket
 import struct
 import threading
 import time
-import urllib.error
-import urllib.request
 import uuid
+
+from cloud import Cloud, DEFAULT_RELAY
 
 CLIENT_ID = '1566174520350347434'
 INTERVAL = 30
-
-
-def system_id(value):
-    value = value.strip().lower().replace('-', '')
-    if not re.fullmatch(r'[a-z]{5,6}', value):
-        raise ValueError('Enter your 5- or 6-letter PluralKit system ID.')
-    return value
-
-
-def get_front(value):
-    request = urllib.request.Request(
-        'https://api.pluralkit.me/v2/systems/' + system_id(value) + '/fronters',
-        headers={'User-Agent': 'Sparklecat-Desktop-Companion/1.0', 'Accept': 'application/json'},
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            if response.status == 204:
-                return []
-            data = json.load(response)
-    except urllib.error.HTTPError as error:
-        if error.code == 403:
-            raise ValueError('Your PluralKit current fronter must be public.') from error
-        if error.code == 404:
-            raise ValueError('PluralKit system not found. Check your system ID.') from error
-        raise ValueError('PluralKit returned HTTP ' + str(error.code)) from error
-    if not isinstance(data, dict) or not isinstance(data.get('members'), list):
-        raise ValueError('Unexpected response from PluralKit.')
-    names = []
-    for member in data['members']:
-        if isinstance(member, dict):
-            name = member.get('display_name') or member.get('name')
-            if isinstance(name, str) and name.strip():
-                names.append(name.strip())
-    return names
 
 
 def activity_for(names):
@@ -146,16 +112,19 @@ class Discord:
             self.stream = None
 
 
-def run_worker(value, stop, messages):
+def run_worker(password, relay, token, stop, messages):
     discord = Discord()
+    cloud = None
     try:
         while not stop.is_set():
             try:
-                names = get_front(value)
+                if cloud is None:
+                    cloud = Cloud(password, relay, token)
+                names = cloud.get_front()
                 if not discord.stream:
                     discord.connect()
                 discord.set_activity(activity_for(names))
-                messages.put('Showing: ' + ', '.join(names) if names else 'No public fronters to show.')
+                messages.put('Showing: ' + ', '.join(names) if names else 'No fronters to show.')
             except (OSError, ValueError, ConnectionError, json.JSONDecodeError) as error:
                 if discord.stream:
                     try:
@@ -185,12 +154,21 @@ def main():
     frame = ttk.Frame(root, padding=20)
     frame.grid(sticky='nsew')
     ttk.Label(frame, text='Discord fronting presence', font=('TkDefaultFont', 15, 'bold')).grid(row=0, column=0, columnspan=2, sticky='w')
-    ttk.Label(frame, text='Enter your PluralKit system ID. Current fronter must be public.').grid(row=1, column=0, columnspan=2, pady=(10, 8), sticky='w')
+    ttk.Label(frame, text='Plural Star cloud password').grid(row=1, column=0, columnspan=2, pady=(10, 0), sticky='w')
     value = tk.StringVar()
-    entry = ttk.Entry(frame, textvariable=value, width=30)
+    entry = ttk.Entry(frame, textvariable=value, width=40, show='•')
     entry.grid(row=2, column=0, sticky='ew')
+    ttk.Label(frame, text='Cloud relay URL').grid(row=3, column=0, columnspan=2, pady=(10, 0), sticky='w')
+    relay = tk.StringVar(value=DEFAULT_RELAY)
+    relay_entry = ttk.Entry(frame, textvariable=relay, width=40)
+    relay_entry.grid(row=4, column=0, columnspan=2, sticky='ew')
+    ttk.Label(frame, text='Relay token (only if your relay requires one)').grid(row=5, column=0, columnspan=2, pady=(10, 0), sticky='w')
+    token = tk.StringVar()
+    token_entry = ttk.Entry(frame, textvariable=token, show='•')
+    token_entry.grid(row=6, column=0, columnspan=2, sticky='ew')
+    ttk.Label(frame, text='Your fronting names will be visible through Discord. The default relay uses an unencrypted connection; use HTTPS if available.', wraplength=420).grid(row=7, column=0, columnspan=2, pady=(10, 0), sticky='w')
     status = tk.StringVar(value='Stopped. Open Discord, then select Start.')
-    ttk.Label(frame, textvariable=status, wraplength=420).grid(row=3, column=0, columnspan=2, pady=(12, 0), sticky='w')
+    ttk.Label(frame, textvariable=status, wraplength=420).grid(row=8, column=0, columnspan=2, pady=(12, 0), sticky='w')
     messages = queue.Queue()
     state = {'stop': None, 'closing': False}
 
@@ -200,16 +178,20 @@ def main():
             button.config(state='disabled')
             status.set('Stopping...')
             return
-        try:
-            current = system_id(value.get())
-        except ValueError as error:
-            status.set(str(error))
+        current = value.get()
+        if not current:
+            status.set('Enter your Plural Star cloud password.')
             return
+        current_relay, current_token = relay.get(), token.get()
+        value.set('')
+        token.set('')
         state['stop'] = threading.Event()
         entry.config(state='disabled')
+        relay_entry.config(state='disabled')
+        token_entry.config(state='disabled')
         button.config(text='Stop')
         status.set('Connecting...')
-        threading.Thread(target=run_worker, args=(current, state['stop'], messages), daemon=True).start()
+        threading.Thread(target=run_worker, args=(current, current_relay, current_token, state['stop'], messages), daemon=True).start()
 
     button = ttk.Button(frame, text='Start', command=toggle)
     button.grid(row=2, column=1, padx=(8, 0))
@@ -224,6 +206,8 @@ def main():
                         root.destroy()
                         return
                     entry.config(state='normal')
+                    relay_entry.config(state='normal')
+                    token_entry.config(state='normal')
                     button.config(text='Start', state='normal')
                     status.set('Stopped.')
                 elif not state['closing']:

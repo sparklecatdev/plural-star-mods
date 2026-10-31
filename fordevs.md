@@ -106,7 +106,7 @@ The existing feature switches are in `modPreferencesCore.ts`; the extra customiz
 
 ## Desktop companion
 
-The standalone Python/Tkinter companion reads public PluralKit current fronters and uses Discord desktop IPC to publish an activity. It does not read Plural Star cloud saves or use a token. Plural Star’s existing PluralKit sync mirrors imported primary fronters. Keep sharing opt-in, clear presence on stop or failed refresh, and document the public visibility requirement. Run `python3 -m unittest discover -s desktop-companion -p "test_*.py"` and test against a running Discord desktop client when changing the integration. Include `desktop-companion/` in the patcher source ZIP and publish it as a separate release ZIP.
+The Python/Tkinter desktop companion reads Plural Star's encrypted cloud vault and publishes primary and co-fronting member names through Discord desktop IPC. It does not require PluralKit. Preserve opt-in sharing, do not store the cloud password, reuse the linked-device ID, never write vault data, and clear presence on stop or failed refresh. The upstream default relay uses HTTP; disclose that authentication is exposed in transit and allow HTTPS custom relays. Run `python3 -m unittest discover -s desktop-companion -p "test_*.py"` with its requirements installed; test against a real cloud account and Discord where available. Include `desktop-companion/` in the patcher source ZIP and publish a separate desktop release ZIP.
 
 ## Validation
 
