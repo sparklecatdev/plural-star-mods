@@ -53,6 +53,7 @@ def main():
         run('git', 'apply', str(ROOT / 'payload/device-unlock.patch'))
         run('git', 'apply', str(ROOT / 'payload/lock-icon.patch'))
         run('git', 'apply', str(ROOT / 'payload/extra-customization.patch'))
+        run('git', 'apply', '--unidiff-zero', str(ROOT / 'payload/group-view.patch'))
         shutil.copytree(ROOT / 'payload/mods', SOURCE / 'src/mods', dirs_exist_ok=True)
         assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', release['version'])
         assert re.fullmatch(r'[a-z0-9.-]{1,80}', release['runtime'])
