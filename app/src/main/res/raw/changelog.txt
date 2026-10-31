@@ -1,1 +1,1 @@
-Optional themed Plural Star launcher icon, designed for supported Android home screens.
+Adds support for optional Discord Rich Presence in the patched app.

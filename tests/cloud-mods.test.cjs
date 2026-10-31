@@ -273,7 +273,7 @@ test('restoring switches cancels a pending storage restore and commits both swit
   const prefs = createModPreferences({wallpaper: true, storage: true}, {read: async () => null,
     beforeDisable: async id => { actions.push('cancel-' + id); }, write: async text => { actions.push(JSON.parse(text)); }});
   await prefs.setPreferences({wallpaper: false, storage: false});
-  assert.deepEqual(plain(actions), ['cancel-wallpaper', 'cancel-storage', {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, disableFacets: false, archivePolls: false, hideLockIcon: false, syncPreferences: false}]);
+  assert.deepEqual(plain(actions), ['cancel-wallpaper', 'cancel-storage', {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, disableFacets: false, archivePolls: false, discordPresence: false, hideLockIcon: false, syncPreferences: false}]);
 });
 
 test('upstream cloud and linked-device snapshots include the dedicated mod record', async () => {

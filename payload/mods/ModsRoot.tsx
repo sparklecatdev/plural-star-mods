@@ -111,7 +111,8 @@ export default function ModsRoot() {
   else if (ready) {
     // Recovery and queued restores finish before upstream singletons can start.
     const App = require('../../App').default;
-    content = <App />;
+    const DiscordPresence = require('./DiscordPresence').DiscordPresence;
+    content = <><DiscordPresence /><App /></>;
     for (let i = wrappers.length - 1; i >= 0; i--) content = React.createElement(wrappers[i].component, {key: `${wrappers[i].id}-${i}`, children: content});
   } else content = <View style={styles.center}><ActivityIndicator color="#E5B5FF" /></View>;
 

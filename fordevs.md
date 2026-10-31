@@ -157,3 +157,10 @@ Keep release assets, source archives, and diagnostics free of credentials and us
 - **Source verification fails:** commit the exact files first, rebuild the unsigned APK so `packageSource` embeds that commit's source, then sign and verify again. The release verifier compares the embedded ZIP with every tracked file.
 
 SparkleScript is unrestricted JavaScript after explicit device-local opt-in. Keep the master switch off by default and never restore it from cloud preferences. `sparkleScripts.ts` owns script lifecycle and app wrappers; scripts must register cleanup with `api.onDispose`. Keep legacy scripts compatible and update `SPARKLESCRIPT.md` when the API changes.
+
+
+## Discord Rich Presence
+
+Discord presence is off by default, remains device-local, and only shares non-private fronting members while the app is running. The opt-in setting lives in the mod menu. Discord must be installed and signed in. `DiscordPresence.tsx` selects names, while `DiscordPresenceModule.java` and `DiscordPresence.cpp` use Discord Social SDK 1.10.19337 without OAuth. `DiscordManifest.java` and `ApkPatcher.java` add the SDK classes, native libraries, and package visibility to newly created APKs. Native changes require a new patcher release and native runtime version; patch-only updates cannot add the bridge to an old installation.
+
+For a local native build, extract the official Discord Social SDK 1.10.19337 into `.work/discord-sdk` or set `DISCORD_SOCIAL_SDK_DIR`; Android NDK 27.0.12077973 is required. Do not commit SDK binaries. When the SDK is unavailable, the build reuses native components from the signed v0.6.4 patcher after verifying its certificate and bridge source hash; changing the bridge requires the SDK. Run the normal full build and Android tests, and test presence on a device with Discord signed in.

@@ -17,8 +17,17 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           cmdline-tools-version: 13114758
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.0.12077973'
           log-accepted-android-sdk-licenses: false
+      - name: Prepare Discord SDK for the first build
+        env:
+          DISCORD_SOCIAL_SDK_URL: ${{ secrets.DISCORD_SOCIAL_SDK_URL }}
+        run: |
+          if [ -n "$DISCORD_SOCIAL_SDK_URL" ] && curl --fail --location --silent "$DISCORD_SOCIAL_SDK_URL" -o "$RUNNER_TEMP/discord-sdk.zip"; then
+            echo "d784097504685953849cc2842561d8a8013326fe0b8df65a1de63ddefde62045  $RUNNER_TEMP/discord-sdk.zip" | sha256sum -c -
+            mkdir -p .work/discord-sdk
+            unzip -q "$RUNNER_TEMP/discord-sdk.zip" -d .work/discord-sdk
+          fi
       - uses: gradle/actions/setup-gradle@v4
       - run: curl --fail --location https://github.com/ByHanyou/Plural-Star/releases/download/v1.23.3/app-release.apk --output "$RUNNER_TEMP/plural-star.apk"
       - run: PLURAL_STAR_APK="$RUNNER_TEMP/plural-star.apk" python3 scripts/build-payloads.py
@@ -27,3 +36,7 @@ jobs:
         with:
           name: sparklecat-plural-star-mods-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sparklecat-plural-star-mods-unsigned-release
+          path: app/build/outputs/apk/release/app-release-unsigned.apk

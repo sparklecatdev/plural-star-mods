@@ -16,7 +16,7 @@ public final class DeviceUnlockPackage implements ReactPackage {
     }
 
     @Override public List<NativeModule> createNativeModules(ReactApplicationContext context) {
-        return java.util.Arrays.asList(new DeviceUnlockModule(context), new RestModeModule(context));
+        return java.util.Arrays.asList(new DeviceUnlockModule(context), new RestModeModule(context), new DiscordPresenceModule(context));
     }
 
     @Override public List<ViewManager> createViewManagers(ReactApplicationContext context) {

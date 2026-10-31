@@ -4,7 +4,7 @@ import {sanitizeExtraCustomization} from './extraCustomizationCore';
 import type {ExtraCustomization} from './extraCustomizationCore';
 
 export const CLOUD_MODS_KEY = 'ps:sparklecat:mods';
-export type ModSettings = {enabled: Omit<ModPreferences, 'syncPreferences'>; pkFrontSyncEnabled: boolean; automaticUpdates: boolean; extraCustomization?: ExtraCustomization};
+export type ModSettings = {enabled: Omit<ModPreferences, 'syncPreferences' | 'discordPresence'>; pkFrontSyncEnabled: boolean; automaticUpdates: boolean; extraCustomization?: ExtraCustomization};
 export type PatchTarget = {runtime: string; variant: string; version: string};
 export type CloudModRecord = {schema: 1; settings: ModSettings; automaticRestore: boolean; patches: PatchTarget[]};
 const variants = ['wallpaper', 'storage', 'wallpaper-storage'];

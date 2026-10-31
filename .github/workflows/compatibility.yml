@@ -34,8 +34,18 @@ jobs:
         if: steps.latest.outputs.needed == 'true'
         with:
           cmdline-tools-version: 13114758
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.0.12077973'
           log-accepted-android-sdk-licenses: false
+      - name: Prepare Discord SDK for the first build
+        if: steps.latest.outputs.needed == 'true'
+        env:
+          DISCORD_SOCIAL_SDK_URL: ${{ secrets.DISCORD_SOCIAL_SDK_URL }}
+        run: |
+          if [ -n "$DISCORD_SOCIAL_SDK_URL" ] && curl --fail --location --silent "$DISCORD_SOCIAL_SDK_URL" -o "$RUNNER_TEMP/discord-sdk.zip"; then
+            echo "d784097504685953849cc2842561d8a8013326fe0b8df65a1de63ddefde62045  $RUNNER_TEMP/discord-sdk.zip" | sha256sum -c -
+            mkdir -p .work/discord-sdk
+            unzip -q "$RUNNER_TEMP/discord-sdk.zip" -d .work/discord-sdk
+          fi
       - uses: gradle/actions/setup-gradle@v4
         if: steps.latest.outputs.needed == 'true'
       - name: Build and check current mods against latest upstream

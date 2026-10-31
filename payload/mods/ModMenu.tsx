@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {Modal, ScrollView, View} from 'react-native';
+import {Modal, NativeModules, ScrollView, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Text} from '../components/AppText';
 import {Btn, ToggleRow} from '../components/controls';
@@ -63,6 +63,8 @@ function ModMenu({onClose}: {onClose: () => void}) {
           onToggle={() => { void toggle('noSpeaker'); }} />
         <ToggleRow label="Archive polls" desc="Move polls out of the main list and restore them later." value={enabled.archivePolls} disabled={busy || saving || pkBusy}
           onToggle={() => { void toggle('archivePolls'); }} />
+        <ToggleRow label="Discord fronting presence" desc={NativeModules.SparklecatDiscordPresence ? 'Show public fronting member names on your Discord profile while the app is running. Requires Discord signed in on this device.' : 'Requires a newer patcher.'} value={!!NativeModules.SparklecatDiscordPresence && enabled.discordPresence} disabled={!NativeModules.SparklecatDiscordPresence || busy || saving || pkBusy}
+          onToggle={() => { void toggle('discordPresence'); }} />
         <ToggleRow label="Fix System Chat keyboard position" desc="On Android, let the system position chat when the keyboard opens." value={enabled.chatKeyboardFix} disabled={busy || saving || pkBusy}
           onToggle={() => { void toggle('chatKeyboardFix'); }} />
         <ToggleRow label="Disable facets" desc="Hide the facets tab and conversion action. Saved facets are kept." value={enabled.disableFacets} disabled={busy || saving || pkBusy}
