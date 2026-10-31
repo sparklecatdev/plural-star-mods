@@ -110,7 +110,7 @@ test('PluralKit save failures are visible and allow a retry', async () => {
 });
 
 function rootHarness({password = null, reduceMotion = false, recoveryError = false, deferred = false} = {}) {
-  const animations = []; const gates = []; let resolveRecovery;
+  const animations = []; const gates = []; const checks = []; let resolveRecovery;
   const recovered = deferred ? new Promise(resolve => { resolveRecovery = resolve; }) : Promise.resolve();
   const {default: Root} = load('ModsRoot.tsx', {
     'react-native': {View: 'View', Text: 'Text', TextInput: 'TextInput', Button: 'Button', ActivityIndicator: 'ActivityIndicator',
@@ -124,14 +124,26 @@ function rootHarness({password = null, reduceMotion = false, recoveryError = fal
     './sparkleScripts': {loadScripts: async () => {}, runScripts: () => {}},
     './useDeviceUnlock': {useDeviceUnlock: () => ({available: false, prompt: async () => {}})},
     './modOptions': {nativeUnlockSupported: true},
-    './updateCheck': {updateChecker: {check: async () => {}}, confirmPatchLaunch: async () => {}},
+    './updateCheck': {updateChecker: {check: async force => { checks.push(force); }}, confirmPatchLaunch: async () => {}},
     './storageSnapshot': {recoverBeforeStart: async () => { await recovered; if (recoveryError) throw Error('restore failed'); },
       retryStoragePreparation: async () => {}, recovery: {recover: async () => {}}, restoreQueue: {cancel: async () => {}}},
     './toolsState': {setToolsOpen: value => gates.push(value), waitForStorageIdle: async () => {}},
     '../../App': {default: () => React.createElement('PluralStar')},
   });
-  return {Root, animations, gates, resolveRecovery};
+  return {Root, animations, gates, checks, resolveRecovery};
 }
+
+test('each launch checks for updates after unlocking', async () => {
+  const h = rootHarness({password: 'secret', reduceMotion: true}); let renderer;
+  for (let launch = 1; launch <= 2; launch++) {
+    await act(async () => { renderer = create(React.createElement(h.Root)); });
+    assert.equal(h.checks.length, launch - 1);
+    await act(async () => renderer.root.findByType('TextInput').props.onChangeText('secret'));
+    await act(async () => renderer.root.findByProps({title: 'Unlock'}).props.onPress());
+    assert.deepEqual(h.checks, Array(launch).fill(true));
+    await act(async () => renderer.unmount());
+  }
+});
 
 test('launch shows a short animation and opens the app automatically without a boot menu', async () => {
   const h = rootHarness(); let renderer;

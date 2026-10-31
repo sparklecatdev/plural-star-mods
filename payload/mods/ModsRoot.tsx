@@ -50,6 +50,7 @@ export default function ModsRoot() {
     setUnlockInput(''); setGatePassword(null); setError('');
   });
   const scriptsOpened = useRef(false);
+  const updateChecked = useRef(false);
   const finishAnimation = useCallback(() => setAnimationDone(true), []);
   const prepare = useCallback(async (retry = false) => {
     setWorking(true); setError('');
@@ -66,7 +67,11 @@ export default function ModsRoot() {
     finally { setWorking(false); }
   }, []);
   useEffect(() => { void prepare(); }, [prepare]);
-  useEffect(() => { if (ready && gatePassword === null && !error) void updateChecker.check(); }, [ready, gatePassword, error]);
+  useEffect(() => {
+    if (!ready || gatePassword !== null || error || updateChecked.current) return;
+    updateChecked.current = true;
+    void updateChecker.check(true);
+  }, [ready, gatePassword, error]);
   useEffect(() => {
     if (!ready || gatePassword !== null || error || scriptsOpened.current) return;
     let stopped = false;

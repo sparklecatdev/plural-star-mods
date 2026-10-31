@@ -75,7 +75,7 @@ Android prevents a separate patcher from reading the official app's private stor
 
 ## Updates
 
-Plural Star checks for compatible patch releases at startup, at most once per day. When updates are available, a small popup in the patcher's purple/lilac theme offers **Open patcher** or **Later**. It waits until setup and the app lock are complete and appears at most once per launch. Update controls and downloads are managed by the patcher.
+Plural Star checks for compatible patch releases each time the app starts. When updates are available, a small popup in the patcher's purple/lilac theme offers **Open patcher** or **Later**. It waits until setup and the app lock are complete and appears at most once per launch. Update controls and downloads are managed by the patcher.
 
 Open the patcher to check for patch updates automatically, then choose **Update installed mods** when an update is available. The patcher downloads the newest compatible stable patch, verifies its exact size and SHA-256 from GitHub's release metadata, rebuilds from the cached original APK using the existing device signing key, and opens Android's installer. Saved data stays in place. If the original APK is missing, download a fresh copy first. Offline checks offer saved matching patches, or the bundled patches for the offline base, only when this would not downgrade a previously prepared patch.
 
