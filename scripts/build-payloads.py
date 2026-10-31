@@ -330,6 +330,7 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
         target = "(fields.background || 'plain') === mode"
         assert text.count(target) == 1
         display.write_text(text.replace(target, "(fields.background || (enhanced ? 'banner' : 'plain')) === mode"))
+        run('git', 'apply', str(ROOT / 'payload/navigation-shortcuts.patch'))
         shutil.copytree(ROOT / 'payload/mods', SOURCE / 'src/mods', dirs_exist_ok=True)
         assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', release['version'])
         assert re.fullmatch(r'[a-z0-9.-]{1,80}', release['runtime'])

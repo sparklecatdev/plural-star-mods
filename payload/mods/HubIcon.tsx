@@ -2,6 +2,11 @@ import React from 'react';
 import Svg, {Path} from 'react-native-svg';
 
 const paths: Record<string, string> = {
+  front: 'M12 3l8 9-8 9-8-9z M12 8v8 M8 12h8',
+  members: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M5 20c0-4 3-6 7-6s7 2 7 6',
+  hub: 'M12 3l8 4v10l-8 4-8-4V7z',
+  journal: 'M5 4h14v16H5z M8 8h8 M8 12h8 M8 16h5',
+  history: 'M4 12a8 8 0 1 0 2-5 M4 3v5h5 M12 7v5l4 2',
   planner: 'M4 5h16v15H4z M8 3v4 M16 3v4 M4 9h16 M8 13h3v3H8z',
   retroHistory: 'M4 12a8 8 0 1 0 2-5 M4 3v5h5 M12 7v5l4 2',
   statistics: 'M4 20V11h4v9 M10 20V4h4v16 M16 20v-6h4v6 M3 20h18',

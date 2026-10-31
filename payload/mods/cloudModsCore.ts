@@ -23,6 +23,7 @@ export function readCloudMods(raw: string | null): CloudModRecord | null {
     (s.enabled.noSpeaker !== undefined && typeof s.enabled.noSpeaker !== 'boolean') ||
     (s.enabled.singleConfirm !== undefined && typeof s.enabled.singleConfirm !== 'boolean') ||
     (s.enabled.deviceUnlock !== undefined && typeof s.enabled.deviceUnlock !== 'boolean') ||
+    (s.enabled.disableFacets !== undefined && typeof s.enabled.disableFacets !== 'boolean') ||
     (s.enabled.chatKeyboardFix !== undefined && typeof s.enabled.chatKeyboardFix !== 'boolean') ||
     (s.enabled.profilePalettes !== undefined && typeof s.enabled.profilePalettes !== 'boolean') ||
     (s.enabled.groupView !== undefined && typeof s.enabled.groupView !== 'boolean') ||
@@ -34,7 +35,7 @@ export function readCloudMods(raw: string | null): CloudModRecord | null {
   }
   return {schema: 1, settings: {enabled: {wallpaper: s.enabled.wallpaper, storage: s.enabled.storage, noSpeaker: s.enabled.noSpeaker === true,
     singleConfirm: s.enabled.singleConfirm === true, deviceUnlock: s.enabled.deviceUnlock === true,
-    groupView: s.enabled.groupView === true, profilePalettes: s.enabled.profilePalettes === true, hideLockIcon: s.enabled.hideLockIcon === true, chatKeyboardFix: s.enabled.chatKeyboardFix === true},
+    groupView: s.enabled.groupView === true, profilePalettes: s.enabled.profilePalettes === true, hideLockIcon: s.enabled.hideLockIcon === true, chatKeyboardFix: s.enabled.chatKeyboardFix === true, disableFacets: s.enabled.disableFacets === true},
     pkFrontSyncEnabled: s.pkFrontSyncEnabled, automaticUpdates: s.automaticUpdates,
     ...(s.extraCustomization === undefined ? {} : {extraCustomization: sanitizeExtraCustomization(s.extraCustomization)})},
     automaticRestore: r.automaticRestore,
@@ -113,7 +114,7 @@ export function createCloudMods(current: PatchTarget, available: Pick<ModPrefere
     if (previous && local.pkFrontSyncEnabled === previous.pkFrontSyncEnabled && local.automaticUpdates === previous.automaticUpdates &&
       JSON.stringify(local.extraCustomization) === JSON.stringify(previous.extraCustomization) &&
       local.enabled.profilePalettes === previous.enabled.profilePalettes && local.enabled.groupView === previous.enabled.groupView && local.enabled.hideLockIcon === previous.enabled.hideLockIcon &&
-      local.enabled.chatKeyboardFix === previous.enabled.chatKeyboardFix && local.enabled.noSpeaker === previous.enabled.noSpeaker &&
+      local.enabled.disableFacets === previous.enabled.disableFacets && local.enabled.chatKeyboardFix === previous.enabled.chatKeyboardFix && local.enabled.noSpeaker === previous.enabled.noSpeaker &&
       local.enabled.singleConfirm === previous.enabled.singleConfirm && local.enabled.deviceUnlock === previous.enabled.deviceUnlock &&
       (!available.wallpaper || local.enabled.wallpaper === previous.enabled.wallpaper) &&
       (!available.storage || local.enabled.storage === previous.enabled.storage)) return Promise.resolve();
@@ -122,7 +123,7 @@ export function createCloudMods(current: PatchTarget, available: Pick<ModPrefere
       if ((io.enabled && !io.enabled()) || !next) return;
       next.settings = {...local, enabled: {
         groupView: local.enabled.groupView, profilePalettes: local.enabled.profilePalettes, hideLockIcon: local.enabled.hideLockIcon,
-        chatKeyboardFix: local.enabled.chatKeyboardFix, noSpeaker: local.enabled.noSpeaker,
+        disableFacets: local.enabled.disableFacets, chatKeyboardFix: local.enabled.chatKeyboardFix, noSpeaker: local.enabled.noSpeaker,
         singleConfirm: local.enabled.singleConfirm,
         deviceUnlock: local.enabled.deviceUnlock,
         wallpaper: available.wallpaper ? local.enabled.wallpaper : next.settings.enabled.wallpaper,

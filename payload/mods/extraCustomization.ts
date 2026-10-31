@@ -3,8 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {ThemeColors} from '../theme';
 import {DEFAULT_EXTRA_CUSTOMIZATION, sanitizeExtraCustomization} from './extraCustomizationCore';
 import type {ExtraCustomization} from './extraCustomizationCore';
-export {FRONT_TIERS, CARD_AREAS, cardAppearance, ELEMENT_COLOR_OPTIONS, COLOR_OPTIONS, DEFAULT_EXTRA_CUSTOMIZATION, TAB_OPTIONS, TILE_OPTIONS} from './extraCustomizationCore';
-export type {FrontTierOption, CardArea, CardAppearance, ElementColorOption, ColorOption, ExtraCustomization} from './extraCustomizationCore';
+export {FRONT_TIERS, CARD_AREAS, cardAppearance, ELEMENT_COLOR_OPTIONS, COLOR_OPTIONS, DEFAULT_EXTRA_CUSTOMIZATION, TAB_OPTIONS, TILE_OPTIONS, NAV_OPTIONS} from './extraCustomizationCore';
+export type {FrontTierOption, CardArea, CardAppearance, ElementColorOption, ColorOption, ExtraCustomization, NavigationOption} from './extraCustomizationCore';
 
 export const EXTRA_CUSTOMIZATION_KEY = 'sparklecat:extra-customization';
 

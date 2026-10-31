@@ -10,15 +10,16 @@ import {fontScale, tierAccent} from '../theme';
 import {options} from './modOptions';
 import {modPreferences, useModPreferences} from './modPreferences';
 import {useTheme} from '../themeContext';
-import {FRONT_TIERS, CARD_AREAS, ELEMENT_COLOR_OPTIONS, COLOR_OPTIONS, DEFAULT_EXTRA_CUSTOMIZATION, extraCustomization, TILE_OPTIONS, useExtraCustomization} from './extraCustomization';
-import type {FrontTierOption, CardArea, CardAppearance, ElementColorOption, ColorOption, ExtraCustomization} from './extraCustomization';
+import {FRONT_TIERS, CARD_AREAS, ELEMENT_COLOR_OPTIONS, COLOR_OPTIONS, DEFAULT_EXTRA_CUSTOMIZATION, extraCustomization, TILE_OPTIONS, TAB_OPTIONS, NAV_OPTIONS, useExtraCustomization} from './extraCustomization';
+import type {FrontTierOption, CardArea, CardAppearance, ElementColorOption, ColorOption, ExtraCustomization, NavigationOption} from './extraCustomization';
 
 const ToggleRow = (props: Omit<React.ComponentProps<typeof BaseToggleRow>, 'desc'>) => <BaseToggleRow {...props} desc="" />;
 
 const FRONT_TIER_NAMES: Record<FrontTierOption, string> = {primary: 'Primary front', coFront: 'Co-front', coConscious: 'Co-conscious'};
 
-const TAB_NAMES: Record<string, string> = {members: 'Members', journal: 'Journal', history: 'History'};
+const TAB_NAMES: Record<string, string> = {front: 'Front', hub: 'Hub', members: 'Members', journal: 'Journal', history: 'History'};
 const TILE_NAMES: Record<string, string> = {
+  ...TAB_NAMES,
   planner: 'Planner', retroHistory: 'Past front', statistics: 'Statistics', chat: 'Chat', mailbox: 'Mailbox',
   whiteboard: 'Whiteboard', colors: 'Colors', network: 'Network', polls: 'Polls', systemMap: 'System map',
   customFields: 'Custom fields', systemManager: 'System manager', archive: 'Archive', share: 'Import / export',
@@ -80,6 +81,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
   const enabled = useModPreferences();
   const colorOf = (key: ColorOption) => key === 'canvas' ? ('canvas' in T && typeof T.canvas === 'string' ? T.canvas : T.bg) : T[key];
   const elementColorOf = (key: ElementColorOption) => ({header: T.bg, tabBar: T.surface, tabActive: T.accent, tabInactive: T.dim, hubTile: T.card, hubTileBorder: T.border})[key];
+  const [navigationPicker, setNavigationPicker] = useState<number | null>(null);
   const [tierPicker, setTierPicker] = useState<FrontTierOption | null>(null);
   const [tierDrafts, setTierDrafts] = useState(prefs.frontTierNames);
   const [elementPicker, setElementPicker] = useState<ElementColorOption | null>(null);
@@ -136,6 +138,12 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         {(['members', 'journal', 'history'] as const).map(id =>
           <ToggleRow key={id} label={`Show ${TAB_NAMES[id]} tab`} value={!prefs.hiddenTabs.includes(id)} disabled={busy}
             onToggle={() => toggleHidden('hiddenTabs', id)} />)}
+        <Text style={{color: T.dim, fontSize: fs(13)}}>Choose what appears in each bottom bar position. Hub stays available.</Text>
+        {prefs.navigationSlots.map((id, index) => <Btn key={index} variant="ghost" disabled={busy} onPress={() => setNavigationPicker(index)}>{`Position ${index + 1}: ${TILE_NAMES[id]}`}</Btn>)}
+        <Text style={{color: T.dim, fontSize: fs(13)}}>Add navigation pages to the hub.</Text>
+        {TAB_OPTIONS.filter(id => id !== 'hub').map(id => <ToggleRow key={id} label={`Show ${TAB_NAMES[id]} in hub`} value={prefs.hubTabs.includes(id)} disabled={busy} onToggle={() => {
+          void save({...prefs, hubTabs: prefs.hubTabs.includes(id) ? prefs.hubTabs.filter(item => item !== id) : [...prefs.hubTabs, id]});
+        }} />)}
         <ToggleRow label="Show tab labels" value={!prefs.hideTabLabels} disabled={busy} onToggle={() => toggle('hideTabLabels')} />
         <ToggleRow label="Show tab icons" value={!prefs.hideTabIcons} disabled={busy} onToggle={() => toggle('hideTabIcons')} />
         <Text style={{color: T.dim, fontSize: fs(13)}}>Icons stay visible if labels are hidden.</Text>
@@ -174,7 +182,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         <Section title="Hub icons">
         <ToggleRow label="Minimal line hub icons" value={prefs.minimalHubIcons} disabled={busy} onToggle={() => toggle('minimalHubIcons')} />
         <Text style={{color: T.dim, fontSize: fs(13)}}>Choose an image for any hub icon. Custom images take priority over the line icons and are stored on this device.</Text>
-        {TILE_OPTIONS.map(id => <View key={id} style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+        {NAV_OPTIONS.map(id => <View key={id} style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
           {prefs.hubIconImages[id] && <Image source={{uri: prefs.hubIconImages[id]}} style={{width: 32, height: 32}} resizeMode="contain" />}
           <Text style={{flex: 1, color: T.text}}>{TILE_NAMES[id]}</Text>
           <Btn variant="ghost" disabled={busy} onPress={() => { void (async () => {
@@ -268,6 +276,17 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         value={prefs.colors[picker] || colorOf(picker)} onClose={() => setPicker(null)}
         onSave={hex => { void save({...prefs, colors: {...prefs.colors, [picker]: hex}}); setPicker(null); }}
         onClear={() => { const colors = {...prefs.colors}; delete colors[picker]; void save({...prefs, colors}); setPicker(null); }} clearLabel="Use default" />}
+      <Modal visible={navigationPicker !== null} animationType="slide" onRequestClose={() => setNavigationPicker(null)}>
+        <SafeAreaView style={{flex: 1, backgroundColor: T.bg}}><ScrollView contentContainerStyle={{padding: 24, gap: 8}}>
+          <Text style={{color: T.text, fontSize: fs(20)}}>Choose a bottom bar page</Text>
+          {NAV_OPTIONS.map(id => <Btn key={id} variant="ghost" disabled={busy || (prefs.navigationSlots.includes(id) && prefs.navigationSlots[navigationPicker ?? 0] !== id) || (prefs.navigationSlots[navigationPicker ?? 0] === 'hub' && id !== 'hub')} onPress={() => {
+            if (navigationPicker === null) return;
+            const navigationSlots = [...prefs.navigationSlots]; navigationSlots[navigationPicker] = id as NavigationOption;
+            void save({...prefs, navigationSlots}); setNavigationPicker(null);
+          }}>{TILE_NAMES[id]}</Btn>)}
+          <Btn variant="ghost" onPress={() => setNavigationPicker(null)}>Cancel</Btn>
+        </ScrollView></SafeAreaView>
+      </Modal>
     </SafeAreaView>
   </Modal>;
 }

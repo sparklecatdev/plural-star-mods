@@ -23,7 +23,7 @@ const {CLOUD_MODS_KEY, readCloudMods, createCloudMods} = load('cloudModsCore.ts'
 const {createModPreferences} = load('modPreferencesCore.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
 const current = {runtime: 'plural-star-1.23.3-mods-1', variant: 'wallpaper-storage', version: '0.4.2'};
-const settings = () => ({enabled: {wallpaper: true, storage: true, noSpeaker: false, singleConfirm: true, deviceUnlock: false, groupView: false, profilePalettes: false, hideLockIcon: false, chatKeyboardFix: false}, pkFrontSyncEnabled: false, automaticUpdates: true});
+const settings = () => ({enabled: {wallpaper: true, storage: true, noSpeaker: false, singleConfirm: true, deviceUnlock: false, groupView: false, profilePalettes: false, hideLockIcon: false, chatKeyboardFix: false, disableFacets: false}, pkFrontSyncEnabled: false, automaticUpdates: true});
 const record = () => ({schema: 1, settings: settings(), automaticRestore: true, patches: [{...current}]});
 function harness(saved = null, available = {wallpaper: true, storage: true}) {
   let disk = saved === null ? null : JSON.stringify(saved), local = settings(), failRead = false, failWrite = false, failRestore = false;
@@ -264,7 +264,7 @@ test('restoring switches cancels a pending storage restore and commits both swit
   const prefs = createModPreferences({wallpaper: true, storage: true}, {read: async () => null,
     beforeDisable: async id => { actions.push('cancel-' + id); }, write: async text => { actions.push(JSON.parse(text)); }});
   await prefs.setPreferences({wallpaper: false, storage: false});
-  assert.deepEqual(plain(actions), ['cancel-wallpaper', 'cancel-storage', {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, hideLockIcon: false, syncPreferences: false}]);
+  assert.deepEqual(plain(actions), ['cancel-wallpaper', 'cancel-storage', {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, disableFacets: false, hideLockIcon: false, syncPreferences: false}]);
 });
 
 test('upstream cloud and linked-device snapshots include the dedicated mod record', async () => {
@@ -327,4 +327,19 @@ test('experimental control collapsing defaults off and syncs only valid preferen
   saved.settings.extraCustomization = {enabled: true, autoCollapseControls: true, sheetOpacity: 50};
   assert.equal(readCloudMods(JSON.stringify(saved)).settings.extraCustomization.autoCollapseControls, true);
   assert.equal(readCloudMods(JSON.stringify(saved)).settings.extraCustomization.sheetOpacity, 50);
+});
+
+
+test('navigation choices validate and facets preference survives cloud sync', () => {
+  const saved = record();
+  saved.settings.enabled.disableFacets = true;
+  saved.settings.extraCustomization = {enabled: true, navigationSlots: ['front', 'chat', 'hub', 'journal', 'history'], hubTabs: ['members'], hubIconImages: {front: 'file:///icon.png'}};
+  const restored = readCloudMods(JSON.stringify(saved)).settings;
+  assert.equal(restored.enabled.disableFacets, true);
+  assert.deepEqual(plain(restored.extraCustomization.navigationSlots), ['front', 'chat', 'hub', 'journal', 'history']);
+  assert.deepEqual(plain(restored.extraCustomization.hubTabs), ['members']);
+  assert.equal(restored.extraCustomization.hubIconImages.front, 'file:///icon.png');
+  assert.deepEqual(plain(extra.sanitizeExtraCustomization({navigationSlots: ['chat', 'chat', 'hub', 'journal', 'history']}).navigationSlots), ['front', 'members', 'hub', 'journal', 'history']);
+  saved.settings.enabled.disableFacets = 'yes';
+  assert.throws(() => readCloudMods(JSON.stringify(saved)));
 });

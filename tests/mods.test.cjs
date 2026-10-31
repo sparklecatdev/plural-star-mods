@@ -25,11 +25,11 @@ test('mod switches persist independently and survive concurrent changes and rela
   const prefs = createModPreferences(both, io);
   let updates = 0; const unsubscribe = prefs.subscribe(() => updates++);
   await Promise.all([prefs.setEnabled('wallpaper', false), prefs.setEnabled('storage', false)]);
-  assert.deepEqual(plain(prefs.getSnapshot()), {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, hideLockIcon: false, syncPreferences: false});
+  assert.deepEqual(plain(prefs.getSnapshot()), {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, disableFacets: false, hideLockIcon: false, syncPreferences: false});
   const reopened = createModPreferences(both, io); await reopened.load();
-  assert.deepEqual(plain(reopened.getSnapshot()), {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, hideLockIcon: false, syncPreferences: false});
+  assert.deepEqual(plain(reopened.getSnapshot()), {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, disableFacets: false, hideLockIcon: false, syncPreferences: false});
   await reopened.setEnabled('wallpaper', true);
-  assert.deepEqual(JSON.parse(disk), {wallpaper: true, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, hideLockIcon: false, syncPreferences: false});
+  assert.deepEqual(JSON.parse(disk), {wallpaper: true, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, disableFacets: false, hideLockIcon: false, syncPreferences: false});
   assert.equal(updates, 3); unsubscribe();
 });
 
@@ -40,11 +40,11 @@ test('No speaker is opt-in and survives relaunch without changing other switches
   await prefs.load();
   assert.equal(prefs.getSnapshot().noSpeaker, false);
   await prefs.setEnabled('noSpeaker', true);
-  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: true, noSpeaker: true, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, hideLockIcon: false, syncPreferences: false});
+  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: true, noSpeaker: true, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, disableFacets: false, hideLockIcon: false, syncPreferences: false});
   const reopened = createModPreferences(both, io); await reopened.load();
   assert.equal(reopened.getSnapshot().noSpeaker, true);
   await reopened.setEnabled('noSpeaker', false);
-  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: true, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, hideLockIcon: false, syncPreferences: false});
+  assert.deepEqual(JSON.parse(disk), {wallpaper: false, storage: true, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, disableFacets: false, hideLockIcon: false, syncPreferences: false});
 });
 
 test('chat keyboard fix is opt-in and persists across relaunch', async () => {
@@ -83,7 +83,7 @@ test('failed switch save keeps the committed state and later changes still work'
 test('unavailable features cannot be enabled and malformed preferences use defaults', async () => {
   const prefs = createModPreferences({wallpaper: false, storage: true}, {read: async () => '{bad', write: async () => {}});
   await prefs.load(); await prefs.setEnabled('wallpaper', true);
-  assert.deepEqual(plain(prefs.getSnapshot()), {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, hideLockIcon: false, syncPreferences: false});
+  assert.deepEqual(plain(prefs.getSnapshot()), {wallpaper: false, storage: false, noSpeaker: false, singleConfirm: false, deviceUnlock: false, groupView: false, profilePalettes: false, chatKeyboardFix: false, disableFacets: false, hideLockIcon: false, syncPreferences: false});
 });
 
 test('disabling storage cancels a queued restore before committing the disabled switch', async () => {

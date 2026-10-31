@@ -2,6 +2,8 @@ export const FRONT_TIERS = ['primary', 'coFront', 'coConscious'] as const;
 export type FrontTierOption = typeof FRONT_TIERS[number];
 export const TAB_OPTIONS = ['front', 'members', 'hub', 'journal', 'history'] as const;
 export const TILE_OPTIONS = ['planner', 'retroHistory', 'statistics', 'chat', 'mailbox', 'whiteboard', 'colors', 'network', 'polls', 'systemMap', 'customFields', 'systemManager', 'archive', 'share', 'credits', 'discord', 'supportPS'] as const;
+export const NAV_OPTIONS = [...TAB_OPTIONS, ...TILE_OPTIONS] as const;
+export type NavigationOption = typeof NAV_OPTIONS[number];
 export const COLOR_OPTIONS = ['canvas', 'surface', 'card', 'border', 'borderLt', 'accentBg', 'dim', 'muted', 'toggleOff', 'danger', 'dangerBg', 'success', 'successBg', 'info', 'infoBg'] as const;
 export const ELEMENT_COLOR_OPTIONS = ['header', 'tabBar', 'tabActive', 'tabInactive', 'hubTile', 'hubTileBorder'] as const;
 export const CARD_AREAS = ['front', 'members', 'journal', 'history'] as const;
@@ -15,12 +17,14 @@ export type ExtraCustomization = {
   transparentAllCards: boolean;
   sheetOpacity: number | null;
   minimalHubIcons: boolean;
-  hubIconImages: Partial<Record<typeof TILE_OPTIONS[number], string>>;
+  hubIconImages: Partial<Record<NavigationOption, string>>;
   autoCollapseControls: boolean;
   hiddenFrontTiers: FrontTierOption[];
   frontTierNames: Partial<Record<FrontTierOption, string>>;
   frontTierColors: Partial<Record<FrontTierOption, string>>;
   cards: Partial<Record<CardArea, CardAppearance>>;
+  navigationSlots: NavigationOption[];
+  hubTabs: string[];
   hiddenTabs: string[];
   hiddenTiles: string[];
   fullScreenWallpaper: boolean;
@@ -56,7 +60,7 @@ export type ExtraCustomization = {
   colors: Partial<Record<ColorOption, string>>;
 };
 export const DEFAULT_EXTRA_CUSTOMIZATION: ExtraCustomization = {
-  blankStartPage: false, transparentAllCards: false, sheetOpacity: null, minimalHubIcons: false, hubIconImages: {}, autoCollapseControls: false, cards: {}, hiddenFrontTiers: [], frontTierNames: {}, frontTierColors: {},
+  navigationSlots: [...TAB_OPTIONS], hubTabs: [], blankStartPage: false, transparentAllCards: false, sheetOpacity: null, minimalHubIcons: false, hubIconImages: {}, autoCollapseControls: false, cards: {}, hiddenFrontTiers: [], frontTierNames: {}, frontTierColors: {},
   hideHeaderBorder: false, hideTabBarBorder: false, hideTabIcons: false, hideTileIcons: false,
   transparentHubTiles: false, hideHubTileBorders: false, hubColumns: 0, tileRadius: 14,
   wallpaperDim: 0.78, wallpaperFit: 'cover', elementColors: {},
@@ -89,7 +93,7 @@ export function sanitizeExtraCustomization(value: unknown): ExtraCustomization {
     if (typeof color === 'string' && hex.test(color)) frontTierColors[key] = color.toUpperCase();
   }
   const hubIconImages: ExtraCustomization['hubIconImages'] = {};
-  for (const id of TILE_OPTIONS) {
+  for (const id of NAV_OPTIONS) {
     const uri = v.hubIconImages?.[id];
     if (typeof uri === 'string' && uri.startsWith('file://') && uri.length <= 2048) hubIconImages[id] = uri;
   }
@@ -108,6 +112,8 @@ export function sanitizeExtraCustomization(value: unknown): ExtraCustomization {
   }
   return {
     cards, frontTierNames, frontTierColors, hubIconImages,
+    navigationSlots: Array.isArray(v.navigationSlots) && v.navigationSlots.length === TAB_OPTIONS.length && v.navigationSlots.includes('hub') && new Set(v.navigationSlots).size === v.navigationSlots.length && v.navigationSlots.every(id => (NAV_OPTIONS as readonly string[]).includes(id)) ? v.navigationSlots : [...TAB_OPTIONS],
+    hubTabs: Array.isArray(v.hubTabs) ? v.hubTabs.filter(id => (TAB_OPTIONS as readonly string[]).includes(id) && id !== 'hub') : [],
     transparentAllCards: v.transparentAllCards === true, sheetOpacity: typeof v.sheetOpacity === 'number' && Number.isFinite(v.sheetOpacity) && v.sheetOpacity >= 0 && v.sheetOpacity <= 100 ? Math.round(v.sheetOpacity) : null, minimalHubIcons: v.minimalHubIcons === true,
     hiddenFrontTiers: Array.isArray(v.hiddenFrontTiers) ? v.hiddenFrontTiers.filter((id): id is FrontTierOption => (FRONT_TIERS as readonly string[]).includes(id)) : [],
     hideHeaderBorder: v.hideHeaderBorder === true, hideTabBarBorder: v.hideTabBarBorder === true,

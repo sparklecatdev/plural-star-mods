@@ -1,0 +1,170 @@
+--- a/src/components/TabBar.tsx
++++ b/src/components/TabBar.tsx
+@@ -1,3 +1,7 @@
++import {Image} from 'react-native';
++import {HubIcon} from '../mods/HubIcon';
++import {useActiveHubShortcut, NAVIGATION_NAMES} from '../mods/navigationShortcuts';
++import {TAB_OPTIONS} from '../mods/extraCustomizationCore';
+ import React from 'react';
+ import {View, TouchableOpacity, StyleSheet} from 'react-native';
+ import {useSafeAreaInsets} from 'react-native-safe-area-context';
+@@ -14,11 +18,12 @@
+   front: '◈', members: '◇', hub: '⬡', journal: '◉', history: '◷',
+ };
+ 
+-export const TabBar = React.memo(function TabBar({tab, isSinglet, onPressTab, onPressBlank}: {tab: Tab | null; isSinglet: boolean; onPressTab: (id: Tab) => void; onPressBlank: () => void}) {
++export const TabBar = React.memo(function TabBar({tab, isSinglet, onPressTab, onPressShortcut, onPressBlank}: {tab: Tab | null; isSinglet: boolean; onPressTab: (id: Tab) => void; onPressShortcut: (id: import('../mods/extraCustomizationCore').NavigationOption) => void; onPressBlank: () => void}) {
+   const {t} = useTranslation();
+   const insets = useSafeAreaInsets();
+   const C = useTheme();
+   const extra = useExtraCustomization();
++  const activeShortcut = useActiveHubShortcut();
+   const fs = fontScale(C);
+   const tabLabel = (id: Tab): string => {
+     if (isSinglet && id === 'front') return t('tabs.status');
+@@ -32,14 +37,19 @@
+         {(!extra.hideTabIcons || extra.hideTabLabels) && <View style={{height: fs(24), justifyContent: 'center', marginBottom: 2}}><AccentText style={{color: tab === null ? extra.elementColors.tabActive || C.accent : extra.elementColors.tabInactive || C.dim, fontSize: fs(18), textAlign: 'center'}}>□</AccentText></View>}
+         {!extra.hideTabLabels && <AccentText style={[styles.tabLabel, {color: tab === null ? extra.elementColors.tabActive || C.accent : extra.elementColors.tabInactive || C.dim, fontSize: Math.min(fs(9), 12), textAlign: 'center'}]}>Blank</AccentText>}
+       </TouchableOpacity>}
+-      {TAB_IDS.filter(id => !extra.enabled || !extra.hiddenTabs.includes(id)).map(id => (
+-        <TouchableOpacity key={id} onPress={() => onPressTab(id)} activeOpacity={0.7} accessibilityRole="tab" accessibilityState={{selected: tab === id}} accessibilityLabel={tabLabel(id)} style={[styles.tabBtn, {paddingBottom: 8 + insets.bottom}]}>
++      {(extra.enabled ? extra.navigationSlots : TAB_IDS).filter(id => !extra.enabled || !extra.hiddenTabs.includes(id)).map(id => {
++        const isTab = (TAB_OPTIONS as readonly string[]).includes(id);
++        const selected = isTab ? tab === id && (id !== 'hub' || !activeShortcut) : tab === 'hub' && activeShortcut === id;
++        const label = isTab ? tabLabel(id as Tab) : NAVIGATION_NAMES[id];
++        return (
++        <TouchableOpacity key={id} onPress={() => { if (isTab) onPressTab(id as Tab); else onPressShortcut(id) }} activeOpacity={0.7} accessibilityRole="tab" accessibilityState={{selected}} accessibilityLabel={label} style={[styles.tabBtn, {paddingBottom: 8 + insets.bottom}]}>
+           {(!extra.enabled || !extra.hideTabIcons || extra.hideTabLabels) && <View style={{height: fs(24), justifyContent: 'center', marginBottom: 2}}>
+-            <AccentText style={{color: tab === id ? (extra.enabled ? extra.elementColors.tabActive || C.accent : C.accent) : (extra.enabled ? extra.elementColors.tabInactive || C.dim : C.dim), fontSize: fs(18), lineHeight: fs(22), textAlign: 'center', includeFontPadding: false, textAlignVertical: 'center'}} maxFontSizeMultiplier={1.2}>{TAB_ICONS[id]}</AccentText>
++            {!(extra.enabled && (extra.hubIconImages[id] || !isTab || extra.minimalHubIcons)) && <AccentText style={{color: selected ? (extra.enabled ? extra.elementColors.tabActive || C.accent : C.accent) : (extra.enabled ? extra.elementColors.tabInactive || C.dim : C.dim), fontSize: fs(18), lineHeight: fs(22), textAlign: 'center', includeFontPadding: false, textAlignVertical: 'center'}} maxFontSizeMultiplier={1.2}>{TAB_ICONS[id as Tab]}</AccentText>}
++            {extra.enabled && (extra.hubIconImages[id] ? <Image source={{uri: extra.hubIconImages[id]}} style={{width: fs(22), height: fs(22)}} resizeMode="contain" /> : (!isTab || extra.minimalHubIcons) && <HubIcon id={id} color={selected ? extra.elementColors.tabActive || C.accent : extra.elementColors.tabInactive || C.dim} size={fs(22)} />)}
+           </View>}
+-          {(!extra.enabled || !extra.hideTabLabels) && <AccentText style={[styles.tabLabel, {color: tab === id ? (extra.enabled ? extra.elementColors.tabActive || C.accent : C.accent) : (extra.enabled ? extra.elementColors.tabInactive || C.dim : C.dim), fontSize: Math.min(fs(9), 12), textAlign: 'center'}]} numberOfLines={2} maxFontSizeMultiplier={1.2}>{tabLabel(id)}</AccentText>}
++          {(!extra.enabled || !extra.hideTabLabels) && <AccentText style={[styles.tabLabel, {color: selected ? (extra.enabled ? extra.elementColors.tabActive || C.accent : C.accent) : (extra.enabled ? extra.elementColors.tabInactive || C.dim : C.dim), fontSize: Math.min(fs(9), 12), textAlign: 'center'}]} numberOfLines={2} maxFontSizeMultiplier={1.2}>{label}</AccentText>}
+         </TouchableOpacity>
+-      ))}
++      ); })}
+     </View>
+   );
+ });
+--- a/src/screens/HubScreen.tsx
++++ b/src/screens/HubScreen.tsx
+@@ -1,5 +1,7 @@
++import {goTab} from '../app/navigation';
++import {HubIcon} from '../mods/HubIcon';
++import {subscribeHubShortcuts, takeHubShortcut, setActiveHubShortcut, NAVIGATION_NAMES} from '../mods/navigationShortcuts';
+ import {Image} from 'react-native';
+-import {HubIcon} from '../mods/HubIcon';
+ import React, {useState, useEffect, useRef, useCallback} from 'react';
+ import {View, ScrollView, TouchableOpacity, Linking, BackHandler, Platform, PanResponder, PixelRatio, AccessibilityInfo} from 'react-native';
+ import AsyncStorage from '@react-native-async-storage/async-storage';
+@@ -91,6 +93,18 @@
+   const {t} = useTranslation();
+   const fs = fontScale(T);
+   const [activeTile, setActiveTile] = useState<HubTile | null>(null);
++  useEffect(() => {
++    const openRequested = () => {
++      const id = takeHubShortcut();
++      if (!id || !DEFAULT_TILE_ORDER.includes(id as HubTile)) return;
++      const url = EXTERNAL_TILES[id as HubTile];
++      if (url) openLink(url); else setActiveTile(id as HubTile);
++    };
++    const unsubscribe = subscribeHubShortcuts(openRequested);
++    openRequested();
++    return unsubscribe;
++  }, []);
++  useEffect(() => { setActiveHubShortcut(activeTile); }, [activeTile]);
+   const closeTile = useCallback(() => setActiveTile(null), []);
+   useEffect(() => {
+     if (Platform.OS !== 'android' || !activeTile) return;
+@@ -327,6 +341,10 @@
+       <View
+         onLayout={e => { gridWRef.current = e.nativeEvent.layout.width; }}
+         style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between', alignItems: 'flex-start'}}>
++        {extra.enabled && extra.hubTabs.map(id => <TouchableOpacity key={`tab-${id}`} onPress={() => goTab(id as 'front' | 'members' | 'journal' | 'history')} accessibilityRole="button" accessibilityLabel={NAVIGATION_NAMES[id as keyof typeof NAVIGATION_NAMES]} style={{width: tileWidth, height: tileHeight, borderRadius: extra.tileRadius, borderWidth: extra.hideHubTileBorders ? 0 : 1, backgroundColor: extra.transparentHubTiles ? 'transparent' : extra.elementColors.hubTile || T.card, borderColor: extra.elementColors.hubTileBorder || T.border, alignItems: 'center', justifyContent: 'center', gap: 6}}>
++          {(!extra.hideTileIcons || extra.hideTileLabels) && (extra.hubIconImages[id as keyof typeof extra.hubIconImages] ? <Image source={{uri: extra.hubIconImages[id as keyof typeof extra.hubIconImages]}} style={{width: fs(30), height: fs(30)}} resizeMode="contain" /> : <HubIcon id={id} color={T.accent} size={fs(30)} />)}
++          {!extra.hideTileLabels && <Text style={{color: T.text, textAlign: 'center'}}>{NAVIGATION_NAMES[id as keyof typeof NAVIGATION_NAMES]}</Text>}
++        </TouchableOpacity>)}
+         {orderedTiles.map((tile, i) => {
+           const isDragged = tileDrag?.id === tile.id;
+           const isTarget = !!tileDrag && !isDragged && tileDrag.target === i;
+--- a/src/app/TabHost.tsx
++++ b/src/app/TabHost.tsx
+@@ -6,6 +6,8 @@
+ import {log} from '../utils/log';
+ import {registerTabControl} from './navigation';
+ import {useExtraCustomization} from '../mods/extraCustomization';
++import {requestHubShortcut} from '../mods/navigationShortcuts';
++import type {NavigationOption} from '../mods/extraCustomizationCore';
+ 
+ export type TabMemory = {tab: Tab; mounted: Tab[]};
+ 
+@@ -36,7 +38,6 @@
+       setShownTab(id);
+     });
+   }, []);
+-  useEffect(() => { if (extra.enabled && extra.hiddenTabs.includes(tab)) goTab('front'); }, [extra, tab, goTab]);
+   useEffect(() => { registerTabControl({goTab, currentTab: () => tabRef.current}); return () => registerTabControl(null); }, [goTab]);
+   const onReselectHub = useUiStore(s => s.reselectHub);
+   useEffect(() => { memory.current = {tab: shownTab, mounted: mountedTabs}; }, [memory, shownTab, mountedTabs]);
+@@ -52,6 +53,7 @@
+     if (id === 'hub' && tabRef.current === 'hub') onReselectHub();
+     goTab(id);
+   }, [goTab, onReselectHub]);
++  const onPressShortcut = useCallback((id: NavigationOption) => { goTab('hub'); requestHubShortcut(id); }, [goTab]);
+   return (
+     <>
+       <View style={styles.content}>
+@@ -64,7 +66,7 @@
+           </View>
+         ) : null)}
+       </View>
+-      <TabBar tab={showBlank ? null : tab} isSinglet={isSinglet} onPressTab={onPressTab} onPressBlank={() => setBlank(true)} />
++      <TabBar tab={showBlank ? null : tab} isSinglet={isSinglet} onPressTab={onPressTab} onPressShortcut={onPressShortcut} onPressBlank={() => setBlank(true)} />
+     </>
+   );
+ }
+--- a/src/screens/members/MembersListHeader.tsx
++++ b/src/screens/members/MembersListHeader.tsx
+@@ -1,3 +1,4 @@
++import {useModPreferences} from '../../mods/modPreferences';
+ import React from 'react';
+ import {View, ScrollView, TouchableOpacity} from 'react-native';
+ import {useTranslation} from 'react-i18next';
+@@ -84,10 +85,11 @@
+   const T = useTheme();
+   const {t} = useTranslation();
+   const fs = fontScale(T);
++  const disableFacets = useModPreferences().disableFacets;
+   return (
+     <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 14, borderBottomWidth: 1, borderBottomColor: T.border}}>
+       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flex: 1}} contentContainerStyle={{alignItems: 'center'}}>
+-        {(['active', 'facets', 'customFronts'] as const).map(tb => {
++        {(['active', 'facets', 'customFronts'] as const).filter(tb => !disableFacets || tb !== 'facets').map(tb => {
+           const spec = TAB_LABEL[tb];
+           const n = counts[tb];
+           return (
+--- a/src/screens/MembersScreen.tsx
++++ b/src/screens/MembersScreen.tsx
+@@ -1,3 +1,4 @@
++import {useModPreferences} from '../mods/modPreferences';
+ import {CollapsibleControls} from '../mods/CollapsibleControls';
+ import React, {useState, useMemo, useCallback, useDeferredValue, useRef, useEffect, startTransition} from 'react';
+ import {log} from '../utils/log';
+@@ -59,6 +60,8 @@
+   const {t} = useTranslation();
+   const fs = useMemo(() => scaledFont(T.textScale), [T.textScale]);
+   const [memberTab, setMemberTab] = useState<MemberTab>('active');
++  const disableFacets = useModPreferences().disableFacets;
++  useEffect(() => { if (disableFacets && memberTab === 'facets') setMemberTab('active'); }, [disableFacets, memberTab]);
+   const [pressedTab, setPressedTab] = useState<MemberTab>('active');
+   const [query, setQuery] = useState('');
+   const [activeGroup, setActiveGroup] = useState<string | null>(null);
+@@ -363,6 +366,6 @@
+           onAssignTags={archiveOnly ? undefined : () => setShowTagAssign(true)}
+           onArchive={archiveOnly ? undefined : confirmBulkArchive}
+           onRestore={archiveOnly ? confirmBulkRestore : undefined}
+-          onFacet={!archiveOnly && memberTab !== 'customFronts' ? confirmBulkFacet : undefined}
++          onFacet={!disableFacets && !archiveOnly && memberTab !== 'customFronts' ? confirmBulkFacet : undefined}
+           onDelete={confirmBulkDelete} />
+       )}

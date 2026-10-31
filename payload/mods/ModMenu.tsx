@@ -63,6 +63,8 @@ function ModMenu({onClose}: {onClose: () => void}) {
           onToggle={() => { void toggle('noSpeaker'); }} />
         <ToggleRow label="Fix System Chat keyboard position" desc="On Android, let the system position chat when the keyboard opens." value={enabled.chatKeyboardFix} disabled={busy || saving || pkBusy}
           onToggle={() => { void toggle('chatKeyboardFix'); }} />
+        <ToggleRow label="Disable facets" desc="Hide the facets tab and conversion action. Saved facets are kept." value={enabled.disableFacets} disabled={busy || saving || pkBusy}
+          onToggle={() => { void toggle('disableFacets'); }} />
         <ToggleRow label="Single confirmation" desc="Show one confirmation when an action would otherwise ask repeatedly." value={enabled.singleConfirm} disabled={busy || saving || pkBusy}
           onToggle={() => { void toggle('singleConfirm'); }} />
         <ToggleRow label="Biometric or device unlock" desc={nativeUnlockSupported ? "Use your phone's screen lock when available. Your app password remains available." : "Requires a newer patcher."} value={nativeUnlockSupported && enabled.deviceUnlock} disabled={!nativeUnlockSupported || busy || saving || pkBusy}
