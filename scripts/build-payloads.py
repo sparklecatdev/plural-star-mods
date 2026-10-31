@@ -189,6 +189,17 @@ def main():
         enhanced = group_pane.read_text()
         assert enhanced.count('showAllAtRoot={showAllAtRoot}') == 1
         enhanced = enhanced.replace('showAllAtRoot={showAllAtRoot}', 'showAllAtRoot={showAllAtRoot} enhanced')
+        enhanced = enhanced.replace('  const openCustomFront = useUiStore(s => s.openCustomFront);', '  const openCustomFront = useUiStore(s => s.openCustomFront);\n  const openNewMember = useUiStore(s => s.openNewMember);')
+        enhanced = enhanced.replace('    setBrowseId(id);', '    setBrowseId(id);\n    setActiveTag(null);')
+        enhanced = enhanced.replace('  const filteredMembers = useMemo(', "  const groupTags = useMemo(() => uniqueTags(browseListable.filter(m => !browseId || (m.groupIds || []).includes(browseId)).flatMap(m => m.tags || [])), [members, browseId]);\n  const filteredMembers = useMemo(")
+        enhanced = enhanced.replace('<TagFilterChips tags={knownTags}', '<TagFilterChips tags={activeTag && !groupTags.some(tag => tagKey(tag) === tagKey(activeTag)) ? [...groupTags, activeTag] : groupTags}')
+        anchor = '      {browseId === null && !selectionMode && <TouchableOpacity onPress={() => openCustomFront(null)}'
+        assert enhanced.count(anchor) == 1
+        enhanced = enhanced.replace(anchor, """      {!selectionMode && <TouchableOpacity onPress={() => openNewMember(browseId || undefined)} accessibilityRole="button" accessibilityLabel={t('members.addMember')}
+        style={[ms.addBtn, {backgroundColor: T.accentBg, borderColor: `${T.accent}40`, alignSelf: 'flex-start', marginBottom: 10}]}>
+        <Text style={{fontSize: fs(12), color: T.accent}}>{`+ ${t('members.addMember')}`}</Text>
+      </TouchableOpacity>}
+""" + anchor)
         (group_pane.parent / 'EnhancedGroupBrowsePane.tsx').write_text(enhanced)
         group_pane.write_text("""import React from 'react';
 import {GroupBrowsePane as Classic} from './ClassicGroupBrowsePane';
@@ -197,6 +208,38 @@ import {useModPreferences} from '../../mods/modPreferences';
 export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
   useModPreferences().groupView ? <Enhanced {...props} /> : <Classic {...props} />;
 """)
+        ui_store = SOURCE / 'src/store/uiStore.ts'
+        text = ui_store.read_text()
+        replacements = {
+            '  addFacet: boolean;\n};': '  addFacet: boolean;\n  initialGroupId?: string;\n};',
+            'addFacet?: boolean; newSession?: boolean': 'addFacet?: boolean; initialGroupId?: string; newSession?: boolean',
+            '  openNewMember: () => void;': '  openNewMember: (initialGroupId?: string) => void;',
+            '      addFacet: options.addFacet ?? prev.addFacet,': '      addFacet: options.addFacet ?? prev.addFacet,\n      initialGroupId: options.initialGroupId,',
+            '  openNewMember: () => get().openMember(null, {readOnly: false, addCustomFront: false, addFacet: false}),': '  openNewMember: initialGroupId => get().openMember(null, {readOnly: false, addCustomFront: false, addFacet: false, initialGroupId}),',
+        }
+        for old, new in replacements.items():
+            assert text.count(old) == 1, old
+            text = text.replace(old, new)
+        ui_store.write_text(text)
+        modals = SOURCE / 'src/app/AppModals.tsx'
+        text = modals.read_text()
+        old = '        readOnly={memberModal.readOnly}'
+        assert text.count(old) == 1
+        modals.write_text(text.replace(old, '        initialGroupId={memberModal.initialGroupId}\n' + old))
+        member_modal = SOURCE / 'src/modals/MemberModal.tsx'
+        text = member_modal.read_text()
+        replacements = {
+            'lockRead = false, facetMode = false}: {': 'lockRead = false, facetMode = false, initialGroupId}: {',
+            'lockRead?: boolean; facetMode?: boolean;': 'lockRead?: boolean; facetMode?: boolean; initialGroupId?: string;',
+            'React.useRef({member, readOnlyProp})': 'React.useRef({member, readOnlyProp, initialGroupId})',
+            'openPropsRef.current = {member, readOnlyProp};': 'openPropsRef.current = {member, readOnlyProp, initialGroupId};',
+            'openPropsRef.current.member || blankMember()': 'openPropsRef.current.member || blankMember({groupIds: openPropsRef.current.initialGroupId ? [openPropsRef.current.initialGroupId] : []})',
+            "const draftId = isNew ? 'new' :": "const draftId = isNew ? (initialGroupId ? `new-group-${initialGroupId}` : 'new') :",
+        }
+        for old, new in replacements.items():
+            assert text.count(old) == 1, old
+            text = text.replace(old, new)
+        member_modal.write_text(text)
         browser = SOURCE / 'src/components/GroupBrowser.tsx'
         text = browser.read_text()
         assert text.count('  showAllAtRoot?: boolean;') == 1 and text.count('  showAllAtRoot,') == 1
