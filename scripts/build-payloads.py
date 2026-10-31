@@ -22,6 +22,10 @@ def main():
     parser.add_argument('--legacy-runtime', action='store_true', help='Build patches for the previous native runtime.')
     args = parser.parse_args()
     base, release = load()
+    changelog = (ROOT / 'payload/mods/changelog.ts').read_text()
+    match = re.search(r"^export const changelogVersion = '([^']+)';$", changelog, re.MULTILINE)
+    if not match or match.group(1) != release['version']:
+        parser.error('Update payload/mods/changelog.ts for patch version ' + release['version'])
     if args.legacy_runtime:
         if not args.patches_only or not release.get('legacy_runtime'):
             parser.error('--legacy-runtime requires --patches-only and a configured legacy runtime')
