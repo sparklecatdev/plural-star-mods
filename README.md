@@ -191,3 +191,16 @@ The release workflow accepts a successful main CI run, a matching draft release,
 Plural Star by TheHanyou, SPARKLECATDEV, and contributors. PluralKit front sync adapted from [PR #11](https://github.com/ByHanyou/Plural-Star/pull/11) at `c1bd5e2f7a5fbb7934733e331154307948424cb0` for the current store and Settings architecture; the full adaptation is in `payload/pluralkit-pr-11.patch` and `payload/mods/pluralKit*`. Wallpaper adapted from sparklecatdev's PR #24 at `72aa97e443a313016d07c9dfec4f09a06edea304`, applied as a feature diff onto the pinned release so newer release fixes remain present.
 
 This project and its upstream-derived payloads are licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**; see [LICENSE](LICENSE). Independent modification project; it does not use the original publisher's signing key. Android apksig is provided under Apache-2.0; React Native and other payload dependencies retain their respective licenses in the upstream source and npm packages.
+
+### Tables in custom fields
+
+Enable **Settings → sparklecat's mods → Extra Customization → HTML tables in rich-text fields**. In a member custom field with rich text enabled, enter HTML such as:
+
+```html
+<table>
+  <tr><th style="background-color: #663399; color: white">Name</th><th>Role</th></tr>
+  <tr><td>Alex</td><td>Friend</td></tr>
+</table>
+```
+
+Cells support plain text, line breaks and inline CSS for colors, borders, padding, font size, weight, style and alignment. Tables scroll horizontally. Full HTML/CSS, nested tables and merged cells are not supported; unsupported table markup falls back to the normal rich-text renderer. The saved field text is unchanged.

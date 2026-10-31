@@ -1,2 +1,2 @@
-export const changelogVersion = '0.4.30';
-export const changelog = '• Use CSS-style declarations to style components in SparkleScript mods.';
+export const changelogVersion = '0.4.31';
+export const changelog = '• Add an optional HTML table renderer for rich-text member custom fields.';

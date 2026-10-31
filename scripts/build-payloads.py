@@ -64,6 +64,12 @@ def main():
         run('git', 'apply', str(ROOT / 'payload/extra-customization.patch'))
         run('git', 'apply', str(ROOT / 'payload/lock-icon.patch'))
         run('git', 'apply', str(ROOT / 'payload/rest-mode-pr-25.patch'))
+        # Opt-in rich-field table rendering preserves the original renderer otherwise.
+        fields = SOURCE / 'src/modals/member/MemberFieldsPanel.tsx'
+        text = fields.read_text()
+        target = "import {RichText as RichDescription} from '../../components/MarkdownRenderer';"
+        assert text.count(target) == 1
+        fields.write_text(text.replace(target, "import {FieldRichText as RichDescription} from '../../mods/FieldTable';"))
         # On Android, avoid applying chat's manual keyboard lift on top of system panning.
         chat = SOURCE / 'src/screens/ChatScreen.tsx'
         text = "import {useModPreferences} from '../mods/modPreferences';\n" + chat.read_text()
@@ -417,6 +423,7 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
         run('node', str(ROOT / 'tests/storage.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/mods.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/sparklescript.test.cjs'), str(SOURCE))
+        run('node', str(ROOT / 'tests/field-tables.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/cloud-mods.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/ui.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/updates.test.cjs'), str(SOURCE))

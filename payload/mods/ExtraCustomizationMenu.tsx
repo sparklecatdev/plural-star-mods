@@ -95,7 +95,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
-  const toggle = (key: 'blankStartPage' | 'transparentAllCards' | 'minimalHubIcons' | 'autoCollapseControls' | 'hideHeaderBorder' | 'hideTabBarBorder' | 'hideTabIcons' | 'hideTileIcons' | 'transparentHubTiles' | 'hideHubTileBorders' | 'fullScreenWallpaper' | 'transparentHeader' | 'transparentTabBar' | 'hideTabLabels' | 'hideTileLabels' | 'hideSystemName' | 'hideFrontTitle' | 'hideFrontSort' | 'hideHubTitle'
+  const toggle = (key: 'fieldTables' | 'blankStartPage' | 'transparentAllCards' | 'minimalHubIcons' | 'autoCollapseControls' | 'hideHeaderBorder' | 'hideTabBarBorder' | 'hideTabIcons' | 'hideTileIcons' | 'transparentHubTiles' | 'hideHubTileBorders' | 'fullScreenWallpaper' | 'transparentHeader' | 'transparentTabBar' | 'hideTabLabels' | 'hideTileLabels' | 'hideSystemName' | 'hideFrontTitle' | 'hideFrontSort' | 'hideHubTitle'
     | 'hideHubReorder' | 'hideMemberSort' | 'hideMemberGroupFilter' | 'hideMemberTagFilter' | 'hideMemberSearch'
     | 'hideMemberBackToTop' | 'hideJournalTitle' | 'hideJournalTagFilter' | 'hideJournalAuthorFilter' | 'hideHistoryTitle') => {
     void save({...prefs, [key]: !prefs[key]});
@@ -120,6 +120,9 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
           <Btn variant="ghost" disabled={busy} onPress={onClose}>Done</Btn>
         </View>
         <Text style={{color: T.dim, fontSize: fs(14)}}>Hide what you do not use and adjust more of the app's colors.</Text>
+        <Section title="Custom fields">
+        <BaseToggleRow label="HTML tables in rich-text fields" desc="Render tables with supported inline CSS in member custom fields." value={prefs.fieldTables} disabled={busy} onToggle={() => toggle('fieldTables')} />
+        </Section>
         <Section title="Screen controls">
         <BaseToggleRow label="Auto-collapse page controls (experimental)" desc="Collapse sorting, filtering, and front note controls until opened." value={prefs.autoCollapseControls} disabled={busy} onToggle={() => toggle('autoCollapseControls')} />
         </Section>

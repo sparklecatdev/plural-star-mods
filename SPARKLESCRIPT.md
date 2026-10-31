@@ -45,6 +45,8 @@ const title = api.css`color: white; font-size: 18px; font-weight: 700;`;
 
 The helper supports common React Native layout, spacing, border, text, and color properties. Numbers and `px` become device-independent numbers; supported dimensions also accept percentages. Use separate declarations such as `margin-top` and `margin-right` rather than CSS shorthand with multiple values. Unsupported properties and numeric formats throw an error; string values must be valid for React Native. This is a declaration converter, not a browser stylesheet: selectors, cascading, media queries, animations, and automatic styling of existing app screens are not supported. Use the returned styles on components your script creates; `api.wrapApp` can place those components around the app.
 
+For HTML tables in member custom fields, use the separate opt-in [table setting](README.md#tables-in-custom-fields); a script is not required.
+
 ## Earlier scripts
 
 The original `mod "Name" version "1.0.0" { ... }` syntax remains supported, including `when open`, `when tap`, `show`, and `allow appearance`/`accent`. These scripts also require the master switch. Existing per-mod enable settings are preserved, but no scripts run until SparkleScript is enabled.
