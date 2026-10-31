@@ -13,6 +13,7 @@ import {BackupTools} from './BackupTools';
 import {PluralKitSettings} from './PluralKitSettings';
 import {CloudModSettings} from './CloudModSettings';
 import {ModSupport} from './ModSupport';
+import {CustomMods} from './CustomMods';
 import {extraCustomization, useExtraCustomization} from './extraCustomization';
 import {ExtraCustomizationMenu} from './ExtraCustomizationMenu';
 
@@ -68,6 +69,7 @@ function ModMenu({onClose}: {onClose: () => void}) {
         {extra.enabled && <Btn variant="ghost" disabled={busy || saving || pkBusy} onPress={() => setExtraOpen(true)}>Open Extra Customization</Btn>}
         <PluralKitSettings disabled={busy || saving} onBusy={setPkBusy} />
         <CloudModSettings disabled={busy || saving || pkBusy} />
+        <CustomMods disabled={busy || saving || pkBusy} />
         <ModSupport disabled={busy || saving || pkBusy} />
         {!!error && <Text accessibilityRole="alert" style={{color: T.danger, fontSize: fs(14)}}>{error}</Text>}
         <Text style={{color: T.muted, fontSize: fs(12)}}>Your choices are saved automatically. Turning a feature off keeps its saved data.</Text>

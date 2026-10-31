@@ -8,6 +8,7 @@ import {nativeUnlockSupported} from './modOptions';
 import {recovery, recoverBeforeStart, restoreQueue, retryStoragePreparation} from './storageSnapshot';
 import {setToolsOpen, waitForStorageIdle} from './toolsState';
 import {updateChecker, confirmPatchLaunch} from './updateCheck';
+import {loadScripts, runScripts} from './sparkleScripts';
 
 function LaunchAnimation({onFinished}: {onFinished: () => void}) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -48,6 +49,7 @@ export default function ModsRoot() {
   const deviceAuth = useDeviceUnlock(nativeUnlockSupported && ready && gatePassword !== null && deviceUnlockEnabled, () => {
     setUnlockInput(''); setGatePassword(null); setError('');
   });
+  const scriptsOpened = useRef(false);
   const finishAnimation = useCallback(() => setAnimationDone(true), []);
   const prepare = useCallback(async (retry = false) => {
     setWorking(true); setError('');
@@ -65,6 +67,12 @@ export default function ModsRoot() {
   }, []);
   useEffect(() => { void prepare(); }, [prepare]);
   useEffect(() => { if (ready && gatePassword === null && !error) void updateChecker.check(); }, [ready, gatePassword, error]);
+  useEffect(() => {
+    if (!ready || gatePassword !== null || error || scriptsOpened.current) return;
+    let stopped = false;
+    void loadScripts().then(() => { if (!stopped) { scriptsOpened.current = true; runScripts('open'); } }).catch(() => {});
+    return () => { stopped = true; };
+  }, [ready, gatePassword, error]);
   useEffect(() => {
     if (!ready || error) return;
     const timer = setTimeout(() => { void confirmPatchLaunch().catch(() => {}); }, 3000);

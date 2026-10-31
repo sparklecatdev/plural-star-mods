@@ -1,0 +1,6 @@
+mod "Hello Star" version "1.0.0" {
+  describe "A little greeting"
+  when tap {
+    show "Hello, star!"
+  }
+}
