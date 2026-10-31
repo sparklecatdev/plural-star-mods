@@ -18,6 +18,8 @@ Alongside custom features, this project includes adaptations of features that we
 
 The repository is **plural-star-mods**. The Android launcher name is **sparklecat's plural star mods**.
 
+Building or modifying the project? See the [developer guide](fordevs.md).
+
 > **Unofficial project:** this project is not officially supported or endorsed by the Plural Star team. Please do not contact them about issues related to these mods or the patcher. Report those issues [here](https://github.com/sparklecatdev/plural-star-mods/issues). We will comply with any takedown requests from the Plural Star team.
 
 ## Features

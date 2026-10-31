@@ -32,7 +32,7 @@ tasks.register('verifyPayloads') {
 }
 tasks.register('packageSource', Zip) {
     from(rootProject.projectDir) {
-        include '.github/**', '.gitattributes', '.gitignore', 'LICENSE', 'LICENSES/**', 'THIRD_PARTY_NOTICES.md', 'README.md', 'AGENTS.md', 'release-signing.sha256'
+        include '.github/**', '.gitattributes', '.gitignore', 'LICENSE', 'LICENSES/**', 'THIRD_PARTY_NOTICES.md', 'README.md', 'fordevs.md', 'AGENTS.md', 'release-signing.sha256'
         include 'app/build.gradle', 'app/src/**', 'native-tools/build.gradle', 'native-tools/src/**', 'build.gradle', 'settings.gradle', 'gradle.properties', 'gradlew', 'gradlew.bat', 'gradle/**', 'payload/**', 'scripts/**', 'tests/**'
         exclude 'app/src/main/assets/**', '**/__pycache__/**', '**/node_modules/**'
     }
