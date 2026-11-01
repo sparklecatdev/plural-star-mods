@@ -10,8 +10,10 @@ import sys
 import threading
 import time
 import uuid
+import subprocess
 
 from cloud import Cloud, DEFAULT_RELAY
+import updater
 
 CLIENT_ID = '1566174520350347434'
 INTERVAL = 30
@@ -208,6 +210,39 @@ def main():
     button = ttk.Button(frame, text='Start', command=toggle)
     button.grid(row=2, column=1, padx=(8, 0))
 
+    install = updater.target()
+    updates = queue.Queue()
+    if install:
+        button.config(state='disabled')
+        status.set('Checking for updates...')
+
+        def check_updates():
+            try:
+                updates.put((updater.fetch_update(), None))
+            except Exception as error:
+                updates.put((None, str(error)))
+
+        threading.Thread(target=check_updates, daemon=True).start()
+
+        def poll_updates():
+            try:
+                result, error = updates.get_nowait()
+            except queue.Empty:
+                root.after(200, poll_updates)
+                return
+            if result:
+                _, _, executable = result
+                try:
+                    subprocess.Popen([str(executable), '--apply-update', str(install), str(os.getpid())], close_fds=True)
+                    root.destroy()
+                    return
+                except OSError as exc:
+                    error = str(exc)
+            button.config(state='normal')
+            status.set('Update check failed: ' + error if error else 'Stopped. Open Discord, then select Start.')
+
+        root.after(200, poll_updates)
+
     def poll():
         try:
             while True:
@@ -242,7 +277,9 @@ def main():
 
 
 if __name__ == '__main__':
-    if '--self-test' in sys.argv:
+    if len(sys.argv) == 4 and sys.argv[1] == '--apply-update':
+        updater.apply_update(sys.argv[2], int(sys.argv[3]))
+    elif '--self-test' in sys.argv:
         import tkinter
         from cloud import derive
         from nacl.secret import SecretBox

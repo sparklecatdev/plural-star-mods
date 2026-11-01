@@ -41,12 +41,16 @@ jobs:
         shell: bash
         run: |
           dist/Sparklecat-Discord-Companion.app/Contents/MacOS/Sparklecat-Discord-Companion --self-test
-          ditto -c -k --sequesterRsrc --keepParent dist/Sparklecat-Discord-Companion.app "sparklecat-discord-companion-${{ matrix.platform }}.zip"
+          cp desktop-companion/Install-macOS.command dist/
+          chmod +x dist/Install-macOS.command
+          (cd dist && zip -qry "../sparklecat-discord-companion-${{ matrix.platform }}.zip" Sparklecat-Discord-Companion.app Install-macOS.command)
       - name: Test and archive (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
           dist/Sparklecat-Discord-Companion/Sparklecat-Discord-Companion --self-test
+          cp desktop-companion/Install-Linux.sh dist/Sparklecat-Discord-Companion/
+          chmod +x dist/Sparklecat-Discord-Companion/Install-Linux.sh
           tar -czf "sparklecat-discord-companion-${{ matrix.platform }}.tar.gz" -C dist Sparklecat-Discord-Companion
       - name: Test and archive (Windows)
         if: runner.os == 'Windows'
@@ -54,7 +58,8 @@ jobs:
         run: |
           $process = Start-Process -FilePath dist/Sparklecat-Discord-Companion/Sparklecat-Discord-Companion.exe -ArgumentList '--self-test' -Wait -PassThru
           if ($process.ExitCode -ne 0) { exit $process.ExitCode }
-          Compress-Archive -Path dist/Sparklecat-Discord-Companion -DestinationPath sparklecat-discord-companion-${{ matrix.platform }}.zip
+          Copy-Item desktop-companion/Install-Windows.ps1 dist/
+          Compress-Archive -Path dist/Sparklecat-Discord-Companion,dist/Install-Windows.ps1 -DestinationPath sparklecat-discord-companion-${{ matrix.platform }}.zip
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}
