@@ -3,7 +3,7 @@
 Show your Plural Star fronters in your Discord activity. No PluralKit account or sync is needed.
 
 1. Enable cloud sync in Plural Star and let it upload your data. Note your cloud password and relay URL in its cloud settings.
-2. Download your computer's build from the [desktop releases](https://github.com/sparklecatdev/plural-star-mods/releases) and extract it. Run `Install-Linux.sh`, `Install-macOS.command`, or `Install-Windows.ps1` for your system, then find Sparklecat Discord Companion in your application menu. Windows and Linux downloads support 64-bit systems; Linux also has an ARM64 build. Choose the Intel or Apple silicon build for your Mac.
+2. Download your computer's build from the [desktop releases](https://github.com/sparklecatdev/plural-star-mods/releases) and extract it. Run `Install-Linux.sh`, `Install-macOS.command`, or `Install-Windows.ps1` for your system, then find Sparklecat Discord Companion in your application menu. Run the installer again to replace an existing installation; your settings are kept. Windows and Linux downloads support 64-bit systems; Linux also has an ARM64 build. Choose the Intel or Apple silicon build for your Mac.
 3. Open the Discord desktop app and enable activity sharing in Discord.
 4. Enter your Plural Star cloud password and relay URL. Enter a relay token only if your relay uses one. Select Start.
 

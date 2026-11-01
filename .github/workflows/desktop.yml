@@ -38,7 +38,7 @@ jobs:
       - run: python -m PyInstaller --noconfirm --clean --windowed --hidden-import PIL._tkinter_finder --collect-all keyring --collect-all pystray --name Sparklecat-Discord-Companion desktop-companion/companion.py
       - name: Install virtual display (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y xvfb xauth
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth xdotool dbus-x11 desktop-file-utils
       - name: Test and archive (macOS)
         if: runner.os == 'macOS'
         shell: bash
@@ -55,6 +55,20 @@ jobs:
           XDG_CONFIG_HOME="$(mktemp -d)" XDG_DATA_HOME="$(mktemp -d)" timeout 20s xvfb-run -a dist/Sparklecat-Discord-Companion/Sparklecat-Discord-Companion --gui-self-test
           cp desktop-companion/Install-Linux.sh dist/Sparklecat-Discord-Companion/
           chmod +x dist/Sparklecat-Discord-Companion/Install-Linux.sh
+          export XDG_DATA_HOME="$(mktemp -d)/data with spaces"
+          export XDG_CONFIG_HOME="$(mktemp -d)"
+          dist/Sparklecat-Discord-Companion/Install-Linux.sh
+          dist/Sparklecat-Discord-Companion/Install-Linux.sh
+          desktop-file-validate "$XDG_DATA_HOME/applications/sparklecat-discord-companion.desktop"
+          dbus-run-session -- xvfb-run -a bash -c '
+            gio launch "$XDG_DATA_HOME/applications/sparklecat-discord-companion.desktop"
+            for attempt in {1..50}; do
+              if xdotool search --onlyvisible --name "^Sparklecat Discord Companion$" >/dev/null; then exit 0; fi
+              sleep 0.2
+            done
+            echo "Desktop launcher did not open a window" >&2
+            exit 1
+          '
           tar -czf "sparklecat-discord-companion-${{ matrix.platform }}.tar.gz" -C dist Sparklecat-Discord-Companion
       - name: Test and archive (Windows)
         if: runner.os == 'Windows'
