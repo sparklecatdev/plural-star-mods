@@ -83,3 +83,16 @@ def set_autostart(enabled):
             path.write_text('[Desktop Entry]\nType=Application\nName=Sparklecat Discord Companion\nExec=' + args + '\nTerminal=false\n', encoding='utf-8')
         else:
             path.unlink(missing_ok=True)
+
+
+def save_icon(source):
+    """Copy and normalize the chosen image so it survives moving the original."""
+    from PIL import Image
+    path = config_path().parent / 'icon.png'
+    with Image.open(source) as image:
+        image.seek(0)
+        image = image.convert('RGBA')
+        image.thumbnail((256, 256))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        image.save(path, format='PNG')
+    return str(path)

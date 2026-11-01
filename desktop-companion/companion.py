@@ -161,10 +161,12 @@ def run_worker(password, relay, token, stop, messages):
 
 def main():
     import tkinter as tk
-    from tkinter import ttk
+    from tkinter import ttk, filedialog
+    from PIL import Image, ImageDraw, ImageTk
 
     root = tk.Tk()
-    root.title('Sparklecat Discord Companion')
+    default_title = 'Sparklecat Discord Companion'
+    root.title(default_title)
     root.resizable(False, False)
     saved = settings.load()
     frame = ttk.Frame(root, padding=20)
@@ -190,10 +192,49 @@ def main():
     ttk.Checkbutton(frame, text='Start when I sign in', variable=autostart).grid(row=9, column=0, columnspan=2, sticky='w')
     ttk.Label(frame, text='When closing the window').grid(row=10, column=0, sticky='w', pady=(8, 0))
     ttk.Combobox(frame, textvariable=close_mode, values=('quit', 'minimize', 'tray'), state='readonly', width=12).grid(row=10, column=1, sticky='e', pady=(8, 0))
+    title = tk.StringVar(value=saved.get('window_title', default_title))
+    icon_path = tk.StringVar(value=saved.get('icon_path', ''))
+    ttk.Label(frame, text='Window and tray title').grid(row=11, column=0, columnspan=2, sticky='w', pady=(8, 0))
+    ttk.Entry(frame, textvariable=title).grid(row=12, column=0, columnspan=2, sticky='ew')
+    def choose_icon():
+        path = filedialog.askopenfilename(title='Choose an icon', filetypes=[('Images', '*.png *.jpg *.jpeg *.gif *.ico *.bmp'), ('All files', '*')])
+        if path:
+            icon_path.set(path)
+    icon_buttons = ttk.Frame(frame)
+    icon_buttons.grid(row=13, column=0, columnspan=2, sticky='w', pady=(8, 0))
+    ttk.Button(icon_buttons, text='Choose icon', command=choose_icon).pack(side='left')
+    ttk.Button(icon_buttons, text='Default icon', command=lambda: icon_path.set('')).pack(side='left', padx=8)
     status = tk.StringVar(value='Stopped. Open Discord, then select Start.')
-    ttk.Label(frame, textvariable=status, wraplength=420).grid(row=12, column=0, columnspan=2, pady=(12, 0), sticky='w')
+    ttk.Label(frame, textvariable=status, wraplength=420).grid(row=15, column=0, columnspan=2, pady=(12, 0), sticky='w')
     messages = queue.Queue()
     state = {'stop': None, 'closing': False, 'tray': None}
+    def icon_image(path):
+        if path:
+            with Image.open(path) as source:
+                return source.convert('RGBA').copy()
+        image = Image.new('RGBA', (64, 64), (30, 26, 48, 255))
+        ImageDraw.Draw(image).text((18, 14), 'S', fill='white', stroke_width=1)
+        return image
+
+    def apply_appearance():
+        name = title.get().strip() or default_title
+        root.title(name)
+        image = icon_image(icon_path.get())
+        image.thumbnail((256, 256))
+        root._icon_photo = ImageTk.PhotoImage(image)
+        try:
+            root.iconphoto(True, root._icon_photo)
+        except tk.TclError:
+            pass  # Some desktop environments do not support window icons.
+        if state['tray']:
+            state['tray'].icon = image
+            state['tray'].title = name
+
+    try:
+        apply_appearance()
+    except (OSError, ValueError):
+        icon_path.set('')
+        apply_appearance()
     try:
         if saved.get('remember'):
             value.set(settings.credential('password'))
@@ -214,8 +255,11 @@ def main():
             elif saved.get('remember'):
                 settings.credential('password', delete=True)
                 settings.credential('token', delete=True)
+            if icon_path.get() and icon_path.get() != saved.get('icon_path'):
+                icon_path.set(settings.save_icon(icon_path.get()))
+            apply_appearance()
             settings.set_autostart(autostart.get())
-            preferences = {'relay': relay.get(), 'remember': remember.get(), 'autostart': autostart.get(), 'close_mode': close_mode.get()}
+            preferences = {'relay': relay.get(), 'remember': remember.get(), 'autostart': autostart.get(), 'close_mode': close_mode.get(), 'window_title': title.get().strip() or default_title, 'icon_path': icon_path.get()}
             settings.save(preferences)
             saved.update(preferences)
             status.set('Settings saved.')
@@ -245,7 +289,7 @@ def main():
         status.set('Connecting...')
         threading.Thread(target=run_worker, args=(current, current_relay, current_token, state['stop'], messages), daemon=True).start()
 
-    ttk.Button(frame, text='Save settings', command=save_preferences).grid(row=11, column=0, columnspan=2, sticky='w', pady=(8, 0))
+    ttk.Button(frame, text='Save settings', command=save_preferences).grid(row=14, column=0, columnspan=2, sticky='w', pady=(8, 0))
     button = ttk.Button(frame, text='Start', command=toggle)
     button.grid(row=2, column=1, padx=(8, 0))
 
@@ -328,10 +372,8 @@ def main():
             try:
                 if not state['tray']:
                     import pystray
-                    from PIL import Image, ImageDraw
-                    image = Image.new('RGBA', (64, 64), (30, 26, 48, 255))
-                    ImageDraw.Draw(image).text((18, 14), 'S', fill='white', stroke_width=1)
-                    tray = pystray.Icon('sparklecat-companion', image, 'Sparklecat Discord Companion',
+                    image = icon_image(icon_path.get())
+                    tray = pystray.Icon('sparklecat-companion', image, title.get().strip() or default_title,
                         menu=pystray.Menu(pystray.MenuItem('Open', lambda: root.after(0, show_window), default=True),
                                           pystray.MenuItem('Quit', lambda: root.after(0, quit_app))))
                     tray.run_detached()

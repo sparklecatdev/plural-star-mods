@@ -25,6 +25,17 @@ class SettingsTests(unittest.TestCase):
             settings.set_autostart(False)
             self.assertFalse(path.exists())
 
+    def test_custom_icon_is_copied_and_normalized(self):
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(settings, 'config_path', return_value=Path(directory) / 'config' / 'settings.json'):
+            source = Path(directory) / 'original.png'
+            Image.new('RGB', (512, 128), 'red').save(source)
+            result = settings.save_icon(source)
+            source.unlink()
+            with Image.open(result) as image:
+                self.assertEqual(image.size, (256, 64))
+                self.assertEqual(image.mode, 'RGBA')
+
     def test_credentials_use_keyring(self):
         import keyring
         with mock.patch.object(keyring, 'set_password') as store, mock.patch.object(keyring, 'get_password', return_value='secret'):
