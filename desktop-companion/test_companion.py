@@ -41,6 +41,16 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(companion.activity_for([], options)['details'], 'Front: Nobody')
         self.assertEqual(companion.clean_presence({'details': 3})['details'], 'Currently fronting')
 
+    def test_real_fronter_templates(self):
+        members = [{'name': 'Alex', 'pronouns': 'they/them', 'avatar': 'https://example.com/avatar.png'},
+                   {'name': 'Sam', 'pronouns': 'she/her', 'avatar': 'cloud:media'}]
+        options = {'details': '{name} ({pronouns})', 'state': '{fronters}: {count}', 'large_image': '{avatar}'}
+        activity = companion.activity_for(members, options)
+        self.assertEqual(activity['details'], 'Alex (they/them)')
+        self.assertEqual(activity['state'], 'Alex, Sam: 2')
+        self.assertEqual(activity['assets']['large_image'], 'https://example.com/avatar.png')
+        self.assertNotIn('assets', companion.activity_for(members[1:], options))
+
     @unittest.skipIf(os.name == 'nt', 'Unix socket test')
     def test_discord_handshake_activity_and_clear(self):
         with tempfile.TemporaryDirectory() as directory:

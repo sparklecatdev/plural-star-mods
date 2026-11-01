@@ -65,6 +65,7 @@ class Cloud:
         self.id = device_id()
         self.device_key = ''
         self.master = None
+        self.avatars = {}
         self.opener = urllib.request.build_opener(NoRedirect())
 
     def request(self, path, method='GET', body=None, device=True, extra_headers=None):
@@ -145,8 +146,27 @@ class Cloud:
             raise ValueError('Could not read encrypted cloud data.') from error
 
     def get_front(self):
+        return list(dict.fromkeys(member['name'] for member in self.get_front_members()))
+
+    def get_front_members(self, include_avatars=False):
         _, manifest = self.read_manifest()
-        return front_names(self.read_entry(manifest, 'ps:members', []), self.read_entry(manifest, 'ps:front', None))
+        members = front_members(self.read_entry(manifest, 'ps:members', []), self.read_entry(manifest, 'ps:front', None))
+        if include_avatars:
+            for member in members:
+                entry = next((e for e in manifest['entries'] if isinstance(e, dict) and e.get('path') == 'ps:media:av:' + member['id']), None)
+                if entry:
+                    object_id = entry.get('id')
+                    if isinstance(object_id, str) and re.fullmatch(r'[0-9a-f]{64}', object_id):
+                        try:
+                            if object_id not in self.avatars:
+                                ciphertext = self.request('/cloud/vault/objects/' + object_id)
+                                if hashlib.blake2b(ciphertext, digest_size=32).hexdigest() != object_id:
+                                    continue
+                                self.avatars[object_id] = SecretBox(self.master).decrypt(ciphertext)
+                            member['photo'] = self.avatars[object_id]
+                        except (OSError, ValueError, CryptoError):
+                            continue
+        return members
 
     def get_companion_settings(self):
         _, manifest = self.read_manifest()
@@ -182,10 +202,10 @@ class Cloud:
         raise ConflictError('Could not sync settings because the cloud is changing. Try again.')
 
 
-def front_names(members, front):
+def front_members(members, front):
     if not isinstance(members, list) or (front is not None and not isinstance(front, dict)):
         raise ValueError('Unexpected member or front data in the cloud.')
-    names = {m.get('id'): m.get('name', '').strip() for m in members
+    records = {m.get('id'): m for m in members
              if isinstance(m, dict) and isinstance(m.get('id'), str) and isinstance(m.get('name'), str)
              and not m.get('deleted') and not m.get('archived')}
     if not front:
@@ -195,4 +215,20 @@ def front_names(members, front):
         value = front.get(tier, {})
         if isinstance(value, dict) and isinstance(value.get('memberIds', []), list):
             ids.extend(value.get('memberIds', []))
-    return list(dict.fromkeys(names[x] for x in ids if isinstance(x, str) and names.get(x)))
+    result = []
+    seen = set()
+    for member_id in ids:
+        if not isinstance(member_id, str) or member_id not in records or member_id in seen:
+            continue
+        seen.add(member_id)
+        member = records[member_id]
+        name = member['name'].strip()
+        if name:
+            result.append({'id': member_id, 'name': name,
+                           'pronouns': member.get('pronouns', '') if isinstance(member.get('pronouns'), str) else '',
+                           'avatar': member.get('avatar', '') if isinstance(member.get('avatar'), str) else ''})
+    return result
+
+
+def front_names(members, front):
+    return list(dict.fromkeys(member['name'] for member in front_members(members, front)))

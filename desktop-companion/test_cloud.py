@@ -54,6 +54,22 @@ class CloudTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             cloud.Cloud('password', 'https://example.com@evil.test')
 
+    def test_front_members_and_encrypted_avatar(self):
+        master = bytes(range(32))
+        ciphertext = seal(master, b'photo bytes')
+        object_id = hashlib.blake2b(ciphertext, digest_size=32).hexdigest()
+        manifest = {'entries': [{'path': 'ps:media:av:a', 'id': object_id}]}
+        with mock.patch.object(cloud, 'device_id', return_value='abc1234567'):
+            client = cloud.Cloud('password', 'https://example.com')
+        client.master = master
+        client.read_manifest = lambda: ({}, manifest)
+        client.read_entry = lambda _, path, default: ([{'id': 'a', 'name': 'Alex', 'pronouns': 'they/them', 'avatar': 'cloud:media'}] if path == 'ps:members' else {'primary': {'memberIds': ['a', 'a']}})
+        client.request = mock.Mock(return_value=ciphertext)
+        expected = [{'id': 'a', 'name': 'Alex', 'pronouns': 'they/them', 'avatar': 'cloud:media', 'photo': b'photo bytes'}]
+        self.assertEqual(client.get_front_members(include_avatars=True), expected)
+        self.assertEqual(client.get_front_members(include_avatars=True), expected)
+        client.request.assert_called_once()
+
     def test_settings_write_retries_without_losing_other_entries(self):
         master = bytes(range(32))
         with mock.patch.object(cloud, 'device_id', return_value='abc1234567'):

@@ -54,19 +54,30 @@ def clean_presence(value):
     return result
 
 
-def activity_for(names, presence=None):
+def activity_for(members, presence=None):
     options = clean_presence(presence)
-    if not names and not options['show_empty']:
+    if not members and not options['show_empty']:
         return None
-    def render(value):
-        return value.replace('{fronters}', ', '.join(names) or 'Nobody').replace('{count}', str(len(names)))[:128]
+    members = [{'name': m, 'pronouns': '', 'avatar': ''} if isinstance(m, str) else m for m in members]
+    names = [m.get('name', '') for m in members]
+    first = members[0] if members else {}
+    avatar = first.get('avatar', '')
+    parsed_avatar = urlparse(avatar)
+    if parsed_avatar.scheme != 'https' or not parsed_avatar.netloc:
+        avatar = ''
+    substitutions = {'{fronters}': ', '.join(names) or 'Nobody', '{count}': str(len(names)),
+                     '{name}': first.get('name', ''), '{pronouns}': first.get('pronouns', ''), '{avatar}': avatar}
+    def render(value, limit=128):
+        for key, replacement in substitutions.items():
+            value = value.replace(key, replacement)
+        return value[:limit]
     activity = {}
     for key in ('details', 'state'):
         value = render(options[key]).strip()
         if value:
             activity[key] = value
-    assets = {key: render(options[key]) if key.endswith('_text') else options[key]
-              for key in ('large_image', 'large_text', 'small_image', 'small_text') if options[key]}
+    assets = {key: value for key in ('large_image', 'large_text', 'small_image', 'small_text')
+              if (value := render(options[key], 300 if key.endswith('_image') else 128).strip())}
     if assets:
         activity['assets'] = assets
     buttons = []
@@ -180,7 +191,9 @@ def run_worker(password, relay, token, stop, messages, commands, sync_enabled, i
             try:
                 if cloud is None:
                     cloud = Cloud(password, relay, token)
-                names = cloud.get_front()
+                members = cloud.get_front_members(include_avatars=True)
+                names = [member['name'] for member in members]
+                messages.put(('front', members))
                 sync_error = None
                 while True:
                     try:
@@ -213,7 +226,7 @@ def run_worker(password, relay, token, stop, messages, commands, sync_enabled, i
                     previous = None
                 if not discord.stream:
                     discord.connect()
-                discord.set_activity(activity_for(names, current.get('presence')))
+                discord.set_activity(activity_for(members, current.get('presence')))
                 status = 'Showing: ' + ', '.join(names) if names else 'No fronters to show.'
                 messages.put(status + (' Settings sync: ' + sync_error + ' Retrying automatically.' if sync_error else ''))
             except (OSError, ValueError, ConnectionError, json.JSONDecodeError) as error:
@@ -288,7 +301,7 @@ def main():
     messages = queue.Queue()
     commands = queue.Queue()
     sync_enabled = threading.Event()
-    state = {'stop': None, 'closing': False, 'tray': None}
+    state = {'stop': None, 'closing': False, 'tray': None, 'front': None, 'preview_update': None}
     def icon_image(path):
         if path:
             with Image.open(path) as source:
@@ -439,30 +452,65 @@ def main():
                   ('button2_label', 'Second button label'), ('button2_url', 'Second button URL')]
         variables = {key: tk.StringVar(value=presence[key]) for key, _ in fields}
         show_empty = tk.BooleanVar(value=presence['show_empty'])
-        ttk.Label(panel, text='Use {fronters} for names and {count} for the number fronting.').grid(row=0, column=0, columnspan=2, sticky='w')
+        ttk.Label(panel, text='Use {fronters}, {count}, {name}, {pronouns} and {avatar}.\n{name}, {pronouns} and {avatar} use the first fronter.\n{avatar} needs a public HTTPS photo URL for Discord.', justify='left').grid(row=0, column=0, columnspan=2, sticky='w')
         for row, (key, label) in enumerate(fields, 1):
             ttk.Label(panel, text=label).grid(row=row, column=0, sticky='w', padx=(0, 8))
             ttk.Entry(panel, textvariable=variables[key], width=42).grid(row=row, column=1, sticky='ew')
         ttk.Checkbutton(panel, text='Show presence when nobody is fronting', variable=show_empty).grid(row=11, column=0, columnspan=2, sticky='w')
         preview = tk.StringVar()
-        ttk.Label(panel, textvariable=preview, wraplength=430, justify='left').grid(row=12, column=0, columnspan=2, sticky='w', pady=10)
+        preview_frame = ttk.Frame(panel)
+        preview_frame.grid(row=12, column=0, columnspan=2, sticky='w', pady=10)
+        photo_label = ttk.Label(preview_frame)
+        photo_label.pack(side='left', padx=(0, 8))
+        ttk.Label(preview_frame, textvariable=preview, wraplength=360, justify='left').pack(side='left')
         def values():
             return clean_presence({**{key: var.get() for key, var in variables.items()}, 'show_empty': show_empty.get()})
         def update_preview(*_):
-            activity = activity_for(['Alex', 'Sam'], values()) or {}
-            lines = ['Preview (example names)', activity.get('details', ''), activity.get('state', '')]
+            members = state['front'] if state['front'] is not None else [{'name': 'Alex', 'pronouns': 'they/them', 'avatar': ''}, {'name': 'Sam', 'pronouns': 'she/her', 'avatar': ''}]
+            activity = activity_for(members, values()) or {}
+            lines = ['Preview (' + ('your cloud data' if state['front'] is not None else 'example data') + ')', activity.get('details', ''), activity.get('state', '')]
+            if members and members[0].get('photo'):
+                lines.append('Cloud photo (local preview)')
             lines += ['Image: ' + activity['assets'].get('large_image', '')] if activity.get('assets') else []
             lines += ['Buttons: ' + ', '.join(button['label'] for button in activity['buttons'])] if activity.get('buttons') else []
             preview.set('\n'.join(lines))
+            photo_label.config(image='')
+            if members and members[0].get('photo'):
+                try:
+                    from io import BytesIO
+                    with Image.open(BytesIO(members[0]['photo'])) as photo:
+                        photo.thumbnail((72, 72))
+                        photo_label.image = ImageTk.PhotoImage(photo.convert('RGBA'))
+                    photo_label.config(image=photo_label.image)
+                except (OSError, ValueError):
+                    pass
         for var in variables.values():
             var.trace_add('write', update_preview)
         show_empty.trace_add('write', update_preview)
         update_preview()
+        state['preview_update'] = update_preview
+        def load_front():
+            if not value.get():
+                preview.set('Enter your Plural Star cloud password first.')
+                return
+            password, address, relay_token = value.get(), relay.get(), token.get()
+            preview.set('Loading your cloud data...')
+            def fetch():
+                try:
+                    messages.put(('preview_front', Cloud(password, address, relay_token).get_front_members(include_avatars=True)))
+                except Exception as error:
+                    messages.put(('preview_error', str(error)))
+            threading.Thread(target=fetch, daemon=True).start()
+        def close_dialog():
+            state['preview_update'] = None
+            dialog.destroy()
         def apply():
             presence.update(values())
-            dialog.destroy()
+            close_dialog()
             save_preferences()
         ttk.Button(panel, text='Save presence', command=apply).grid(row=13, column=0, sticky='w')
+        ttk.Button(panel, text='Load my fronters', command=load_front).grid(row=13, column=1, sticky='e')
+        dialog.protocol('WM_DELETE_WINDOW', close_dialog)
 
     ttk.Button(icon_buttons, text='Edit Discord presence', command=edit_presence).pack(side='left')
     ttk.Button(frame, text='Save settings', command=save_preferences).grid(row=14, column=0, columnspan=2, sticky='w', pady=(8, 0))
@@ -521,6 +569,14 @@ def main():
                     token_entry.config(state='normal')
                     button.config(text='Start', state='normal')
                     status.set('Stopped.')
+                elif isinstance(message, tuple) and message[0] in ('front', 'preview_front'):
+                    state['front'] = message[1]
+                    if state['preview_update']:
+                        state['preview_update']()
+                elif isinstance(message, tuple) and message[0] == 'preview_error':
+                    status.set('Could not load preview: ' + message[1])
+                    if state['preview_update']:
+                        state['preview_update']()
                 elif isinstance(message, tuple) and message[0] == 'settings':
                     try:
                         apply_cloud_settings(message[1])
