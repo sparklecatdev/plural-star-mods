@@ -2,6 +2,8 @@ import base64
 import gzip
 import hashlib
 import json
+from io import BytesIO
+from PIL import Image
 import unittest
 from unittest import mock
 
@@ -56,7 +58,9 @@ class CloudTests(unittest.TestCase):
 
     def test_front_members_and_encrypted_avatar(self):
         master = bytes(range(32))
-        ciphertext = seal(master, b'photo bytes')
+        photo = BytesIO()
+        Image.new('RGB', (96, 96), 'blue').save(photo, format='PNG')
+        ciphertext = seal(master, photo.getvalue())
         object_id = hashlib.blake2b(ciphertext, digest_size=32).hexdigest()
         manifest = {'entries': [{'path': 'ps:media:av:a', 'id': object_id}]}
         with mock.patch.object(cloud, 'device_id', return_value='abc1234567'):
@@ -65,10 +69,47 @@ class CloudTests(unittest.TestCase):
         client.read_manifest = lambda: ({}, manifest)
         client.read_entry = lambda _, path, default: ([{'id': 'a', 'name': 'Alex', 'pronouns': 'they/them', 'avatar': 'cloud:media'}] if path == 'ps:members' else {'primary': {'memberIds': ['a', 'a']}})
         client.request = mock.Mock(return_value=ciphertext)
-        expected = [{'id': 'a', 'name': 'Alex', 'pronouns': 'they/them', 'avatar': 'cloud:media', 'photo': b'photo bytes'}]
+        expected = [{'id': 'a', 'name': 'Alex', 'pronouns': 'they/them', 'avatar': 'cloud:media', 'photo': photo.getvalue()}]
         self.assertEqual(client.get_front_members(include_avatars=True), expected)
         self.assertEqual(client.get_front_members(include_avatars=True), expected)
         client.request.assert_called_once()
+
+    def test_public_and_inline_avatars(self):
+        photo = BytesIO()
+        Image.new('RGB', (96, 96), 'blue').save(photo, format='PNG')
+        data = photo.getvalue()
+        with mock.patch.object(cloud, 'device_id', return_value='abc1234567'):
+            client = cloud.Cloud('password', 'https://example.com', 'private-token')
+        client.read_manifest = lambda: ({}, {'entries': []})
+        members = [{'id': 'a', 'name': 'Alex', 'avatar': 'https://images.example.com/alex.png'},
+                   {'id': 'b', 'name': 'Bee', 'avatar': 'data:image/png;base64,' + base64.b64encode(data).decode()}]
+        client.read_entry = lambda _, path, default: members if path == 'ps:members' else {'primary': {'memberIds': ['a', 'b']}}
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = data
+        opener = mock.Mock()
+        opener.open.return_value = response
+        with mock.patch.object(cloud.urllib.request, 'build_opener', return_value=opener):
+            loaded = client.get_front_members(include_avatars=True)
+            self.assertEqual([m['photo'] for m in loaded], [data, data])
+            self.assertEqual(Image.open(BytesIO(loaded[0]['photo'])).size, (96, 96))
+            client.get_front_members(include_avatars=True)
+        opener.open.assert_called_once()
+        request = opener.open.call_args.args[0]
+        self.assertEqual(request.full_url, members[0]['avatar'])
+        self.assertEqual(dict(request.header_items()), {'User-agent': 'Sparklecat-Discord-Companion'})
+
+    def test_avatar_failure_keeps_fronting_data_and_reports_error(self):
+        with mock.patch.object(cloud, 'device_id', return_value='abc1234567'):
+            client = cloud.Cloud('password', 'https://example.com')
+        client.master = bytes(range(32))
+        client.read_manifest = lambda: ({}, {'entries': [{'path': 'ps:media:av:a', 'id': 'a' * 64}]})
+        client.read_entry = lambda _, path, default: [{'id': 'a', 'name': 'Alex', 'avatar': 'cloud:media'}] if path == 'ps:members' else {'primary': {'memberIds': ['a']}}
+        client.request = mock.Mock(return_value=b'damaged')
+        member = client.get_front_members(include_avatars=True)[0]
+        self.assertEqual(member['name'], 'Alex')
+        self.assertNotIn('photo', member)
+        self.assertIn('photo_error', member)
+        self.assertEqual(client.avatars, {})
 
     def test_settings_write_retries_without_losing_other_entries(self):
         master = bytes(range(32))

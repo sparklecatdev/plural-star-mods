@@ -469,21 +469,30 @@ def main():
             members = state['front'] if state['front'] is not None else [{'name': 'Alex', 'pronouns': 'they/them', 'avatar': ''}, {'name': 'Sam', 'pronouns': 'she/her', 'avatar': ''}]
             activity = activity_for(members, values()) or {}
             lines = ['Preview (' + ('your cloud data' if state['front'] is not None else 'example data') + ')', activity.get('details', ''), activity.get('state', '')]
-            if members and members[0].get('photo'):
-                lines.append('Cloud photo (local preview)')
+            first = members[0] if members else {}
+            photo_label.config(image='')
+            photo_label.image = None
+            if first.get('photo'):
+                try:
+                    from io import BytesIO
+                    with Image.open(BytesIO(first['photo'])) as photo:
+                        photo.thumbnail((72, 72))
+                        photo_label.image = ImageTk.PhotoImage(photo.convert('RGBA'), master=dialog)
+                    photo_label.config(image=photo_label.image)
+                    if urlparse(first.get('avatar', '')).scheme == 'https':
+                        if not activity.get('assets', {}).get('large_image'):
+                            lines.append('Select Use fronter photo to show this photo on Discord.')
+                    else:
+                        lines.append('Private cloud photo (local preview only).')
+                except (OSError, ValueError):
+                    lines.append('This photo could not be displayed. Try choosing it again in Plural Star.')
+            elif state['front'] is not None:
+                lines.append(first.get('photo_error') or 'No profile photo found for the first fronter.')
+            if any('{avatar}' in variables[key].get() and not activity.get('assets', {}).get(key) for key in ('large_image', 'small_image')):
+                lines.append('Discord needs a public HTTPS photo URL; private cloud photos stay in the local preview.')
             lines += ['Image: ' + activity['assets'].get('large_image', '')] if activity.get('assets') else []
             lines += ['Buttons: ' + ', '.join(button['label'] for button in activity['buttons'])] if activity.get('buttons') else []
             preview.set('\n'.join(lines))
-            photo_label.config(image='')
-            if members and members[0].get('photo'):
-                try:
-                    from io import BytesIO
-                    with Image.open(BytesIO(members[0]['photo'])) as photo:
-                        photo.thumbnail((72, 72))
-                        photo_label.image = ImageTk.PhotoImage(photo.convert('RGBA'))
-                    photo_label.config(image=photo_label.image)
-                except (OSError, ValueError):
-                    pass
         for var in variables.values():
             var.trace_add('write', update_preview)
         show_empty.trace_add('write', update_preview)
@@ -510,7 +519,11 @@ def main():
             save_preferences()
         ttk.Button(panel, text='Save presence', command=apply).grid(row=13, column=0, sticky='w')
         ttk.Button(panel, text='Load my fronters', command=load_front).grid(row=13, column=1, sticky='e')
+        ttk.Button(panel, text='Use fronter photo', command=lambda: variables['large_image'].set('{avatar}')).grid(row=14, column=0, columnspan=2, sticky='w', pady=(8, 0))
+        if value.get() and state['front'] is None:
+            load_front()
         dialog.protocol('WM_DELETE_WINDOW', close_dialog)
+        return photo_label
 
     ttk.Button(icon_buttons, text='Edit Discord presence', command=edit_presence).pack(side='left')
     ttk.Button(frame, text='Save settings', command=save_preferences).grid(row=14, column=0, columnspan=2, sticky='w', pady=(8, 0))
@@ -630,6 +643,13 @@ def main():
     if '--autostart' in sys.argv and saved.get('close_mode') in ('tray', 'minimize'):
         root.after(300, close)
     if '--gui-self-test' in sys.argv:
+        from io import BytesIO
+        photo = BytesIO()
+        Image.new('RGB', (96, 96), 'blue').save(photo, format='PNG')
+        state['front'] = [{'name': 'Test', 'pronouns': 'they/them', 'avatar': 'cloud:media', 'photo': photo.getvalue()}]
+        label = edit_presence()
+        root.update()
+        assert label.image is not None and label.image.width() == 72
         root.after(500, root.destroy)
     root.mainloop()
 

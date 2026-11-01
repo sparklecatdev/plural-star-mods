@@ -153,20 +153,43 @@ class Cloud:
         members = front_members(self.read_entry(manifest, 'ps:members', []), self.read_entry(manifest, 'ps:front', None))
         if include_avatars:
             for member in members:
-                entry = next((e for e in manifest['entries'] if isinstance(e, dict) and e.get('path') == 'ps:media:av:' + member['id']), None)
-                if entry:
-                    object_id = entry.get('id')
-                    if isinstance(object_id, str) and re.fullmatch(r'[0-9a-f]{64}', object_id):
-                        try:
-                            if object_id not in self.avatars:
-                                ciphertext = self.request('/cloud/vault/objects/' + object_id)
-                                if hashlib.blake2b(ciphertext, digest_size=32).hexdigest() != object_id:
-                                    continue
-                                self.avatars[object_id] = SecretBox(self.master).decrypt(ciphertext)
-                            member['photo'] = self.avatars[object_id]
-                        except (OSError, ValueError, CryptoError):
-                            continue
+                try:
+                    member['photo'] = self.get_avatar(manifest, member)
+                except (OSError, ValueError, CryptoError):
+                    member['photo_error'] = 'Could not load this photo. Try syncing Plural Star and loading again.'
         return members
+
+    def get_avatar(self, manifest, member):
+        avatar = member['avatar']
+        entry = next((e for e in manifest['entries'] if isinstance(e, dict) and e.get('path') == 'ps:media:av:' + member['id']), None)
+        if avatar.startswith('data:image/'):
+            if len(avatar) > 40 * 1024 * 1024 or ';base64,' not in avatar:
+                raise ValueError('Invalid photo data.')
+            return base64.b64decode(avatar.split(';base64,', 1)[1], validate=True)
+        parsed = urllib.parse.urlsplit(avatar)
+        if parsed.scheme == 'https' and parsed.hostname and not parsed.username and not parsed.password:
+            if avatar not in self.avatars:
+                # Public photos must never receive cloud credentials.
+                request = urllib.request.Request(avatar, headers={'User-Agent': 'Sparklecat-Discord-Companion'})
+                with urllib.request.build_opener(NoRedirect()).open(request, timeout=20) as response:
+                    photo = response.read(30 * 1024 * 1024 + 1)
+                    if len(photo) > 30 * 1024 * 1024:
+                        raise ValueError('Photo is too large.')
+                    self.avatars[avatar] = photo
+            return self.avatars[avatar]
+        if not entry:
+            if avatar:
+                raise ValueError('Photo has not been synced to the cloud.')
+            return None
+        object_id = entry.get('id')
+        if not isinstance(object_id, str) or not re.fullmatch(r'[0-9a-f]{64}', object_id):
+            raise ValueError('Invalid cloud photo ID.')
+        if object_id not in self.avatars:
+            ciphertext = self.request('/cloud/vault/objects/' + object_id)
+            if hashlib.blake2b(ciphertext, digest_size=32).hexdigest() != object_id:
+                raise ValueError('Cloud photo failed its integrity check.')
+            self.avatars[object_id] = SecretBox(self.master).decrypt(ciphertext)
+        return self.avatars[object_id]
 
     def get_companion_settings(self):
         _, manifest = self.read_manifest()
