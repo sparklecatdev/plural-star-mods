@@ -573,6 +573,8 @@ def main():
         root.after(200, start_saved)
     if '--autostart' in sys.argv and saved.get('close_mode') in ('tray', 'minimize'):
         root.after(300, close)
+    if '--gui-self-test' in sys.argv:
+        root.after(500, root.destroy)
     root.mainloop()
 
 
