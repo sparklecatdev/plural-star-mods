@@ -358,9 +358,13 @@ if __name__ == '__main__':
         updater.apply_update(sys.argv[2], int(sys.argv[3]))
     elif '--self-test' in sys.argv:
         import tkinter
+        import importlib.util
+        import keyring
+        from PIL import Image
         from cloud import derive
         from nacl.secret import SecretBox
         tkinter.Tcl()
+        assert keyring.get_keyring() and Image.new('RGB', (1, 1)) and importlib.util.find_spec('pystray')
         assert len(derive('test')[2]) == SecretBox.KEY_SIZE
     else:
         main()
