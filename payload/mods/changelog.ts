@@ -1,2 +1,2 @@
-export const changelogVersion = '0.4.35';
-export const changelog = '• Removed the Android Discord presence integration in favor of the desktop companion.';
+export const changelogVersion = '0.4.36';
+export const changelog = '• Added animated GIF wallpapers alongside still images.';

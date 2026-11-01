@@ -383,7 +383,7 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
             translations = SOURCE / 'src/i18n/en.json'
             en = json.loads(translations.read_text())
             en['modal']['backgroundImage'] = 'Wallpaper'
-            en['modal']['backgroundImageDesc'] = 'Choose a background that feels like you.'
+            en['modal']['backgroundImageDesc'] = 'Choose a still image or animated GIF for your background.'
             translations.write_text(json.dumps(en, ensure_ascii=False, indent=2) + '\n')
         else:
             (SOURCE / 'src/mods/WallpaperControls.tsx').write_text('export const WallpaperControls = () => null;\n')

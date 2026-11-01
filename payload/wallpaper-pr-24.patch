@@ -26,7 +26,7 @@ new file mode 100644
 index 0000000..9d88c15
 --- /dev/null
 +++ b/scripts/background-settings.test.js
-@@ -0,0 +1,166 @@
+@@ -0,0 +1,174 @@
 +// Run with: node --test scripts/background-settings.test.js
 +const assert = require('node:assert/strict');
 +const fs = require('node:fs');
@@ -158,19 +158,27 @@ index 0000000..9d88c15
 +
 +test('native file utility accepts content/file URIs and confines deletion to background files', async () => {
 +  const copies = [], removed = [];
-+  let fail = false;
++  let fail = false, animated = false;
++  const moves = [];
 +  const media = load('src/utils/backgroundImage.ts', {'./mediaFiles': {
 +    BACKGROUND_DIR: '/documents/ps_backgrounds', ensureDir: async () => {},
++    fs: {readFile: async () => animated ? 'gif' : 'png', mv: async (...args) => moves.push(args)},
++    sniffImageExt: value => value,
 +    removeIfExists: async name => removed.push(name),
 +    downscaleOrCopy: async (...args) => { copies.push(args); if (fail) throw Error('copy failed'); },
 +  }});
 +  for (const uri of ['content://provider/42', 'file:///camera.jpg']) {
 +    const name = await media.saveBackgroundImageFromUri(uri);
-+    assert.match(name, /^background-[a-z0-9-]+\.png$/);
++    assert.match(name, /^background-[a-z0-9-]+\.(png|gif)$/);
 +    assert.equal(copies.at(-1)[0], uri);
 +    assert.equal(copies.at(-1)[2], 1920);
 +    assert.equal(media.backgroundImageUri(name), `/documents/ps_backgrounds/${name}`.replace(/^/, 'file://'));
 +  }
++  animated = true;
++  const gif = await media.saveBackgroundImageFromUri('content://provider/animated');
++  assert.match(gif, /^background-[a-z0-9-]+\.gif$/);
++  assert.equal(media.backgroundImageUri(gif), `file:///documents/ps_backgrounds/${gif}`);
++  assert.equal(moves[0][1], `/documents/ps_backgrounds/${gif}`);
 +  await assert.rejects(media.saveBackgroundImageFromUri('https://example.com/photo'));
 +  for (const invalid of ['../avatar.png', 'file:///photo', '', undefined]) {
 +    assert.equal(media.backgroundImageUri(invalid), undefined);
@@ -502,7 +510,7 @@ index 0000000..eccb16e
 +    let uri: string | undefined;
 +    try {
 +      if (!remove) {
-+        const result = await launchImageLibrary({mediaType: 'photo', selectionLimit: 1, includeBase64: false, maxWidth: 1920, maxHeight: 1920, quality: 0.9});
++        const result = await launchImageLibrary({mediaType: 'photo', selectionLimit: 1, includeBase64: false, assetRepresentationMode: 'current'});
 +        if (result.didCancel) return;
 +        if (result.errorCode) throw new Error(result.errorMessage || result.errorCode);
 +        const image = result.assets?.[0];
@@ -981,11 +989,11 @@ new file mode 100644
 index 0000000..302f622
 --- /dev/null
 +++ b/src/utils/backgroundImage.ts
-@@ -0,0 +1,25 @@
-+import {BACKGROUND_DIR, downscaleOrCopy, ensureDir, removeIfExists} from './mediaFiles';
+@@ -0,0 +1,31 @@
++import {BACKGROUND_DIR, downscaleOrCopy, ensureDir, fs, removeIfExists, sniffImageExt} from './mediaFiles';
 +
 +export const backgroundImageUri = (filename?: string): string | undefined =>
-+  typeof filename === 'string' && /^background-[a-z0-9-]+\.png$/.test(filename)
++  typeof filename === 'string' && /^background-[a-z0-9-]+\.(png|gif)$/.test(filename)
 +    ? `file://${BACKGROUND_DIR}/${filename}`
 +    : undefined;
 +
@@ -1001,6 +1009,12 @@ index 0000000..302f622
 +  const filename = `background-${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
 +  try {
 +    await downscaleOrCopy(sourceUri, `${BACKGROUND_DIR}/${filename}`, 1920);
++    const path = `${BACKGROUND_DIR}/${filename}`;
++    if (sniffImageExt(await fs.readFile(path, 'base64')) === 'gif') {
++      const gif = filename.replace(/\.png$/, '.gif');
++      await fs.mv(path, `${BACKGROUND_DIR}/${gif}`);
++      return gif;
++    }
 +    return filename;
 +  } catch (e) {
 +    await removeBackgroundImage(filename);
