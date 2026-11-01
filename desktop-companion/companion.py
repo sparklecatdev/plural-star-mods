@@ -14,6 +14,7 @@ import subprocess
 
 from cloud import Cloud, DEFAULT_RELAY
 import updater
+import settings
 
 CLIENT_ID = '1566174520350347434'
 INTERVAL = 30
@@ -165,6 +166,7 @@ def main():
     root = tk.Tk()
     root.title('Sparklecat Discord Companion')
     root.resizable(False, False)
+    saved = settings.load()
     frame = ttk.Frame(root, padding=20)
     frame.grid(sticky='nsew')
     ttk.Label(frame, text='Discord fronting presence', font=('TkDefaultFont', 15, 'bold')).grid(row=0, column=0, columnspan=2, sticky='w')
@@ -173,7 +175,7 @@ def main():
     entry = ttk.Entry(frame, textvariable=value, width=40, show='•')
     entry.grid(row=2, column=0, sticky='ew')
     ttk.Label(frame, text='Cloud relay URL').grid(row=3, column=0, columnspan=2, pady=(10, 0), sticky='w')
-    relay = tk.StringVar(value=DEFAULT_RELAY)
+    relay = tk.StringVar(value=saved.get('relay', DEFAULT_RELAY))
     relay_entry = ttk.Entry(frame, textvariable=relay, width=40)
     relay_entry.grid(row=4, column=0, columnspan=2, sticky='ew')
     ttk.Label(frame, text='Relay token (only if your relay requires one)').grid(row=5, column=0, columnspan=2, pady=(10, 0), sticky='w')
@@ -181,10 +183,46 @@ def main():
     token_entry = ttk.Entry(frame, textvariable=token, show='•')
     token_entry.grid(row=6, column=0, columnspan=2, sticky='ew')
     ttk.Label(frame, text='Your fronting names will be visible through Discord. The default relay uses an unencrypted connection; use HTTPS if available.', wraplength=420).grid(row=7, column=0, columnspan=2, pady=(10, 0), sticky='w')
+    remember = tk.BooleanVar(value=saved.get('remember', True))
+    autostart = tk.BooleanVar(value=saved.get('autostart', False))
+    close_mode = tk.StringVar(value=saved.get('close_mode', 'quit'))
+    ttk.Checkbutton(frame, text='Remember password securely', variable=remember).grid(row=8, column=0, columnspan=2, sticky='w', pady=(10, 0))
+    ttk.Checkbutton(frame, text='Start when I sign in', variable=autostart).grid(row=9, column=0, columnspan=2, sticky='w')
+    ttk.Label(frame, text='When closing the window').grid(row=10, column=0, sticky='w', pady=(8, 0))
+    ttk.Combobox(frame, textvariable=close_mode, values=('quit', 'minimize', 'tray'), state='readonly', width=12).grid(row=10, column=1, sticky='e', pady=(8, 0))
     status = tk.StringVar(value='Stopped. Open Discord, then select Start.')
-    ttk.Label(frame, textvariable=status, wraplength=420).grid(row=8, column=0, columnspan=2, pady=(12, 0), sticky='w')
+    ttk.Label(frame, textvariable=status, wraplength=420).grid(row=12, column=0, columnspan=2, pady=(12, 0), sticky='w')
     messages = queue.Queue()
-    state = {'stop': None, 'closing': False}
+    state = {'stop': None, 'closing': False, 'tray': None}
+    try:
+        if saved.get('remember'):
+            value.set(settings.credential('password'))
+            token.set(settings.credential('token'))
+    except Exception as error:
+        status.set('Could not unlock saved credentials: ' + str(error))
+
+    def save_preferences():
+        try:
+            if remember.get():
+                if not value.get():
+                    raise ValueError('Enter your Plural Star cloud password.')
+                settings.credential('password', value.get())
+                if token.get():
+                    settings.credential('token', token.get())
+                else:
+                    settings.credential('token', delete=True)
+            elif saved.get('remember'):
+                settings.credential('password', delete=True)
+                settings.credential('token', delete=True)
+            settings.set_autostart(autostart.get())
+            preferences = {'relay': relay.get(), 'remember': remember.get(), 'autostart': autostart.get(), 'close_mode': close_mode.get()}
+            settings.save(preferences)
+            saved.update(preferences)
+            status.set('Settings saved.')
+            return True
+        except Exception as error:
+            status.set('Could not save settings or credentials: ' + str(error))
+            return False
 
     def toggle():
         if state['stop']:
@@ -197,8 +235,8 @@ def main():
             status.set('Enter your Plural Star cloud password.')
             return
         current_relay, current_token = relay.get(), token.get()
-        value.set('')
-        token.set('')
+        if not save_preferences():
+            return
         state['stop'] = threading.Event()
         entry.config(state='disabled')
         relay_entry.config(state='disabled')
@@ -207,8 +245,13 @@ def main():
         status.set('Connecting...')
         threading.Thread(target=run_worker, args=(current, current_relay, current_token, state['stop'], messages), daemon=True).start()
 
+    ttk.Button(frame, text='Save settings', command=save_preferences).grid(row=11, column=0, columnspan=2, sticky='w', pady=(8, 0))
     button = ttk.Button(frame, text='Start', command=toggle)
     button.grid(row=2, column=1, padx=(8, 0))
+
+    def start_saved():
+        if saved.get('remember') and value.get() and not state['stop']:
+            toggle()
 
     install = updater.target()
     updates = queue.Queue()
@@ -240,6 +283,7 @@ def main():
                     error = str(exc)
             button.config(state='normal')
             status.set('Update check failed: ' + error if error else 'Stopped. Open Discord, then select Start.')
+            start_saved()
 
         root.after(200, poll_updates)
 
@@ -263,7 +307,10 @@ def main():
             pass
         root.after(200, poll)
 
-    def close():
+    def quit_app():
+        if state['tray']:
+            state['tray'].stop()
+            state['tray'] = None
         if state['stop']:
             state['closing'] = True
             state['stop'].set()
@@ -271,8 +318,38 @@ def main():
         else:
             root.destroy()
 
+    def show_window():
+        root.deiconify()
+        root.lift()
+
+    def close():
+        mode = close_mode.get()
+        if mode == 'tray':
+            try:
+                if not state['tray']:
+                    import pystray
+                    from PIL import Image, ImageDraw
+                    image = Image.new('RGBA', (64, 64), (30, 26, 48, 255))
+                    ImageDraw.Draw(image).text((18, 14), 'S', fill='white', stroke_width=1)
+                    tray = pystray.Icon('sparklecat-companion', image, 'Sparklecat Discord Companion',
+                        menu=pystray.Menu(pystray.MenuItem('Open', lambda: root.after(0, show_window), default=True),
+                                          pystray.MenuItem('Quit', lambda: root.after(0, quit_app))))
+                    tray.run_detached()
+                    state['tray'] = tray
+                root.withdraw()
+            except Exception as error:
+                status.set('Tray unavailable: ' + str(error))
+        elif mode == 'minimize':
+            root.iconify()
+        else:
+            quit_app()
+
     root.protocol('WM_DELETE_WINDOW', close)
     root.after(200, poll)
+    if not install:
+        root.after(200, start_saved)
+    if '--autostart' in sys.argv and saved.get('close_mode') in ('tray', 'minimize'):
+        root.after(300, close)
     root.mainloop()
 
 
