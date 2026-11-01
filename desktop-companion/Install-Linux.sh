@@ -34,12 +34,14 @@ if [ -n "$backup" ]; then rm -rf "$backup"; fi
 trap - EXIT HUP INT TERM
 # Desktop Exec values require escaped backslashes, double quotes, backticks and dollar signs.
 escaped=$(printf '%s' "$install_dir/Sparklecat-Discord-Companion" | sed 's/[\\"`$]/\\&/g; s/%/%%/g')
+working_dir=$(printf '%s' "$install_dir" | sed 's/\\/\\\\/g')
 cat > "$applications/sparklecat-discord-companion.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Sparklecat Discord Companion
 Comment=Show Plural Star fronters in Discord
 Exec="$escaped"
+Path=$working_dir
 Terminal=false
 Categories=Network;Utility;
 EOF
