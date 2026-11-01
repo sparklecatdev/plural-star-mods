@@ -18,10 +18,10 @@ class CompanionTests(unittest.TestCase):
     def test_discord_socket_paths_include_sandboxed_and_fallback_locations(self):
         with mock.patch.dict(os.environ, {'XDG_RUNTIME_DIR': '/run/user/42', 'TMPDIR': '/custom/tmp'}, clear=True):
             paths = companion.discord_socket_paths()
-        self.assertIn('/run/user/42/app/com.discordapp.Discord/discord-ipc-0', paths)
-        self.assertIn('/run/user/42/snap.discord/discord-ipc-0', paths)
-        self.assertIn('/custom/tmp/discord-ipc-0', paths)
-        self.assertIn('/tmp/discord-ipc-9', paths)
+        self.assertIn(os.path.join('/run/user/42', 'app', 'com.discordapp.Discord', 'discord-ipc-0'), paths)
+        self.assertIn(os.path.join('/run/user/42', 'snap.discord', 'discord-ipc-0'), paths)
+        self.assertIn(os.path.join('/custom/tmp', 'discord-ipc-0'), paths)
+        self.assertIn(os.path.join('/tmp', 'discord-ipc-9'), paths)
 
     def test_activity(self):
         self.assertIsNone(companion.activity_for([]))
