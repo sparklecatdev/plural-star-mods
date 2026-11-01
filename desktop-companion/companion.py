@@ -190,6 +190,7 @@ def run_worker(password, relay, token, stop, messages, commands, sync_enabled, i
     current = initial or {}
     try:
         while not stop.is_set():
+            sync_started = time.monotonic_ns()
             try:
                 if cloud is None:
                     cloud = Cloud(password, relay, token)
@@ -209,6 +210,7 @@ def run_worker(password, relay, token, stop, messages, commands, sync_enabled, i
                         if pending is not None:
                             cloud.put_companion_settings(pending)
                             previous = pending
+                            initial = None
                             pending = None
                         else:
                             remote = cloud.get_companion_settings()
@@ -220,7 +222,7 @@ def run_worker(password, relay, token, stop, messages, commands, sync_enabled, i
                                 previous = remote
                                 if remote is not None:
                                     current = remote
-                                    messages.put(('settings', remote))
+                                    messages.put(('settings', remote, sync_started))
                     except (OSError, ValueError, ConnectionError, json.JSONDecodeError) as error:
                         sync_error = str(error)
                 else:
@@ -313,7 +315,7 @@ def main():
     share_photos = threading.Event()
     if saved.get('share_photos') is True:
         share_photos.set()
-    state = {'stop': None, 'closing': False, 'tray': None, 'front': None, 'preview_update': None}
+    state = {'stop': None, 'closing': False, 'tray': None, 'front': None, 'preview_update': None, 'settings_saved_at': 0}
     def icon_image(path):
         if path:
             with Image.open(path) as source:
@@ -398,17 +400,19 @@ def main():
 
     def save_preferences():
         try:
-            if remember.get():
-                if not value.get():
-                    raise ValueError('Enter your Plural Star cloud password.')
-                settings.credential('password', value.get())
-                if token.get():
-                    settings.credential('token', token.get())
-                else:
+            credential_error = None
+            try:
+                if remember.get() and value.get():
+                    settings.credential('password', value.get())
+                    if token.get():
+                        settings.credential('token', token.get())
+                    else:
+                        settings.credential('token', delete=True)
+                elif not remember.get() and saved.get('remember'):
+                    settings.credential('password', delete=True)
                     settings.credential('token', delete=True)
-            elif saved.get('remember'):
-                settings.credential('password', delete=True)
-                settings.credential('token', delete=True)
+            except Exception as error:
+                credential_error = str(error)
             if icon_path.get() and icon_path.get() != saved.get('icon_path'):
                 icon_path.set(settings.save_icon(icon_path.get()))
             synced = export_settings() if sync_settings.get() else None
@@ -417,6 +421,7 @@ def main():
             preferences = {'relay': relay.get(), 'remember': remember.get(), 'autostart': autostart.get(), 'close_mode': close_mode.get(), 'window_title': title.get().strip() or default_title, 'icon_path': icon_path.get(), 'sync_settings': sync_settings.get(), 'presence': dict(presence), 'share_photos': share_photos.is_set()}
             settings.save(preferences)
             saved.update(preferences)
+            state['settings_saved_at'] = time.monotonic_ns()
             if sync_settings.get():
                 sync_enabled.set()
                 if state['stop']:
@@ -425,7 +430,7 @@ def main():
                 sync_enabled.clear()
                 if state['stop']:
                     commands.put(export_settings())
-            status.set('Settings saved.')
+            status.set('Settings saved. Could not update saved credentials: ' + credential_error if credential_error else 'Settings saved.')
             return True
         except Exception as error:
             status.set('Could not save settings or credentials: ' + str(error))
@@ -546,8 +551,10 @@ def main():
                 share_photos.set()
             else:
                 share_photos.clear()
-            close_dialog()
-            save_preferences()
+            if save_preferences():
+                close_dialog()
+            else:
+                messagebox.showerror('Could not save presence', status.get(), parent=dialog)
         ttk.Button(panel, text='Save presence', command=apply).grid(row=14, column=0, sticky='w')
         ttk.Button(panel, text='Load my fronters', command=load_front).grid(row=14, column=1, sticky='e')
         ttk.Button(panel, text='Use fronter photo', command=lambda: variables['large_image'].set('{avatar}')).grid(row=15, column=0, columnspan=2, sticky='w', pady=(8, 0))
@@ -622,6 +629,8 @@ def main():
                     if state['preview_update']:
                         state['preview_update']()
                 elif isinstance(message, tuple) and message[0] == 'settings':
+                    if message[2] <= state['settings_saved_at']:
+                        continue
                     try:
                         apply_cloud_settings(message[1])
                     except Exception as error:
@@ -681,6 +690,24 @@ def main():
         label = edit_presence()
         root.update()
         assert label.image is not None and label.image.width() == 72
+        panel = label.master.master
+        first_line = panel.grid_slaves(row=1, column=1)[0]
+        first_line.delete(0, 'end')
+        first_line.insert(0, 'Saved presence test')
+        panel.grid_slaves(row=14, column=0)[0].invoke()
+        assert settings.load()['presence']['details'] == 'Saved presence test'
+        value.set('test password')
+        original_credential = settings.credential
+        def unavailable_credential(*args, **kwargs):
+            raise RuntimeError('Keyring unavailable')
+        settings.credential = unavailable_credential
+        assert save_preferences() and 'Keyring unavailable' in status.get()
+        settings.credential = original_credential
+        sync_settings.set(True)
+        messages.put(('settings', {'v': 1, 'title': 'Old settings', 'icon': '',
+                                    'autostart': False, 'close_mode': 'quit'}, 0))
+        poll()
+        assert settings.load()['presence']['details'] == 'Saved presence test'
         root.after(500, root.destroy)
     root.mainloop()
 
