@@ -28,6 +28,19 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(companion.activity_for(['Alex'])['state'], 'Alex')
         self.assertEqual(len(companion.activity_for(['x' * 200])['state']), 128)
 
+    def test_custom_presence_and_empty_front(self):
+        options = {'details': 'Front: {fronters}', 'state': '{count} here',
+                   'large_image': 'https://example.com/image.png',
+                   'button1_label': 'Site', 'button1_url': 'https://example.com',
+                   'button2_label': 'Bad', 'button2_url': 'javascript:alert(1)', 'show_empty': True}
+        activity = companion.activity_for(['Alex', 'Sam'], options)
+        self.assertEqual(activity['details'], 'Front: Alex, Sam')
+        self.assertEqual(activity['state'], '2 here')
+        self.assertEqual(activity['assets']['large_image'], options['large_image'])
+        self.assertEqual(activity['buttons'], [{'label': 'Site', 'url': 'https://example.com'}])
+        self.assertEqual(companion.activity_for([], options)['details'], 'Front: Nobody')
+        self.assertEqual(companion.clean_presence({'details': 3})['details'], 'Currently fronting')
+
     @unittest.skipIf(os.name == 'nt', 'Unix socket test')
     def test_discord_handshake_activity_and_clear(self):
         with tempfile.TemporaryDirectory() as directory:

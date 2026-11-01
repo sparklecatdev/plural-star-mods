@@ -12,6 +12,7 @@ import threading
 import time
 import uuid
 import subprocess
+from urllib.parse import urlparse
 
 from cloud import Cloud, DEFAULT_RELAY
 import updater
@@ -33,10 +34,50 @@ def discord_socket_paths():
             for root in dict.fromkeys(filter(None, roots)) for index in range(10)]
 
 
-def activity_for(names):
-    if not names:
+PRESENCE_DEFAULTS = {'details': 'Currently fronting', 'state': '{fronters}',
+                     'large_image': '', 'large_text': '', 'small_image': '', 'small_text': '',
+                     'button1_label': '', 'button1_url': '', 'button2_label': '', 'button2_url': '',
+                     'show_empty': False}
+
+
+def clean_presence(value):
+    if not isinstance(value, dict):
+        value = {}
+    result = {}
+    for key, default in PRESENCE_DEFAULTS.items():
+        item = value.get(key, default)
+        if isinstance(default, bool):
+            result[key] = item if isinstance(item, bool) else default
+        else:
+            limit = 300 if key.endswith('_image') else 512 if key.endswith('_url') else 32 if key.endswith('_label') else 128
+            result[key] = item[:limit] if isinstance(item, str) else default
+    return result
+
+
+def activity_for(names, presence=None):
+    options = clean_presence(presence)
+    if not names and not options['show_empty']:
         return None
-    return {'details': 'Currently fronting', 'state': ', '.join(names)[:128]}
+    def render(value):
+        return value.replace('{fronters}', ', '.join(names) or 'Nobody').replace('{count}', str(len(names)))[:128]
+    activity = {}
+    for key in ('details', 'state'):
+        value = render(options[key]).strip()
+        if value:
+            activity[key] = value
+    assets = {key: render(options[key]) if key.endswith('_text') else options[key]
+              for key in ('large_image', 'large_text', 'small_image', 'small_text') if options[key]}
+    if assets:
+        activity['assets'] = assets
+    buttons = []
+    for n in (1, 2):
+        label, url = options[f'button{n}_label'].strip(), options[f'button{n}_url'].strip()
+        parsed = urlparse(url)
+        if label and parsed.scheme in ('http', 'https') and parsed.netloc:
+            buttons.append({'label': label, 'url': url})
+    if buttons:
+        activity['buttons'] = buttons
+    return activity
 
 
 class Discord:
@@ -133,6 +174,7 @@ def run_worker(password, relay, token, stop, messages, commands, sync_enabled, i
     cloud = None
     pending = None
     previous = None
+    current = initial or {}
     try:
         while not stop.is_set():
             try:
@@ -140,13 +182,15 @@ def run_worker(password, relay, token, stop, messages, commands, sync_enabled, i
                     cloud = Cloud(password, relay, token)
                 names = cloud.get_front()
                 sync_error = None
+                while True:
+                    try:
+                        current = commands.get_nowait()
+                        if sync_enabled.is_set():
+                            pending = current
+                    except queue.Empty:
+                        break
                 if sync_enabled.is_set():
                     try:
-                        while True:
-                            try:
-                                pending = commands.get_nowait()
-                            except queue.Empty:
-                                break
                         if pending is not None:
                             cloud.put_companion_settings(pending)
                             previous = pending
@@ -160,6 +204,7 @@ def run_worker(password, relay, token, stop, messages, commands, sync_enabled, i
                             elif remote != previous:
                                 previous = remote
                                 if remote is not None:
+                                    current = remote
                                     messages.put(('settings', remote))
                     except (OSError, ValueError, ConnectionError, json.JSONDecodeError) as error:
                         sync_error = str(error)
@@ -168,7 +213,7 @@ def run_worker(password, relay, token, stop, messages, commands, sync_enabled, i
                     previous = None
                 if not discord.stream:
                     discord.connect()
-                discord.set_activity(activity_for(names))
+                discord.set_activity(activity_for(names, current.get('presence')))
                 status = 'Showing: ' + ', '.join(names) if names else 'No fronters to show.'
                 messages.put(status + (' Settings sync: ' + sync_error + ' Retrying automatically.' if sync_error else ''))
             except (OSError, ValueError, ConnectionError, json.JSONDecodeError) as error:
@@ -235,6 +280,7 @@ def main():
     icon_buttons.grid(row=13, column=0, columnspan=2, sticky='w', pady=(8, 0))
     ttk.Button(icon_buttons, text='Choose icon', command=choose_icon).pack(side='left')
     ttk.Button(icon_buttons, text='Default icon', command=lambda: icon_path.set('')).pack(side='left', padx=8)
+    presence = clean_presence(saved.get('presence'))
     sync_settings = tk.BooleanVar(value=saved.get('sync_settings', False))
     ttk.Checkbutton(frame, text='Sync appearance and startup settings with Plural Star', variable=sync_settings).grid(row=16, column=0, columnspan=2, sticky='w')
     status = tk.StringVar(value='Stopped. Open Discord, then select Start.')
@@ -293,7 +339,7 @@ def main():
             if len(icon) > 400000:
                 raise ValueError('Icon is too large to sync.')
         return {'v': 1, 'title': window_title, 'icon': icon,
-                'autostart': autostart.get(), 'close_mode': close_mode.get()}
+                'autostart': autostart.get(), 'close_mode': close_mode.get(), 'presence': dict(presence)}
 
     def apply_cloud_settings(data):
         if not sync_settings.get():
@@ -314,13 +360,14 @@ def main():
             target.parent.mkdir(parents=True, exist_ok=True)
             image.save(target, format='PNG')
             path = str(target)
+        presence.update(clean_presence(data.get('presence')))
         settings.set_autostart(data['autostart'])
         title.set(data['title'])
         icon_path.set(path)
         autostart.set(data['autostart'])
         close_mode.set(data['close_mode'])
         apply_appearance()
-        preferences = dict(saved, window_title=data['title'], icon_path=path, autostart=data['autostart'], close_mode=data['close_mode'])
+        preferences = dict(saved, window_title=data['title'], icon_path=path, autostart=data['autostart'], close_mode=data['close_mode'], presence=dict(presence))
         settings.save(preferences)
         saved.update(preferences)
 
@@ -342,7 +389,7 @@ def main():
             synced = export_settings() if sync_settings.get() else None
             apply_appearance()
             settings.set_autostart(autostart.get())
-            preferences = {'relay': relay.get(), 'remember': remember.get(), 'autostart': autostart.get(), 'close_mode': close_mode.get(), 'window_title': title.get().strip() or default_title, 'icon_path': icon_path.get(), 'sync_settings': sync_settings.get()}
+            preferences = {'relay': relay.get(), 'remember': remember.get(), 'autostart': autostart.get(), 'close_mode': close_mode.get(), 'window_title': title.get().strip() or default_title, 'icon_path': icon_path.get(), 'sync_settings': sync_settings.get(), 'presence': dict(presence)}
             settings.save(preferences)
             saved.update(preferences)
             if sync_settings.get():
@@ -351,8 +398,8 @@ def main():
                     commands.put(synced)
             else:
                 sync_enabled.clear()
-                while not commands.empty():
-                    commands.get_nowait()
+                if state['stop']:
+                    commands.put(export_settings())
             status.set('Settings saved.')
             return True
         except Exception as error:
@@ -378,8 +425,46 @@ def main():
         token_entry.config(state='disabled')
         button.config(text='Stop')
         status.set('Connecting...')
-        threading.Thread(target=run_worker, args=(current, current_relay, current_token, state['stop'], messages, commands, sync_enabled, export_settings() if sync_settings.get() else None), daemon=True).start()
+        threading.Thread(target=run_worker, args=(current, current_relay, current_token, state['stop'], messages, commands, sync_enabled, export_settings()), daemon=True).start()
 
+    def edit_presence():
+        dialog = tk.Toplevel(root)
+        dialog.title('Discord presence')
+        panel = ttk.Frame(dialog, padding=12)
+        panel.grid(sticky='nsew')
+        fields = [('details', 'First line'), ('state', 'Second line'),
+                  ('large_image', 'Large image URL or asset key'), ('large_text', 'Large image hover text'),
+                  ('small_image', 'Small image URL or asset key'), ('small_text', 'Small image hover text'),
+                  ('button1_label', 'First button label'), ('button1_url', 'First button URL'),
+                  ('button2_label', 'Second button label'), ('button2_url', 'Second button URL')]
+        variables = {key: tk.StringVar(value=presence[key]) for key, _ in fields}
+        show_empty = tk.BooleanVar(value=presence['show_empty'])
+        ttk.Label(panel, text='Use {fronters} for names and {count} for the number fronting.').grid(row=0, column=0, columnspan=2, sticky='w')
+        for row, (key, label) in enumerate(fields, 1):
+            ttk.Label(panel, text=label).grid(row=row, column=0, sticky='w', padx=(0, 8))
+            ttk.Entry(panel, textvariable=variables[key], width=42).grid(row=row, column=1, sticky='ew')
+        ttk.Checkbutton(panel, text='Show presence when nobody is fronting', variable=show_empty).grid(row=11, column=0, columnspan=2, sticky='w')
+        preview = tk.StringVar()
+        ttk.Label(panel, textvariable=preview, wraplength=430, justify='left').grid(row=12, column=0, columnspan=2, sticky='w', pady=10)
+        def values():
+            return clean_presence({**{key: var.get() for key, var in variables.items()}, 'show_empty': show_empty.get()})
+        def update_preview(*_):
+            activity = activity_for(['Alex', 'Sam'], values()) or {}
+            lines = ['Preview (example names)', activity.get('details', ''), activity.get('state', '')]
+            lines += ['Image: ' + activity['assets'].get('large_image', '')] if activity.get('assets') else []
+            lines += ['Buttons: ' + ', '.join(button['label'] for button in activity['buttons'])] if activity.get('buttons') else []
+            preview.set('\n'.join(lines))
+        for var in variables.values():
+            var.trace_add('write', update_preview)
+        show_empty.trace_add('write', update_preview)
+        update_preview()
+        def apply():
+            presence.update(values())
+            dialog.destroy()
+            save_preferences()
+        ttk.Button(panel, text='Save presence', command=apply).grid(row=13, column=0, sticky='w')
+
+    ttk.Button(icon_buttons, text='Edit Discord presence', command=edit_presence).pack(side='left')
     ttk.Button(frame, text='Save settings', command=save_preferences).grid(row=14, column=0, columnspan=2, sticky='w', pady=(8, 0))
     button = ttk.Button(frame, text='Start', command=toggle)
     button.grid(row=2, column=1, padx=(8, 0))

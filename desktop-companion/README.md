@@ -18,3 +18,5 @@ The downloads do not require Python. macOS and Windows may warn about the unsign
 Installed builds check for a newer desktop release at launch and install verified updates automatically. Extracted builds that have not been installed do not update themselves. On Windows, if PowerShell blocks the installer, run it from a PowerShell window with `powershell -ExecutionPolicy Bypass -File .\Install-Windows.ps1`.
 
 To run from source, install Python 3 with Tkinter, then use `Start.command` on macOS, `Start.bat` on Windows, or `sh Start.command` on Linux. The launcher installs the required packages on first use.
+
+Customize the Discord presence in **Edit Discord presence**, or from the synced mobile companion settings. Use `{fronters}` and `{count}` in the text. Images accept public URLs or Discord application asset keys; up to two buttons can open web links. Discord controls the application name and icon in its Developer Portal. The preview uses example names.
