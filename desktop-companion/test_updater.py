@@ -2,6 +2,8 @@ import hashlib
 import io
 import json
 import os
+from pathlib import Path
+import tempfile
 import unittest
 import zipfile
 from unittest.mock import patch
@@ -50,6 +52,27 @@ class UpdateTests(unittest.TestCase):
         with patch('updater.urllib.request.urlopen', side_effect=self.responses(self.archive('../escape'))):
             with self.assertRaises(ValueError):
                 updater.fetch_update()
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX process-wait test')
+    @patch('updater.sys.platform', 'linux')
+    def test_replace_installed_version_and_restart(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / 'download'
+            source.mkdir()
+            executable = source / 'app'
+            executable.write_text('new')
+            installed = root / 'installed'
+            installed.mkdir()
+            (installed / 'app').write_text('old')
+            with patch('updater.sys.executable', str(executable)), \
+                 patch('updater.os.name', 'posix'), \
+                 patch('updater.os.kill', side_effect=ProcessLookupError), \
+                 patch('updater.subprocess.Popen') as launch:
+                updater.apply_update(installed, 123)
+            self.assertEqual((installed / 'app').read_text(), 'new')
+            launch.assert_called_once()
+            self.assertFalse((root / 'installed.old').exists())
 
 
 if __name__ == '__main__':
