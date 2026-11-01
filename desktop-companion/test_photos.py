@@ -1,11 +1,15 @@
 from io import BytesIO
+import http.client
 import json
+import socket
+import ssl
 import unittest
+import urllib.error
 from unittest import mock
 
 from PIL import Image, PngImagePlugin
 
-from photos import PhotoPublisher, UPLOAD_URL
+from photos import PhotoPublisher, UPLOAD_URL, upload_context
 
 
 class PhotoTests(unittest.TestCase):
@@ -82,6 +86,65 @@ class PhotoTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             PhotoPublisher().publish(b'not an image')
         opener.assert_not_called()
+
+    @mock.patch('photos.urllib.request.build_opener')
+    @mock.patch('photos.time.monotonic', return_value=100)
+    def test_failures_keep_specific_reason_during_backoff(self, clock, opener):
+        cases = (
+            (urllib.error.HTTPError(UPLOAD_URL, 403, 'secret response', {}, None), 'HTTP 403'),
+            (urllib.error.HTTPError(UPLOAD_URL, 429, 'secret response', {}, None), 'HTTP 429'),
+            (urllib.error.HTTPError(UPLOAD_URL, 503, 'secret response', {}, None), 'HTTP 503'),
+            (urllib.error.URLError(ssl.SSLCertVerificationError(1, 'secret response')), 'CA certificates'),
+            (urllib.error.URLError(socket.gaierror(-2, 'secret response')), 'DNS'),
+            (urllib.error.URLError(TimeoutError('secret response')), 'timed out'),
+            (urllib.error.URLError(ssl.SSLError('secret response')), 'HTTPS connection'),
+            (urllib.error.URLError('secret response'), 'firewall or proxy'),
+            (http.client.IncompleteRead(b'secret response'), 'firewall or proxy'),
+        )
+        for error, expected in cases:
+            with self.subTest(expected=expected):
+                opener.reset_mock()
+                opener.return_value.open.side_effect = error
+                publisher = PhotoPublisher()
+                with self.assertRaisesRegex(ValueError, expected) as first:
+                    publisher.publish(self.photo)
+                self.assertNotIn('secret response', str(first.exception))
+                with self.assertRaises(ValueError) as retry:
+                    publisher.publish(self.photo)
+                self.assertEqual(str(retry.exception), str(first.exception))
+                opener.return_value.open.assert_called_once()
+
+    @mock.patch('photos.urllib.request.build_opener')
+    def test_host_rejection_and_invalid_json_are_reported_without_response_contents(self, opener):
+        for body, expected in ((b'<html>secret response</html>', 'invalid response'),
+                               (b'{"success":false,"errorcode":123,"description":"secret response"}', 'code 123'),
+                               (b'x' * 4097, 'oversized response')):
+            with self.subTest(expected=expected):
+                opener.return_value.open.return_value.__enter__.return_value.read.return_value = body
+                with self.assertRaisesRegex(ValueError, expected) as error:
+                    PhotoPublisher().publish(self.photo)
+                self.assertNotIn('secret response', str(error.exception))
+
+    @mock.patch('photos.sys.platform', 'linux')
+    @mock.patch('photos.Path.is_file', side_effect=lambda: True)
+    @mock.patch('photos.ssl.create_default_context')
+    def test_linux_loads_distro_certificates_when_bundled_paths_are_absent(self, create, exists):
+        context = create.return_value
+        context.cert_store_stats.return_value = {'x509_ca': 0}
+        context.load_verify_locations.side_effect = [OSError('bad bundle'), None]
+        self.assertIs(upload_context(), context)
+        self.assertEqual(context.load_verify_locations.call_args_list, [
+            mock.call(cafile='/etc/ssl/certs/ca-certificates.crt'),
+            mock.call(cafile='/etc/pki/tls/certs/ca-bundle.crt')])
+
+    def test_tls_verification_is_preserved(self):
+        context = upload_context()
+        self.assertTrue(context.check_hostname)
+        self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+        with mock.patch('photos.ssl.create_default_context', return_value=context), \
+                mock.patch('photos.Path.is_file') as exists:
+            upload_context()
+            exists.assert_not_called()
 
 
 if __name__ == '__main__':

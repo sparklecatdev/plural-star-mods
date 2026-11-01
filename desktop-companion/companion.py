@@ -698,5 +698,8 @@ if __name__ == '__main__':
         tkinter.Tcl()
         assert keyring.get_keyring() and Image.new('RGB', (1, 1)) and importlib.util.find_spec('pystray')
         assert len(derive('test')[2]) == SecretBox.KEY_SIZE
+        if sys.platform.startswith('linux'):
+            from photos import upload_context
+            assert upload_context().cert_store_stats()['x509_ca'] > 0
     else:
         main()

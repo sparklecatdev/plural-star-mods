@@ -52,6 +52,7 @@ jobs:
         shell: bash
         run: |
           dist/Sparklecat-Discord-Companion/Sparklecat-Discord-Companion --self-test
+          SSL_CERT_FILE=/nonexistent SSL_CERT_DIR=/nonexistent dist/Sparklecat-Discord-Companion/Sparklecat-Discord-Companion --self-test
           XDG_CONFIG_HOME="$(mktemp -d)" XDG_DATA_HOME="$(mktemp -d)" timeout 20s xvfb-run -a dist/Sparklecat-Discord-Companion/Sparklecat-Discord-Companion --gui-self-test
           cp desktop-companion/Install-Linux.sh dist/Sparklecat-Discord-Companion/
           chmod +x dist/Sparklecat-Discord-Companion/Install-Linux.sh
