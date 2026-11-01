@@ -15,6 +15,7 @@ import subprocess
 from urllib.parse import urlparse
 
 from cloud import Cloud, DEFAULT_RELAY
+from photos import PhotoPublisher
 import updater
 import settings
 
@@ -180,8 +181,9 @@ class Discord:
             self.stream = None
 
 
-def run_worker(password, relay, token, stop, messages, commands, sync_enabled, initial):
+def run_worker(password, relay, token, stop, messages, commands, sync_enabled, initial, share_photos):
     discord = Discord()
+    photos = PhotoPublisher()
     cloud = None
     pending = None
     previous = None
@@ -226,8 +228,15 @@ def run_worker(password, relay, token, stop, messages, commands, sync_enabled, i
                     previous = None
                 if not discord.stream:
                     discord.connect()
+                photo_error = None
+                try:
+                    members = photos.for_activity(members, clean_presence(current.get('presence')), share_photos.is_set())
+                except (OSError, ValueError) as error:
+                    photo_error = str(error)
                 discord.set_activity(activity_for(members, current.get('presence')))
                 status = 'Showing: ' + ', '.join(names) if names else 'No fronters to show.'
+                if photo_error:
+                    status += ' Photo: ' + photo_error
                 messages.put(status + (' Settings sync: ' + sync_error + ' Retrying automatically.' if sync_error else ''))
             except (OSError, ValueError, ConnectionError, json.JSONDecodeError) as error:
                 if discord.stream:
@@ -250,7 +259,7 @@ def run_worker(password, relay, token, stop, messages, commands, sync_enabled, i
 
 def main():
     import tkinter as tk
-    from tkinter import ttk, filedialog
+    from tkinter import ttk, filedialog, messagebox
     from PIL import Image, ImageDraw, ImageTk
 
     root = tk.Tk()
@@ -301,6 +310,9 @@ def main():
     messages = queue.Queue()
     commands = queue.Queue()
     sync_enabled = threading.Event()
+    share_photos = threading.Event()
+    if saved.get('share_photos') is True:
+        share_photos.set()
     state = {'stop': None, 'closing': False, 'tray': None, 'front': None, 'preview_update': None}
     def icon_image(path):
         if path:
@@ -402,7 +414,7 @@ def main():
             synced = export_settings() if sync_settings.get() else None
             apply_appearance()
             settings.set_autostart(autostart.get())
-            preferences = {'relay': relay.get(), 'remember': remember.get(), 'autostart': autostart.get(), 'close_mode': close_mode.get(), 'window_title': title.get().strip() or default_title, 'icon_path': icon_path.get(), 'sync_settings': sync_settings.get(), 'presence': dict(presence)}
+            preferences = {'relay': relay.get(), 'remember': remember.get(), 'autostart': autostart.get(), 'close_mode': close_mode.get(), 'window_title': title.get().strip() or default_title, 'icon_path': icon_path.get(), 'sync_settings': sync_settings.get(), 'presence': dict(presence), 'share_photos': share_photos.is_set()}
             settings.save(preferences)
             saved.update(preferences)
             if sync_settings.get():
@@ -438,7 +450,7 @@ def main():
         token_entry.config(state='disabled')
         button.config(text='Stop')
         status.set('Connecting...')
-        threading.Thread(target=run_worker, args=(current, current_relay, current_token, state['stop'], messages, commands, sync_enabled, export_settings()), daemon=True).start()
+        threading.Thread(target=run_worker, args=(current, current_relay, current_token, state['stop'], messages, commands, sync_enabled, export_settings(), share_photos), daemon=True).start()
 
     def edit_presence():
         dialog = tk.Toplevel(root)
@@ -452,14 +464,28 @@ def main():
                   ('button2_label', 'Second button label'), ('button2_url', 'Second button URL')]
         variables = {key: tk.StringVar(value=presence[key]) for key, _ in fields}
         show_empty = tk.BooleanVar(value=presence['show_empty'])
+        allow_photos = tk.BooleanVar(value=share_photos.is_set())
         ttk.Label(panel, text='Use {fronters}, {count}, {name}, {pronouns} and {avatar}.\n{name}, {pronouns} and {avatar} use the first fronter.\n{avatar} needs a public HTTPS photo URL for Discord.', justify='left').grid(row=0, column=0, columnspan=2, sticky='w')
         for row, (key, label) in enumerate(fields, 1):
             ttk.Label(panel, text=label).grid(row=row, column=0, sticky='w', padx=(0, 8))
             ttk.Entry(panel, textvariable=variables[key], width=42).grid(row=row, column=1, sticky='ew')
         ttk.Checkbutton(panel, text='Show presence when nobody is fronting', variable=show_empty).grid(row=11, column=0, columnspan=2, sticky='w')
+        def confirm_photos():
+            if allow_photos.get():
+                allowed = messagebox.askyesno('Share photos publicly?',
+                    'The companion will upload the first fronter\'s photo to Uguu when {avatar} is used in an image field. '
+                    'Photos leave your encrypted vault and become publicly accessible to anyone with the link. '
+                    'Links expire after 3 hours and renew automatically while needed. Others and Discord may keep copies. '
+                    'Disabling stops new uploads; existing uploads remain until they expire. '
+                    'Names, pronouns and vault credentials are not uploaded to the photo host.\n\nEnable photo sharing on this computer?', parent=dialog)
+                allow_photos.set(allowed)
+                if allowed and not variables['large_image'].get():
+                    variables['large_image'].set('{avatar}')
+            update_preview()
+        ttk.Checkbutton(panel, text='Share cloud photos publicly for Discord (temporary hosting)', variable=allow_photos, command=confirm_photos).grid(row=12, column=0, columnspan=2, sticky='w')
         preview = tk.StringVar()
         preview_frame = ttk.Frame(panel)
-        preview_frame.grid(row=12, column=0, columnspan=2, sticky='w', pady=10)
+        preview_frame.grid(row=13, column=0, columnspan=2, sticky='w', pady=10)
         photo_label = ttk.Label(preview_frame)
         photo_label.pack(side='left', padx=(0, 8))
         ttk.Label(preview_frame, textvariable=preview, wraplength=360, justify='left').pack(side='left')
@@ -483,13 +509,14 @@ def main():
                         if not activity.get('assets', {}).get('large_image'):
                             lines.append('Select Use fronter photo to show this photo on Discord.')
                     else:
-                        lines.append('Private cloud photo (local preview only).')
+                        lines.append('Cloud photo will be shared publicly while presence is running.' if allow_photos.get() else 'Private cloud photo (local preview only).')
                 except (OSError, ValueError):
                     lines.append('This photo could not be displayed. Try choosing it again in Plural Star.')
             elif state['front'] is not None:
                 lines.append(first.get('photo_error') or 'No profile photo found for the first fronter.')
             if any('{avatar}' in variables[key].get() and not activity.get('assets', {}).get(key) for key in ('large_image', 'small_image')):
-                lines.append('Discord needs a public HTTPS photo URL; private cloud photos stay in the local preview.')
+                if not allow_photos.get():
+                    lines.append('Enable public photo sharing above to show cloud photos on Discord.')
             lines += ['Image: ' + activity['assets'].get('large_image', '')] if activity.get('assets') else []
             lines += ['Buttons: ' + ', '.join(button['label'] for button in activity['buttons'])] if activity.get('buttons') else []
             preview.set('\n'.join(lines))
@@ -515,11 +542,15 @@ def main():
             dialog.destroy()
         def apply():
             presence.update(values())
+            if allow_photos.get():
+                share_photos.set()
+            else:
+                share_photos.clear()
             close_dialog()
             save_preferences()
-        ttk.Button(panel, text='Save presence', command=apply).grid(row=13, column=0, sticky='w')
-        ttk.Button(panel, text='Load my fronters', command=load_front).grid(row=13, column=1, sticky='e')
-        ttk.Button(panel, text='Use fronter photo', command=lambda: variables['large_image'].set('{avatar}')).grid(row=14, column=0, columnspan=2, sticky='w', pady=(8, 0))
+        ttk.Button(panel, text='Save presence', command=apply).grid(row=14, column=0, sticky='w')
+        ttk.Button(panel, text='Load my fronters', command=load_front).grid(row=14, column=1, sticky='e')
+        ttk.Button(panel, text='Use fronter photo', command=lambda: variables['large_image'].set('{avatar}')).grid(row=15, column=0, columnspan=2, sticky='w', pady=(8, 0))
         if value.get() and state['front'] is None:
             load_front()
         dialog.protocol('WM_DELETE_WINDOW', close_dialog)

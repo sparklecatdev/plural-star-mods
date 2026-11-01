@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import queue
 import socket
 import struct
 import tempfile
@@ -50,6 +51,36 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(activity['state'], 'Alex, Sam: 2')
         self.assertEqual(activity['assets']['large_image'], 'https://example.com/avatar.png')
         self.assertNotIn('assets', companion.activity_for(members[1:], options))
+
+    def test_worker_sends_hosted_photo_and_preserves_text_on_upload_failure(self):
+        original = [{'name': 'Alex', 'avatar': 'cloud:photo', 'photo': b'private photo'}]
+        hosted = [{**original[0], 'avatar': 'https://n.uguu.se/abcdefgh.png'}]
+        for result in (hosted, ValueError('Upload unavailable')):
+            with self.subTest(result=result), mock.patch.object(companion, 'Cloud') as cloud, \
+                    mock.patch.object(companion, 'Discord') as discord, \
+                    mock.patch.object(companion, 'PhotoPublisher') as photos:
+                cloud.return_value.get_front_members.return_value = original
+                if isinstance(result, Exception):
+                    photos.return_value.for_activity.side_effect = result
+                else:
+                    photos.return_value.for_activity.return_value = result
+                stop = mock.Mock()
+                stop.is_set.side_effect = [False, True]
+                sharing = threading.Event()
+                sharing.set()
+                messages = queue.Queue()
+                companion.run_worker('password', 'relay', '', stop, messages, queue.Queue(),
+                                     threading.Event(), {'presence': {'large_image': '{avatar}'}}, sharing)
+                self.assertEqual(messages.get_nowait(), ('front', original))
+                status = messages.get_nowait()
+                activity = discord.return_value.set_activity.call_args_list[0].args[0]
+                self.assertEqual(activity['state'], 'Alex')
+                if isinstance(result, Exception):
+                    self.assertNotIn('assets', activity)
+                    self.assertIn('Upload unavailable', status)
+                else:
+                    self.assertEqual(activity['assets']['large_image'], hosted[0]['avatar'])
+                self.assertTrue(photos.return_value.for_activity.call_args.args[2])
 
     @unittest.skipIf(os.name == 'nt', 'Unix socket test')
     def test_discord_handshake_activity_and_clear(self):
