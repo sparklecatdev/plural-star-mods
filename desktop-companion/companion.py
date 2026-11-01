@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Show Plural Star cloud fronters in Discord activity."""
+import base64
 import json
 import os
 import queue
@@ -127,19 +128,49 @@ class Discord:
             self.stream = None
 
 
-def run_worker(password, relay, token, stop, messages):
+def run_worker(password, relay, token, stop, messages, commands, sync_enabled, initial):
     discord = Discord()
     cloud = None
+    pending = None
+    previous = None
     try:
         while not stop.is_set():
             try:
                 if cloud is None:
                     cloud = Cloud(password, relay, token)
                 names = cloud.get_front()
+                sync_error = None
+                if sync_enabled.is_set():
+                    try:
+                        while True:
+                            try:
+                                pending = commands.get_nowait()
+                            except queue.Empty:
+                                break
+                        if pending is not None:
+                            cloud.put_companion_settings(pending)
+                            previous = pending
+                            pending = None
+                        else:
+                            remote = cloud.get_companion_settings()
+                            if remote is None and initial is not None:
+                                cloud.put_companion_settings(initial)
+                                previous = initial
+                                initial = None
+                            elif remote != previous:
+                                previous = remote
+                                if remote is not None:
+                                    messages.put(('settings', remote))
+                    except (OSError, ValueError, ConnectionError, json.JSONDecodeError) as error:
+                        sync_error = str(error)
+                else:
+                    pending = None
+                    previous = None
                 if not discord.stream:
                     discord.connect()
                 discord.set_activity(activity_for(names))
-                messages.put('Showing: ' + ', '.join(names) if names else 'No fronters to show.')
+                status = 'Showing: ' + ', '.join(names) if names else 'No fronters to show.'
+                messages.put(status + (' Settings sync: ' + sync_error + ' Retrying automatically.' if sync_error else ''))
             except (OSError, ValueError, ConnectionError, json.JSONDecodeError) as error:
                 if discord.stream:
                     try:
@@ -204,9 +235,13 @@ def main():
     icon_buttons.grid(row=13, column=0, columnspan=2, sticky='w', pady=(8, 0))
     ttk.Button(icon_buttons, text='Choose icon', command=choose_icon).pack(side='left')
     ttk.Button(icon_buttons, text='Default icon', command=lambda: icon_path.set('')).pack(side='left', padx=8)
+    sync_settings = tk.BooleanVar(value=saved.get('sync_settings', False))
+    ttk.Checkbutton(frame, text='Sync appearance and startup settings with Plural Star', variable=sync_settings).grid(row=16, column=0, columnspan=2, sticky='w')
     status = tk.StringVar(value='Stopped. Open Discord, then select Start.')
     ttk.Label(frame, textvariable=status, wraplength=420).grid(row=15, column=0, columnspan=2, pady=(12, 0), sticky='w')
     messages = queue.Queue()
+    commands = queue.Queue()
+    sync_enabled = threading.Event()
     state = {'stop': None, 'closing': False, 'tray': None}
     def icon_image(path):
         if path:
@@ -242,6 +277,53 @@ def main():
     except Exception as error:
         status.set('Could not unlock saved credentials: ' + str(error))
 
+    def export_settings():
+        window_title = title.get().strip() or default_title
+        if len(window_title) > 120:
+            raise ValueError('Title must be at most 120 characters to sync.')
+        icon = ''
+        if icon_path.get():
+            from io import BytesIO
+            with Image.open(icon_path.get()) as source:
+                image = source.convert('RGBA')
+                image.thumbnail((256, 256))
+            encoded = BytesIO()
+            image.save(encoded, format='PNG')
+            icon = base64.b64encode(encoded.getvalue()).decode('ascii')
+            if len(icon) > 400000:
+                raise ValueError('Icon is too large to sync.')
+        return {'v': 1, 'title': window_title, 'icon': icon,
+                'autostart': autostart.get(), 'close_mode': close_mode.get()}
+
+    def apply_cloud_settings(data):
+        if not sync_settings.get():
+            return
+        if not isinstance(data, dict) or data.get('v') != 1 or not isinstance(data.get('title'), str) or len(data['title']) > 120 or not isinstance(data.get('autostart'), bool) or data.get('close_mode') not in ('quit', 'minimize', 'tray') or not isinstance(data.get('icon'), str) or len(data['icon']) > 400000:
+            raise ValueError('Invalid synced companion settings.')
+        path = ''
+        if data['icon']:
+            from io import BytesIO
+            raw = base64.b64decode(data['icon'], validate=True)
+            with Image.open(BytesIO(raw)) as image:
+                if image.format not in ('PNG', 'JPEG', 'GIF', 'WEBP') or image.width > 4096 or image.height > 4096:
+                    raise ValueError('Invalid synced icon.')
+                image.seek(0)
+                image = image.convert('RGBA')
+                image.thumbnail((256, 256))
+            target = settings.config_path().parent / 'cloud-icon.png'
+            target.parent.mkdir(parents=True, exist_ok=True)
+            image.save(target, format='PNG')
+            path = str(target)
+        settings.set_autostart(data['autostart'])
+        title.set(data['title'])
+        icon_path.set(path)
+        autostart.set(data['autostart'])
+        close_mode.set(data['close_mode'])
+        apply_appearance()
+        preferences = dict(saved, window_title=data['title'], icon_path=path, autostart=data['autostart'], close_mode=data['close_mode'])
+        settings.save(preferences)
+        saved.update(preferences)
+
     def save_preferences():
         try:
             if remember.get():
@@ -257,11 +339,20 @@ def main():
                 settings.credential('token', delete=True)
             if icon_path.get() and icon_path.get() != saved.get('icon_path'):
                 icon_path.set(settings.save_icon(icon_path.get()))
+            synced = export_settings() if sync_settings.get() else None
             apply_appearance()
             settings.set_autostart(autostart.get())
-            preferences = {'relay': relay.get(), 'remember': remember.get(), 'autostart': autostart.get(), 'close_mode': close_mode.get(), 'window_title': title.get().strip() or default_title, 'icon_path': icon_path.get()}
+            preferences = {'relay': relay.get(), 'remember': remember.get(), 'autostart': autostart.get(), 'close_mode': close_mode.get(), 'window_title': title.get().strip() or default_title, 'icon_path': icon_path.get(), 'sync_settings': sync_settings.get()}
             settings.save(preferences)
             saved.update(preferences)
+            if sync_settings.get():
+                sync_enabled.set()
+                if state['stop']:
+                    commands.put(synced)
+            else:
+                sync_enabled.clear()
+                while not commands.empty():
+                    commands.get_nowait()
             status.set('Settings saved.')
             return True
         except Exception as error:
@@ -287,7 +378,7 @@ def main():
         token_entry.config(state='disabled')
         button.config(text='Stop')
         status.set('Connecting...')
-        threading.Thread(target=run_worker, args=(current, current_relay, current_token, state['stop'], messages), daemon=True).start()
+        threading.Thread(target=run_worker, args=(current, current_relay, current_token, state['stop'], messages, commands, sync_enabled, export_settings() if sync_settings.get() else None), daemon=True).start()
 
     ttk.Button(frame, text='Save settings', command=save_preferences).grid(row=14, column=0, columnspan=2, sticky='w', pady=(8, 0))
     button = ttk.Button(frame, text='Start', command=toggle)
@@ -345,6 +436,11 @@ def main():
                     token_entry.config(state='normal')
                     button.config(text='Start', state='normal')
                     status.set('Stopped.')
+                elif isinstance(message, tuple) and message[0] == 'settings':
+                    try:
+                        apply_cloud_settings(message[1])
+                    except Exception as error:
+                        status.set('Could not apply synced settings: ' + str(error))
                 elif not state['closing']:
                     status.set(message)
         except queue.Empty:

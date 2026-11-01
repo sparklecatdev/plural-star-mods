@@ -1,2 +1,2 @@
-export const changelogVersion = '0.4.36';
-export const changelog = '• Added animated GIF wallpapers alongside still images.';
+export const changelogVersion = '0.4.37';
+export const changelog = '• Manage Discord companion appearance and startup settings from your synced mobile app.';

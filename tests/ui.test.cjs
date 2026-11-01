@@ -248,6 +248,7 @@ test('Settings opens the mod menu; switches persist and hide disabled controls',
     './PluralKitSettings': {PluralKitSettings: host('PluralKitSettings')},
     './RestModeSettings': {RestModeSettings: host('RestModeSettings')},
     './CloudModSettings': {CloudModSettings: host('CloudModSettings')},
+    './DesktopCompanionSettings': {DesktopCompanionSettings: host('DesktopCompanionSettings')},
     './ModSupport': {ModSupport: host('ModSupport')}, './CustomMods': {CustomMods: host('CustomMods')},
   });
   let renderer;
@@ -257,10 +258,12 @@ test('Settings opens the mod menu; switches persist and hide disabled controls',
   assert.equal(renderer.root.findAllByType('Modal').length, 1);
   assert.equal(renderer.root.findAllByType('WallpaperControls').length, 0);
   assert.equal(renderer.root.findAllByType('CloudModSettings').length, 0);
+  assert.equal(renderer.root.findAllByType('DesktopCompanionSettings').length, 0);
   for (const label of ['Wallpaper', 'Storage tools', 'Sync mod preferences']) {
     await act(async () => { renderer.root.findAllByType('Toggle').find(n => n.props.label === label).props.onToggle(); await new Promise(setImmediate); });
   }
   assert.equal(renderer.root.findAllByType('CloudModSettings').length, 1);
+  assert.equal(renderer.root.findAllByType('DesktopCompanionSettings').length, 1);
   assert.equal(renderer.root.findAllByType('PluralKitSettings').length, 1);
   await act(async () => renderer.root.findByType('PluralKitSettings').props.onBusy(true));
   assert.equal(renderer.root.findByType('BackupTools').props.disabled, true);
@@ -278,6 +281,7 @@ test('Settings opens the mod menu; switches persist and hide disabled controls',
   assert.equal(renderer.root.findAllByType('WallpaperControls').length, 0);
   assert.equal(renderer.root.findAllByType('BackupTools').length, 0);
   assert.equal(renderer.root.findAllByType('CloudModSettings').length, 0);
+  assert.equal(renderer.root.findAllByType('DesktopCompanionSettings').length, 0);
   await act(async () => renderer.root.findAllByType('Button').find(n => n.props.children === 'Done').props.onPress());
   assert.equal(renderer.root.findAllByType('Modal').length, 0);
   await act(async () => renderer.unmount());

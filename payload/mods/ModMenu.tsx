@@ -17,6 +17,7 @@ import {CustomMods} from './CustomMods';
 import {extraCustomization, useExtraCustomization} from './extraCustomization';
 import {ExtraCustomizationMenu} from './ExtraCustomizationMenu';
 import {RestModeSettings} from './RestModeSettings';
+import {DesktopCompanionSettings} from './DesktopCompanionSettings';
 
 export function ModSettingsButton() {
   const [open, setOpen] = useState(false);
@@ -82,7 +83,7 @@ function ModMenu({onClose}: {onClose: () => void}) {
         {extra.enabled && <Btn variant="ghost" disabled={busy || saving || pkBusy} onPress={() => setExtraOpen(true)}>Open Extra Customization</Btn>}
         <RestModeSettings disabled={busy || saving || pkBusy} />
         <PluralKitSettings disabled={busy || saving} onBusy={setPkBusy} />
-        {enabled.syncPreferences && <CloudModSettings disabled={busy || saving || pkBusy} />}
+        {enabled.syncPreferences && <><CloudModSettings disabled={busy || saving || pkBusy} /><DesktopCompanionSettings disabled={busy || saving || pkBusy} /></>}
         <CustomMods disabled={busy || saving || pkBusy} />
         <ModSupport disabled={busy || saving || pkBusy} />
         {!!error && <Text accessibilityRole="alert" style={{color: T.danger, fontSize: fs(14)}}>{error}</Text>}

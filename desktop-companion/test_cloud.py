@@ -54,6 +54,50 @@ class CloudTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             cloud.Cloud('password', 'https://example.com@evil.test')
 
+    def test_settings_write_retries_without_losing_other_entries(self):
+        master = bytes(range(32))
+        with mock.patch.object(cloud, 'device_id', return_value='abc1234567'):
+            client = cloud.Cloud('password', 'https://example.com')
+        client.master = master
+        other = {'path': 'ps:members', 'id': 'a' * 64, 'tier': 'base', 'size': 7, 'hash': 'old', 'kind': 'data'}
+        added = {'path': 'ps:front', 'id': 'b' * 64, 'tier': 'base', 'size': 5, 'hash': 'new', 'kind': 'data'}
+        state = {'version': 1, 'manifest': {'v': 1, 'version': 1, 'entries': [other]}, 'objects': {}, 'conflict': True}
+
+        def request(path, method='GET', body=None, device=True, extra_headers=None):
+            if path.startswith('/cloud/vault/objects/'):
+                object_id = path.rsplit('/', 1)[1]
+                if method == 'PUT':
+                    self.assertEqual(hashlib.blake2b(body, digest_size=32).hexdigest(), object_id)
+                    self.assertEqual(extra_headers['Content-Range'], f'bytes 0-{len(body)-1}/{len(body)}')
+                    state['objects'][object_id] = body
+                    return b'{}'
+                return state['objects'][object_id]
+            if method == 'GET':
+                packed = seal(master, gzip.compress(json.dumps(state['manifest']).encode()))
+                return json.dumps({'version': state['version'], 'ciphertext': base64.b64encode(packed).decode()}).encode()
+            if state['conflict']:
+                state['conflict'] = False
+                state['version'] += 1
+                state['manifest']['entries'].append(added)
+                raise cloud.ConflictError('concurrent update')
+            self.assertEqual(body['expected_version'], state['version'])
+            state['version'] += 1
+            state['manifest'] = json.loads(gzip.decompress(SecretBox(master).decrypt(base64.b64decode(body['ciphertext']))))
+            self.assertEqual(len(body['objects']), 3)
+            return b'{}'
+
+        client.request = request
+        value = {'v': 1, 'title': 'Hello ✦', 'icon': '', 'autostart': True, 'close_mode': 'tray'}
+        client.put_companion_settings(value)
+        self.assertEqual(client.get_companion_settings(), value)
+        self.assertEqual([entry['path'] for entry in state['manifest']['entries']], ['ps:members', 'ps:front', cloud.COMPANION_KEY])
+        entry = state['manifest']['entries'][-1]
+        raw = gzip.decompress(SecretBox(master).decrypt(state['objects'][entry['id']])).decode()
+        h = 0x811c9dc5
+        for ch in raw:
+            h = ((h ^ ord(ch)) * 0x01000193) & 0xffffffff
+        self.assertEqual(entry['hash'], format(h, 'x'))
+
 
 if __name__ == '__main__':
     unittest.main()

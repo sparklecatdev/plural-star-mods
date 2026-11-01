@@ -1,4 +1,4 @@
-"""Read the Plural Star cloud vault without changing its data."""
+"""Read the Plural Star cloud vault and sync companion preferences."""
 import base64
 import gzip
 import hashlib
@@ -18,6 +18,11 @@ from nacl.secret import SecretBox
 
 SALT = b'PluralStarCloudVault/v1'
 DEFAULT_RELAY = 'http://pluralstar.dedyn.io:7523'
+COMPANION_KEY = 'ps:sparklecat:discord-companion'
+
+
+class ConflictError(ValueError):
+    pass
 
 
 def derive(password):
@@ -62,14 +67,17 @@ class Cloud:
         self.master = None
         self.opener = urllib.request.build_opener(NoRedirect())
 
-    def request(self, path, method='GET', body=None, device=True):
+    def request(self, path, method='GET', body=None, device=True, extra_headers=None):
         headers = {'X-Vault-Id': self.lookup, 'X-Vault-Auth': self.auth, 'User-Agent': 'Sparklecat-Discord-Companion'}
         if self.token:
             headers['Authorization'] = 'Bearer ' + self.token
         if device and self.device_key:
             headers.update({'X-Ps-Device-Id': self.id, 'X-Ps-Device-Key': self.device_key})
+        headers.update(extra_headers or {})
         data = None
-        if body is not None:
+        if isinstance(body, bytes):
+            data = body
+        elif body is not None:
             headers['Content-Type'] = 'application/json'
             data = json.dumps(body).encode()
         request = urllib.request.Request(self.url + path, headers=headers, data=data, method=method)
@@ -80,6 +88,8 @@ class Cloud:
                     raise ValueError('Cloud response is too large.')
                 return result
         except urllib.error.HTTPError as error:
+            if error.code == 409:
+                raise ConflictError('Cloud data changed during sync.') from error
             if error.code in (401, 403):
                 self.master = None
                 self.device_key = ''
@@ -107,29 +117,69 @@ class Cloud:
         if len(self.master) != SecretBox.KEY_SIZE:
             raise ValueError('Invalid cloud vault key.')
 
-    def get_front(self):
+    def read_manifest(self):
         if self.master is None:
             self.connect()
+        response = self.json('/cloud/vault/manifest')
         try:
-            manifest = self.json('/cloud/vault/manifest')
-            plain = SecretBox(self.master).decrypt(base64.b64decode(manifest['ciphertext'], validate=True))
-            data = json.loads(gzip.decompress(plain))
+            data = json.loads(gzip.decompress(SecretBox(self.master).decrypt(base64.b64decode(response['ciphertext'], validate=True))))
             if not isinstance(data, dict) or data.get('v') != 1 or not isinstance(data.get('entries'), list):
                 raise ValueError('Unsupported cloud manifest.')
-            entries = {e.get('path'): e.get('id') for e in data['entries'] if isinstance(e, dict)}
-            def read(path, default):
-                object_id = entries.get(path)
-                if object_id is None:
-                    return default
-                if not isinstance(object_id, str) or not re.fullmatch(r'[0-9a-f]{64}', object_id):
-                    raise ValueError('Invalid cloud object ID.')
-                ciphertext = self.request('/cloud/vault/objects/' + object_id)
-                if hashlib.blake2b(ciphertext, digest_size=32).hexdigest() != object_id:
-                    raise ValueError('Cloud object failed its integrity check.')
-                return json.loads(gzip.decompress(SecretBox(self.master).decrypt(ciphertext)))
-            return front_names(read('ps:members', []), read('ps:front', None))
+            return response, data
         except (KeyError, TypeError, CryptoError, OSError) as error:
-            raise ValueError('Could not read the encrypted cloud data.') from error
+            raise ValueError('Could not read the encrypted cloud manifest.') from error
+
+    def read_entry(self, manifest, path, default):
+        entry = next((e for e in manifest['entries'] if isinstance(e, dict) and e.get('path') == path), None)
+        if entry is None:
+            return default
+        object_id = entry.get('id')
+        if not isinstance(object_id, str) or not re.fullmatch(r'[0-9a-f]{64}', object_id):
+            raise ValueError('Invalid cloud object ID.')
+        ciphertext = self.request('/cloud/vault/objects/' + object_id)
+        if hashlib.blake2b(ciphertext, digest_size=32).hexdigest() != object_id:
+            raise ValueError('Cloud object failed its integrity check.')
+        try:
+            return json.loads(gzip.decompress(SecretBox(self.master).decrypt(ciphertext)))
+        except (CryptoError, OSError, ValueError) as error:
+            raise ValueError('Could not read encrypted cloud data.') from error
+
+    def get_front(self):
+        _, manifest = self.read_manifest()
+        return front_names(self.read_entry(manifest, 'ps:members', []), self.read_entry(manifest, 'ps:front', None))
+
+    def get_companion_settings(self):
+        _, manifest = self.read_manifest()
+        return self.read_entry(manifest, COMPANION_KEY, None)
+
+    def put_companion_settings(self, settings):
+        # The vault's compare-and-swap version prevents overwriting unrelated changes.
+        raw = json.dumps(settings, ensure_ascii=True, separators=(',', ':'))
+        plain = gzip.compress(raw.encode('utf-8'))
+        ciphertext = bytes(SecretBox(self.master).encrypt(plain))
+        object_id = hashlib.blake2b(ciphertext, digest_size=32).hexdigest()
+        # The relay accepts one complete chunk for this bounded record.
+        self.request('/cloud/vault/objects/' + object_id, 'PUT', ciphertext, extra_headers={
+            'Content-Type': 'application/octet-stream', 'Content-Range': f'bytes 0-{len(ciphertext)-1}/{len(ciphertext)}', 'X-Ps-Tier': 'base'})
+        h = 0x811c9dc5
+        encoded = raw.encode('utf-16-le')
+        for unit in (int.from_bytes(encoded[i:i+2], 'little') for i in range(0, len(encoded), 2)):
+            h = ((h ^ unit) * 0x01000193) & 0xffffffff
+        entry = {'path': COMPANION_KEY, 'id': object_id, 'size': len(plain), 'kind': 'data', 'tier': 'base', 'hash': format(h, 'x')}
+        for _ in range(3):
+            response, manifest = self.read_manifest()
+            version = int(response.get('version', 0))
+            entries = [e for e in manifest['entries'] if e.get('path') != COMPANION_KEY]
+            entries.append(entry)
+            manifest.update(entries=entries, version=version + 1, updated=int(__import__('time').time() * 1000))
+            sealed = bytes(SecretBox(self.master).encrypt(gzip.compress(json.dumps(manifest, separators=(',', ':')).encode())))
+            refs = [{'id': e['id'], 'tier': e['tier'], 'size': e['size']} for e in entries]
+            try:
+                self.json('/cloud/vault/manifest', 'PUT', {'expected_version': version, 'ciphertext': base64.b64encode(sealed).decode(), 'objects': refs})
+                return
+            except ConflictError:
+                continue
+        raise ConflictError('Could not sync settings because the cloud is changing. Try again.')
 
 
 def front_names(members, front):
