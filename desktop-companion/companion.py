@@ -6,6 +6,7 @@ import queue
 import re
 import socket
 import struct
+import sys
 import threading
 import time
 import uuid
@@ -14,6 +15,18 @@ from cloud import Cloud, DEFAULT_RELAY
 
 CLIENT_ID = '1566174520350347434'
 INTERVAL = 30
+
+
+def discord_socket_paths():
+    roots = [os.environ.get(name) for name in ('XDG_RUNTIME_DIR', 'TMPDIR', 'TMP', 'TEMP')]
+    runtime = os.environ.get('XDG_RUNTIME_DIR')
+    if runtime:
+        roots += [os.path.join(runtime, 'app', name) for name in
+                  ('com.discordapp.Discord', 'com.discordapp.DiscordCanary', 'com.discordapp.DiscordPTB')]
+        roots.append(os.path.join(runtime, 'snap.discord'))
+    roots.append('/tmp')
+    return [os.path.join(root, 'discord-ipc-' + str(index))
+            for root in dict.fromkeys(filter(None, roots)) for index in range(10)]
 
 
 def activity_for(names):
@@ -44,12 +57,11 @@ class Discord:
                 except OSError:
                     continue
         else:
-            prefix = next((os.environ[x] for x in ('XDG_RUNTIME_DIR', 'TMPDIR', 'TMP', 'TEMP') if os.environ.get(x)), '/tmp')
-            for index in range(10):
+            for path in discord_socket_paths():
                 stream = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
                 stream.settimeout(5)
                 try:
-                    stream.connect(os.path.join(prefix, 'discord-ipc-' + str(index)))
+                    stream.connect(path)
                     self.stream = stream
                     break
                 except OSError:
@@ -230,4 +242,11 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    if '--self-test' in sys.argv:
+        import tkinter
+        from cloud import derive
+        from nacl.secret import SecretBox
+        tkinter.Tcl()
+        assert len(derive('test')[2]) == SecretBox.KEY_SIZE
+    else:
+        main()
