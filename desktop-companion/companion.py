@@ -725,7 +725,8 @@ def main():
         first_line = panel.grid_slaves(row=1, column=1)[0]
         first_line.delete(0, 'end')
         first_line.insert(0, 'Saved presence test')
-        panel.grid_slaves(row=14, column=0)[0].invoke()
+        next(widget for widget in panel.winfo_children()
+             if isinstance(widget, ttk.Button) and widget.cget('text') == 'Save presence').invoke()
         assert settings.load()['presence']['details'] == 'Saved presence test'
         value.set('test password')
         original_credential = settings.credential
