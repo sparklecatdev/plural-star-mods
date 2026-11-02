@@ -132,13 +132,21 @@ def apply_update(destination, pid):
     relative_exe = source.relative_to(source_root)
     if os.name == 'nt':
         import ctypes
-        kernel = ctypes.windll.kernel32
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+        kernel.WaitForSingleObject.restype = wintypes.DWORD
+        kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
         handle = kernel.OpenProcess(0x00100000, False, pid)
         if handle:
             result = kernel.WaitForSingleObject(handle, 30000)
             kernel.CloseHandle(handle)
             if result != 0:
                 raise RuntimeError('Previous version did not exit.')
+        elif ctypes.get_last_error() != 87:  # The process has already exited.
+            raise ctypes.WinError(ctypes.get_last_error())
     else:
         for _ in range(300):
             try:
