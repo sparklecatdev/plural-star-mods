@@ -74,6 +74,31 @@ class UpdateTests(unittest.TestCase):
             launch.assert_called_once()
             self.assertFalse((root / 'installed.old').exists())
 
+    @unittest.skipIf(os.name == 'nt', 'POSIX process-wait test')
+    @patch('updater.sys.platform', 'linux')
+    def test_recover_interrupted_update_and_rollback_failed_launch(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / 'download'
+            source.mkdir()
+            executable = source / 'app'
+            executable.write_text('new')
+            installed = root / 'installed'
+            backup = root / 'installed.old'
+            backup.mkdir()
+            (backup / 'app').write_text('old')
+            stale = root / 'installed.new'
+            stale.mkdir()
+            (stale / 'app').write_text('incomplete')
+            with patch('updater.sys.executable', str(executable)), \
+                 patch('updater.os.kill', side_effect=ProcessLookupError), \
+                 patch('updater.subprocess.Popen', side_effect=OSError('launch failed')):
+                with self.assertRaisesRegex(OSError, 'launch failed'):
+                    updater.apply_update(installed, 123)
+            self.assertEqual((installed / 'app').read_text(), 'old')
+            self.assertFalse(backup.exists())
+            self.assertFalse(stale.exists())
+
 
 if __name__ == '__main__':
     unittest.main()

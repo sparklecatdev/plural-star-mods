@@ -606,22 +606,17 @@ def main():
     install = updater.target()
     updates = queue.Queue()
     if install:
-        button.config(state='disabled')
-        status.set('Checking for updates...')
-
-        def check_updates():
+        def check_updates_background():
             try:
                 updates.put((updater.fetch_update(), None))
             except Exception as error:
                 updates.put((None, str(error)))
 
-        threading.Thread(target=check_updates, daemon=True).start()
-
-        def poll_updates():
+        def poll_updates(startup):
             try:
                 result, error = updates.get_nowait()
             except queue.Empty:
-                root.after(200, poll_updates)
+                root.after(200, lambda: poll_updates(startup))
                 return
             if result:
                 _, _, executable = result
@@ -632,10 +627,21 @@ def main():
                 except OSError as exc:
                     error = str(exc)
             button.config(state='normal')
-            status.set('Update check failed: ' + error if error else 'Stopped. Open Discord, then select Start.')
-            start_saved()
+            update_button.config(state='normal')
+            status.set('Update check failed: ' + error if error else 'The companion is up to date.')
+            if startup:
+                start_saved()
 
-        root.after(200, poll_updates)
+        def check_updates(startup=False):
+            button.config(state='disabled')
+            update_button.config(state='disabled')
+            status.set('Checking for updates...')
+            threading.Thread(target=check_updates_background, daemon=True).start()
+            root.after(200, lambda: poll_updates(startup))
+
+        update_button = ttk.Button(frame, text='Check for updates', command=check_updates)
+        update_button.grid(row=17, column=0, columnspan=2, sticky='w', pady=(8, 0))
+        check_updates(startup=True)
 
     def poll():
         try:
@@ -746,7 +752,11 @@ def main():
 
 if __name__ == '__main__':
     if len(sys.argv) == 4 and sys.argv[1] == '--apply-update':
-        updater.apply_update(sys.argv[2], int(sys.argv[3]))
+        try:
+            updater.apply_update(sys.argv[2], int(sys.argv[3]))
+        except Exception as error:
+            import tkinter.messagebox
+            tkinter.messagebox.showerror('Update failed', str(error))
     elif '--self-test' in sys.argv:
         import tkinter
         import importlib.util

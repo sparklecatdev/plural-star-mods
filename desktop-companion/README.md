@@ -15,7 +15,7 @@ To manage the companion from your phone, enable **Sync appearance and startup se
 
 The downloads do not require Python. macOS and Windows may warn about the unsigned application. On macOS, open it from Finder and allow it in Privacy & Security if needed. On Linux, the build requires a graphical desktop and is built on Ubuntu 22.04. Flatpak and Snap Discord are supported when their IPC socket is accessible.
 
-Installed builds check for a newer desktop release at launch and install verified updates automatically. Extracted builds that have not been installed do not update themselves. On Windows, if PowerShell blocks the installer, run it from a PowerShell window with `powershell -ExecutionPolicy Bypass -File .\Install-Windows.ps1`.
+Installed builds check for a newer desktop release at launch and install verified updates automatically. Select **Check for updates** to check again without restarting. Extracted builds that have not been installed do not update themselves. On Windows, if PowerShell blocks the installer, run it from a PowerShell window with `powershell -ExecutionPolicy Bypass -File .\Install-Windows.ps1`.
 
 To run from source, install Python 3 with Tkinter, then use `Start.command` on macOS, `Start.bat` on Windows, or `sh Start.command` on Linux. The launcher installs the required packages on first use.
 

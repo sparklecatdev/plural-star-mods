@@ -46,6 +46,10 @@ jobs:
           dist/Sparklecat-Discord-Companion.app/Contents/MacOS/Sparklecat-Discord-Companion --self-test
           cp desktop-companion/Install-macOS.command dist/
           chmod +x dist/Install-macOS.command
+          export HOME="$(mktemp -d)"
+          dist/Install-macOS.command
+          dist/Install-macOS.command
+          test -x "$HOME/Applications/Sparklecat-Discord-Companion.app/Contents/MacOS/Sparklecat-Discord-Companion"
           (cd dist && zip -qry "../sparklecat-discord-companion-${{ matrix.platform }}.zip" Sparklecat-Discord-Companion.app Install-macOS.command)
       - name: Test and archive (Linux)
         if: runner.os == 'Linux'
@@ -78,6 +82,10 @@ jobs:
           $process = Start-Process -FilePath dist/Sparklecat-Discord-Companion/Sparklecat-Discord-Companion.exe -ArgumentList '--self-test' -Wait -PassThru
           if ($process.ExitCode -ne 0) { exit $process.ExitCode }
           Copy-Item desktop-companion/Install-Windows.ps1 dist/
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'sparklecat-install-test'
+          & dist/Install-Windows.ps1
+          & dist/Install-Windows.ps1
+          if (-not (Test-Path (Join-Path $env:LOCALAPPDATA 'Programs/Sparklecat Discord Companion/Sparklecat-Discord-Companion.exe'))) { throw 'Install failed' }
           Compress-Archive -Path dist/Sparklecat-Discord-Companion,dist/Install-Windows.ps1 -DestinationPath sparklecat-discord-companion-${{ matrix.platform }}.zip
       - uses: actions/upload-artifact@v4
         with:

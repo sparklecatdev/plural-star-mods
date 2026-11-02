@@ -15,7 +15,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-VERSION = (0, 6, 8)
+VERSION = (0, 6, 9)
 RELEASES = 'https://api.github.com/repos/sparklecatdev/plural-star-mods/releases?per_page=100'
 NAME = 'Sparklecat-Discord-Companion'
 
@@ -150,8 +150,14 @@ def apply_update(destination, pid):
             raise RuntimeError('Previous version did not exit.')
     replacement = destination.with_name(destination.name + '.new')
     backup = destination.with_name(destination.name + '.old')
-    if replacement.exists() or backup.exists():
-        raise RuntimeError('An unfinished update needs attention.')
+    # Recover an interrupted swap before starting a new one.
+    if backup.exists():
+        if destination.exists():
+            shutil.rmtree(backup)
+        else:
+            backup.rename(destination)
+    if replacement.exists():
+        shutil.rmtree(replacement)
     shutil.copytree(source_root, replacement, symlinks=True)
     try:
         destination.rename(backup)
@@ -160,7 +166,12 @@ def apply_update(destination, pid):
         except Exception:
             backup.rename(destination)
             raise
-        subprocess.Popen([str(destination / relative_exe)], close_fds=True)
+        try:
+            subprocess.Popen([str(destination / relative_exe)], close_fds=True)
+        except Exception:
+            shutil.rmtree(destination)
+            backup.rename(destination)
+            raise
         shutil.rmtree(backup, ignore_errors=True)
     finally:
         shutil.rmtree(replacement, ignore_errors=True)
