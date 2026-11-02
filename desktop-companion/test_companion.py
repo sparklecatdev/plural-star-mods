@@ -82,6 +82,29 @@ class CompanionTests(unittest.TestCase):
                     self.assertEqual(activity['assets']['large_image'], hosted[0]['avatar'])
                 self.assertTrue(photos.return_value.for_activity.call_args.args[2])
 
+    def test_game_process_matching(self):
+        with mock.patch.object(companion.os, 'name', 'posix'), \
+                mock.patch.object(companion.subprocess, 'check_output', return_value='/usr/bin/other\n/home/user/MyGame\n'):
+            self.assertTrue(companion.running_game('another, mygame'))
+            self.assertFalse(companion.running_game('another'))
+            self.assertFalse(companion.running_game(''))
+
+    def test_worker_pauses_and_resumes_for_selected_game(self):
+        with mock.patch.object(companion, 'Cloud') as cloud, \
+                mock.patch.object(companion, 'Discord') as discord, \
+                mock.patch.object(companion, 'PhotoPublisher') as photos, \
+                mock.patch.object(companion, 'running_game', side_effect=[True, False]):
+            cloud.return_value.get_front_members.return_value = [{'name': 'Alex'}]
+            photos.return_value.for_activity.return_value = [{'name': 'Alex'}]
+            stop = mock.Mock()
+            stop.is_set.side_effect = [False, False, True]
+            companion.run_worker('password', 'relay', '', stop, queue.Queue(), queue.Queue(),
+                                 threading.Event(), {}, threading.Event(), {'enabled': True, 'names': 'game'})
+            calls = discord.return_value.set_activity.call_args_list
+            self.assertIsNone(calls[0].args[0])
+            self.assertEqual(calls[1].args[0]['state'], 'Alex')
+            self.assertEqual(photos.return_value.for_activity.call_count, 1)
+
     @unittest.skipIf(os.name == 'nt', 'Unix socket test')
     def test_discord_handshake_activity_and_clear(self):
         with tempfile.TemporaryDirectory() as directory:

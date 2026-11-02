@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Show Plural Star cloud fronters in Discord activity."""
 import base64
+import csv
+import io
 import json
 import os
 import queue
@@ -181,7 +183,22 @@ class Discord:
             self.stream = None
 
 
-def run_worker(password, relay, token, stop, messages, commands, sync_enabled, initial, share_photos):
+def running_game(names):
+    """Match user-selected executable names without inspecting process arguments."""
+    wanted = {name.strip().casefold() for name in names.split(',') if name.strip()}
+    if not wanted:
+        return False
+    if os.name == 'nt':
+        output = subprocess.check_output(['tasklist', '/FO', 'CSV', '/NH'], text=True, timeout=10,
+                                         creationflags=subprocess.CREATE_NO_WINDOW)
+        processes = (row[0] for row in csv.reader(io.StringIO(output)) if row)
+    else:
+        output = subprocess.check_output(['ps', '-A', '-o', 'comm='], text=True, timeout=10)
+        processes = output.splitlines()
+    return any(os.path.basename(name.strip()).casefold() in wanted for name in processes)
+
+
+def run_worker(password, relay, token, stop, messages, commands, sync_enabled, initial, share_photos, game_settings=None):
     discord = Discord()
     photos = PhotoPublisher()
     cloud = None
@@ -230,17 +247,20 @@ def run_worker(password, relay, token, stop, messages, commands, sync_enabled, i
                     previous = None
                 if not discord.stream:
                     discord.connect()
+                game_settings = game_settings if game_settings is not None else {}
+                paused = game_settings.get('enabled', False) and running_game(game_settings.get('names', ''))
                 photo_error = None
                 try:
-                    members = photos.for_activity(members, clean_presence(current.get('presence')), share_photos.is_set())
+                    if not paused:
+                        members = photos.for_activity(members, clean_presence(current.get('presence')), share_photos.is_set())
                 except (OSError, ValueError) as error:
                     photo_error = str(error)
-                discord.set_activity(activity_for(members, current.get('presence')))
-                status = 'Showing: ' + ', '.join(names) if names else 'No fronters to show.'
+                discord.set_activity(None if paused else activity_for(members, current.get('presence')))
+                status = 'Paused while a selected game is running.' if paused else ('Showing: ' + ', '.join(names) if names else 'No fronters to show.')
                 if photo_error:
                     status += ' Photo: ' + photo_error
                 messages.put(status + (' Settings sync: ' + sync_error + ' Retrying automatically.' if sync_error else ''))
-            except (OSError, ValueError, ConnectionError, json.JSONDecodeError) as error:
+            except (OSError, ValueError, ConnectionError, json.JSONDecodeError, subprocess.SubprocessError) as error:
                 if discord.stream:
                     try:
                         discord.set_activity(None)
@@ -312,6 +332,7 @@ def main():
     messages = queue.Queue()
     commands = queue.Queue()
     sync_enabled = threading.Event()
+    game_settings = {'enabled': saved.get('pause_for_games') is True, 'names': saved.get('game_processes', '') if isinstance(saved.get('game_processes', ''), str) else ''}
     share_photos = threading.Event()
     if saved.get('share_photos') is True:
         share_photos.set()
@@ -418,7 +439,7 @@ def main():
             synced = export_settings() if sync_settings.get() else None
             apply_appearance()
             settings.set_autostart(autostart.get())
-            preferences = {'relay': relay.get(), 'remember': remember.get(), 'autostart': autostart.get(), 'close_mode': close_mode.get(), 'window_title': title.get().strip() or default_title, 'icon_path': icon_path.get(), 'sync_settings': sync_settings.get(), 'presence': dict(presence), 'share_photos': share_photos.is_set()}
+            preferences = {'relay': relay.get(), 'remember': remember.get(), 'autostart': autostart.get(), 'close_mode': close_mode.get(), 'window_title': title.get().strip() or default_title, 'icon_path': icon_path.get(), 'sync_settings': sync_settings.get(), 'presence': dict(presence), 'share_photos': share_photos.is_set(), 'pause_for_games': game_settings['enabled'], 'game_processes': game_settings['names']}
             settings.save(preferences)
             saved.update(preferences)
             state['settings_saved_at'] = time.monotonic_ns()
@@ -455,7 +476,7 @@ def main():
         token_entry.config(state='disabled')
         button.config(text='Stop')
         status.set('Connecting...')
-        threading.Thread(target=run_worker, args=(current, current_relay, current_token, state['stop'], messages, commands, sync_enabled, export_settings(), share_photos), daemon=True).start()
+        threading.Thread(target=run_worker, args=(current, current_relay, current_token, state['stop'], messages, commands, sync_enabled, export_settings(), share_photos, game_settings), daemon=True).start()
 
     def edit_presence():
         dialog = tk.Toplevel(root)
@@ -470,6 +491,8 @@ def main():
         variables = {key: tk.StringVar(value=presence[key]) for key, _ in fields}
         show_empty = tk.BooleanVar(value=presence['show_empty'])
         allow_photos = tk.BooleanVar(value=share_photos.is_set())
+        pause_games = tk.BooleanVar(value=game_settings['enabled'])
+        game_names = tk.StringVar(value=game_settings['names'])
         ttk.Label(panel, text='Use {fronters}, {count}, {name}, {pronouns} and {avatar}.\n{name}, {pronouns} and {avatar} use the first fronter.\n{avatar} needs a public HTTPS photo URL for Discord.', justify='left').grid(row=0, column=0, columnspan=2, sticky='w')
         for row, (key, label) in enumerate(fields, 1):
             ttk.Label(panel, text=label).grid(row=row, column=0, sticky='w', padx=(0, 8))
@@ -488,9 +511,12 @@ def main():
                     variables['large_image'].set('{avatar}')
             update_preview()
         ttk.Checkbutton(panel, text='Share cloud photos publicly for Discord (temporary hosting)', variable=allow_photos, command=confirm_photos).grid(row=12, column=0, columnspan=2, sticky='w')
+        ttk.Checkbutton(panel, text='Pause presence while selected games are running', variable=pause_games).grid(row=13, column=0, columnspan=2, sticky='w')
+        ttk.Label(panel, text='Game executable names (comma-separated)').grid(row=14, column=0, sticky='w')
+        ttk.Entry(panel, textvariable=game_names, width=42).grid(row=14, column=1, sticky='ew')
         preview = tk.StringVar()
         preview_frame = ttk.Frame(panel)
-        preview_frame.grid(row=13, column=0, columnspan=2, sticky='w', pady=10)
+        preview_frame.grid(row=15, column=0, columnspan=2, sticky='w', pady=10)
         photo_label = ttk.Label(preview_frame)
         photo_label.pack(side='left', padx=(0, 8))
         ttk.Label(preview_frame, textvariable=preview, wraplength=360, justify='left').pack(side='left')
@@ -546,6 +572,11 @@ def main():
             state['preview_update'] = None
             dialog.destroy()
         def apply():
+            names = game_names.get().strip()
+            if pause_games.get() and not any(part.strip() for part in names.split(',')):
+                messagebox.showerror('Choose games', 'Enter at least one executable name.', parent=dialog)
+                return
+            game_settings.update(enabled=pause_games.get(), names=names)
             presence.update(values())
             if allow_photos.get():
                 share_photos.set()
@@ -555,9 +586,9 @@ def main():
                 close_dialog()
             else:
                 messagebox.showerror('Could not save presence', status.get(), parent=dialog)
-        ttk.Button(panel, text='Save presence', command=apply).grid(row=14, column=0, sticky='w')
-        ttk.Button(panel, text='Load my fronters', command=load_front).grid(row=14, column=1, sticky='e')
-        ttk.Button(panel, text='Use fronter photo', command=lambda: variables['large_image'].set('{avatar}')).grid(row=15, column=0, columnspan=2, sticky='w', pady=(8, 0))
+        ttk.Button(panel, text='Save presence', command=apply).grid(row=16, column=0, sticky='w')
+        ttk.Button(panel, text='Load my fronters', command=load_front).grid(row=16, column=1, sticky='e')
+        ttk.Button(panel, text='Use fronter photo', command=lambda: variables['large_image'].set('{avatar}')).grid(row=17, column=0, columnspan=2, sticky='w', pady=(8, 0))
         if value.get() and state['front'] is None:
             load_front()
         dialog.protocol('WM_DELETE_WINDOW', close_dialog)
