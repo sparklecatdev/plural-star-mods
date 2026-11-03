@@ -38,8 +38,9 @@ class UpdateTests(unittest.TestCase):
     @patch('updater.sys.platform', 'linux')
     @patch('updater.platform_asset', return_value='windows-x64.zip')
     def test_download_and_verify(self, _):
-        with patch('updater.urllib.request.urlopen', side_effect=self.responses(self.archive())):
+        with patch('updater.upload_context') as context, patch('updater.urllib.request.urlopen', side_effect=self.responses(self.archive())) as open_url:
             result = updater.fetch_update()
+        self.assertEqual([call.kwargs['context'] for call in open_url.call_args_list], [context.return_value] * 2)
         self.assertTrue(result[2].is_file())
         import shutil
         shutil.rmtree(result[0])

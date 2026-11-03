@@ -14,6 +14,7 @@ import time
 import urllib.request
 import zipfile
 from pathlib import Path
+from photos import upload_context
 
 VERSION = (0, 6, 10)
 RELEASES = 'https://api.github.com/repos/sparklecatdev/plural-star-mods/releases?per_page=100'
@@ -53,7 +54,8 @@ def fetch_update():
     if not suffix:
         return None
     req = urllib.request.Request(RELEASES, headers={'User-Agent': 'Sparklecat-Discord-Companion', 'Accept': 'application/vnd.github+json'})
-    with urllib.request.urlopen(req, timeout=10) as response:
+    context = upload_context()
+    with urllib.request.urlopen(req, timeout=10, context=context) as response:
         releases = json.loads(response.read(4 * 1024 * 1024))
     choices = []
     for release in releases:
@@ -76,7 +78,7 @@ def fetch_update():
     try:
         archive = staging / 'download'
         digest = hashlib.sha256()
-        with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Sparklecat-Discord-Companion'}), timeout=30) as response, archive.open('wb') as output:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Sparklecat-Discord-Companion'}), timeout=30, context=context) as response, archive.open('wb') as output:
             total = 0
             while True:
                 chunk = response.read(1024 * 1024)
