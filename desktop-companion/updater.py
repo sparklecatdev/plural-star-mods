@@ -15,7 +15,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-VERSION = (0, 6, 9)
+VERSION = (0, 6, 10)
 RELEASES = 'https://api.github.com/repos/sparklecatdev/plural-star-mods/releases?per_page=100'
 NAME = 'Sparklecat-Discord-Companion'
 

@@ -647,7 +647,13 @@ def main():
         try:
             while True:
                 message = messages.get_nowait()
-                if message is None:
+                if message == ('tray', 'open'):
+                    show_window()
+                elif message == ('tray', 'quit'):
+                    quit_app()
+                    if not state['closing']:
+                        return
+                elif message is None:
                     state['stop'] = None
                     if state['closing']:
                         root.destroy()
@@ -701,8 +707,8 @@ def main():
                     import pystray
                     image = icon_image(icon_path.get())
                     tray = pystray.Icon('sparklecat-companion', image, title.get().strip() or default_title,
-                        menu=pystray.Menu(pystray.MenuItem('Open', lambda: root.after(0, show_window), default=True),
-                                          pystray.MenuItem('Quit', lambda: root.after(0, quit_app))))
+                        menu=pystray.Menu(pystray.MenuItem('Open window', lambda: messages.put(('tray', 'open')), default=True),
+                                          pystray.MenuItem('Close app', lambda: messages.put(('tray', 'quit')))))
                     tray.run_detached()
                     state['tray'] = tray
                 root.withdraw()
