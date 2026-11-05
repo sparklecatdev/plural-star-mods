@@ -62,7 +62,8 @@ def main():
         source = target / 'BundleLoader.java'
         source.write_text(code)
         run(str(java / 'javac'), '--release', '17', '-classpath', os.pathsep.join((str(sdk / 'platforms/android-36/android.jar'), str(react_classes))),
-            '-d', str(target), str(source), str(ROOT / 'payload/native/DeviceUnlockModule.java'), str(ROOT / 'payload/native/DeviceUnlockPackage.java'), str(ROOT / 'payload/native/RestModeModule.java'))
+            '-d', str(target), str(source), str(ROOT / 'payload/native/DeviceUnlockModule.java'), str(ROOT / 'payload/native/DeviceUnlockPackage.java'), str(ROOT / 'payload/native/RestModeModule.java'),
+            str(ROOT / 'payload/native/MusicModule.java'), str(ROOT / 'payload/native/MusicNotificationListener.java'))
         run(str(java / 'jar'), '--create', '--file', str(target / 'loader.jar'), '-C', str(target), 'dev')
         run(str(sdk / 'build-tools/36.0.0/d8'), '--min-api', '26', '--lib', str(sdk / 'platforms/android-36/android.jar'),
             '--classpath', str(react_classes), '--output', str(target), str(target / 'loader.jar'))

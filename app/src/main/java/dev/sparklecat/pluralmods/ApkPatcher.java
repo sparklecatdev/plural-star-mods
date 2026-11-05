@@ -38,6 +38,9 @@ public final class ApkPatcher {
         patch(source, output, expectedSha256, payload, nativeCode, primaryNativeCode, Collections.emptyMap(), signer, progress);
     }
     public static void patch(File source, File output, String expectedSha256, Payload payload, Payload nativeCode, Payload primaryNativeCode, Map<String, byte[]> iconFiles, ApkSigner.SignerConfig signer, Progress progress) throws Exception {
+        patch(source, output, expectedSha256, payload, nativeCode, primaryNativeCode, iconFiles, true, signer, progress);
+    }
+    public static void patch(File source, File output, String expectedSha256, Payload payload, Payload nativeCode, Payload primaryNativeCode, Map<String, byte[]> iconFiles, boolean musicService, ApkSigner.SignerConfig signer, Progress progress) throws Exception {
         progress.update("Verifying the original APK…");
         if (expectedSha256 == null || !expectedSha256.matches("[0-9a-f]{64}") || source.length() > MAX_APK || !expectedSha256.equals(sha256(source)))
             throw new IOException("This APK does not match the supported release. Use Download Plural Star to get a compatible official copy.");
@@ -46,7 +49,7 @@ public final class ApkPatcher {
         try {
             progress.update("Applying mods…");
             if (nativeCode == null) throw new IOException("The patch update loader is missing.");
-            rewrite(source, unsigned, payload, nativeCode, primaryNativeCode, iconFiles);
+            rewrite(source, unsigned, payload, nativeCode, primaryNativeCode, iconFiles, musicService);
             progress.update("Preparing the app for installation…");
             new ApkSigner.Builder(Collections.singletonList(signer)).setInputApk(unsigned).setOutputApk(signed)
                 .setMinSdkVersion(24).setV1SigningEnabled(false).setV2SigningEnabled(true).setV3SigningEnabled(false)
@@ -76,6 +79,9 @@ public final class ApkPatcher {
         rewrite(source, output, payload, nativeCode, primaryNativeCode, Collections.emptyMap());
     }
     static void rewrite(File source, File output, Payload payload, Payload nativeCode, Payload primaryNativeCode, Map<String, byte[]> iconFiles) throws IOException {
+        rewrite(source, output, payload, nativeCode, primaryNativeCode, iconFiles, true);
+    }
+    static void rewrite(File source, File output, Payload payload, Payload nativeCode, Payload primaryNativeCode, Map<String, byte[]> iconFiles, boolean musicService) throws IOException {
         try (ZipFile input = new ZipFile(source); CountingStream count = new CountingStream(new BufferedOutputStream(new FileOutputStream(output))); ZipOutputStream zip = new ZipOutputStream(count)) {
             Set<String> seen = new HashSet<>();
             boolean found = false, foundNative = false, foundPrimary = false;
@@ -92,6 +98,11 @@ public final class ApkPatcher {
                     remainingIcons.remove(name);
                     zip.putNextEntry(next);
                     zip.write(iconFiles.get(name));
+                } else if (name.equals("AndroidManifest.xml") && nativeCode != null && musicService) {
+                    ByteArrayOutputStream manifest = new ByteArrayOutputStream();
+                    try (InputStream in = input.getInputStream(entry)) { copy(in, manifest, 4L * 1024 * 1024); }
+                    zip.putNextEntry(next);
+                    zip.write(MusicManifest.addService(manifest.toByteArray()));
                 } else if (name.equals(BUNDLE) || name.equals("classes2.dex") && nativeCode != null || name.equals("classes.dex") && primaryNativeCode != null) {
                     boolean isBundle = name.equals(BUNDLE);
                     boolean isPrimary = name.equals("classes.dex");

@@ -38,3 +38,13 @@ The build-time native-tools utility uses dexlib2 (smali) under BSD-3-Clause.
 Its copyright and license are retained in the dependency JAR. dexlib2 is not
 included in either Android app; the generated DEX contains the upstream classes
 and this project's bundle loader.
+
+The optional music player and lyrics behavior in payload/mods/MusicPlayer.tsx
+and musicCore.ts adapt BitChord contributors’ NowPlayingScreen, PlayerLyrics,
+PlayerQueue, and LrcLib at commit b690dc146009d4815825fa4a20815ef2e4ee8898:
+https://github.com/sparklecatdev/BitChord-desktop
+
+The adaptation was made on 2026-11-05 for Android media-session control in
+Plural Star. BitChord is licensed under GPL-3.0; its license is retained in
+LICENSES/BitChord-GPL-3.0.txt. The combined project is distributed under
+AGPL-3.0, with the source available alongside releases.

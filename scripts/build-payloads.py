@@ -20,16 +20,18 @@ def main():
     parser.add_argument('--variant', choices=['wallpaper', 'storage', 'wallpaper-storage'])
     parser.add_argument('--patches-only', action='store_true', help='Build patch updates without the APK creation loader or Android SDK.')
     parser.add_argument('--legacy-runtime', action='store_true', help='Build patches for the previous native runtime.')
+    parser.add_argument('--previous-runtime', action='store_true', help='Build patches for the most recent older native runtime.')
     args = parser.parse_args()
     base, release = load()
     changelog = (ROOT / 'payload/mods/changelog.ts').read_text()
     match = re.search(r"^export const changelogVersion = '([^']+)';$", changelog, re.MULTILINE)
     if not match or match.group(1) != release['version']:
         parser.error('Update payload/mods/changelog.ts for patch version ' + release['version'])
-    if args.legacy_runtime:
-        if not args.patches_only or not release.get('legacy_runtime'):
-            parser.error('--legacy-runtime requires --patches-only and a configured legacy runtime')
-        release['runtime'] = release['legacy_runtime']
+    if args.legacy_runtime or args.previous_runtime:
+        key = 'previous_runtime' if args.previous_runtime else 'legacy_runtime'
+        if args.legacy_runtime and args.previous_runtime or not args.patches_only or not release.get(key):
+            parser.error('Select one configured older runtime with --patches-only')
+        release['runtime'] = release[key]
     commit = base['commit']
     SOURCE.parent.mkdir(exist_ok=True)
     if not SOURCE.exists():
@@ -338,6 +340,16 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
         assert text.count(target) == 1
         display.write_text(text.replace(target, "(fields.background || (enhanced ? 'banner' : 'plain')) === mode"))
         run('git', 'apply', str(ROOT / 'payload/navigation-shortcuts.patch'))
+        tabs = SOURCE / 'src/app/TabHost.tsx'
+        text = "import {MusicDock} from '../mods/MusicPlayer';\n" + tabs.read_text()
+        target = '      <TabBar tab='
+        assert text.count(target) == 1
+        tabs.write_text(text.replace(target, '      <MusicDock />\n' + target))
+        hub = SOURCE / 'src/screens/HubScreen.tsx'
+        text = "import {MusicHubButton} from '../mods/MusicPlayer';\n" + hub.read_text()
+        target = '      <View\n        onLayout={e => { gridWRef'
+        assert text.count(target) == 1
+        hub.write_text(text.replace(target, '      <MusicHubButton />\n' + target))
         shutil.copytree(ROOT / 'payload/mods', SOURCE / 'src/mods', dirs_exist_ok=True)
         assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', release['version'])
         assert re.fullmatch(r'[a-z0-9.-]{1,80}', release['runtime'])
@@ -390,7 +402,7 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
         settings.write_text(settings_text)
         app = SOURCE / 'App.tsx'
         app_text = app.read_text()
-        app_text = "import {PatchUpdatePrompt} from './src/mods/PatchUpdatePrompt';\nimport {useModCloudSync} from './src/mods/cloudMods';\n" + app_text
+        app_text = "import {MusicRoot} from './src/mods/MusicPlayer';\nimport {PatchUpdatePrompt} from './src/mods/PatchUpdatePrompt';\nimport {useModCloudSync} from './src/mods/cloudMods';\n" + app_text
         if wallpaper:
             app_text = "import {BackgroundImage} from './src/components/BackgroundImage';\nimport {useModPreferences} from './src/mods/modPreferences';\nimport {useExtraCustomization} from './src/mods/extraCustomization';\n" + app_text
             target = '  const appSettings = useAppStore(s => s.appSettings);'
@@ -405,7 +417,7 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
         app_text = app_text.replace(target, target + '\n  useModCloudSync(loaded && !firstRun && !locked);')
         target = '        <AppModals isSinglet={isSinglet} selfMember={selfMember} />'
         assert app_text.count(target) == 1
-        app_text = app_text.replace(target, target + '\n        <PatchUpdatePrompt enabled={loaded && !firstRun && !locked} />')
+        app_text = app_text.replace(target, target + '\n        <MusicRoot />\n        <PatchUpdatePrompt enabled={loaded && !firstRun && !locked} />')
         app.write_text(app_text)
         entry = SOURCE / 'index.js'
         text = entry.read_text()
@@ -423,6 +435,7 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
             run('node', '--test', 'scripts/background-settings.test.js', 'scripts/restore-settings.test.js')
         run('node', str(ROOT / 'tests/storage.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/mods.test.cjs'), str(SOURCE))
+        run('node', str(ROOT / 'tests/music.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/sparklescript.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/field-tables.test.cjs'), str(SOURCE))
         run('node', str(ROOT / 'tests/cloud-mods.test.cjs'), str(SOURCE))
@@ -437,7 +450,7 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
     (destination / 'provenance.json').write_text(json.dumps({'upstream': commit, 'upstream_version': base['version'], 'wallpaper_pr': 24,
         'wallpaper_commit': '72aa97e443a313016d07c9dfec4f09a06edea304',
         'pluralkit_pr': 11, 'pluralkit_commit': 'c1bd5e2f7a5fbb7934733e331154307948424cb0', 'bundle_format': 'javascript',
-        'version': release['version'], 'runtime': release['runtime'],
+        'version': release['version'], 'runtime': release['runtime'], 'native_music': not (args.legacy_runtime or args.previous_runtime),
         'bundles': {v: hashlib.sha256((destination / (v + '.bundle')).read_bytes()).hexdigest() for v in variants},
         'supported_apk_sha256': base['sha256']}, indent=2) + '\n')
 

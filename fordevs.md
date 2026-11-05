@@ -36,6 +36,7 @@ For detailed guidance on implementing new features in this patcher, please see t
 - Runtime bundle loading and rollback support
 - Biometric/device unlock functionality (added in v0.6.1)
 - Android-specific integration points
+- Foreground music session controls and notification-access service
 
 ## What this repository builds
 
@@ -50,7 +51,7 @@ The **release streams** are different:
 | Stream | Version/source | Contents and purpose |
 | --- | --- | --- |
 | Patcher APK | `versionCode` and `versionName` in `app/build.gradle`; `v<version>` release | Signed patcher, exact source ZIP, checksums. Required for patcher UI, Java, packaged native dex, or resource changes. |
-| JavaScript patches | `version` and `runtime` in `payload/release.json`; `patches-v<version>` release | Verified bundles for the compatible runtime and variants; no new patcher APK. The optional `legacy_runtime` emits older-runtime bundles too. |
+| JavaScript patches | `version` and `runtime` in `payload/release.json`; `patches-v<version>` release | Verified bundles for the compatible runtime and variants; no new patcher APK. Optional `previous_runtime` and `legacy_runtime` retain older hosts with unavailable native features disabled. |
 | Official-version compatibility | Exact official APK SHA-256 and upstream commit; `compat-v<upstream>-patches-v<patch>` release | Matching bundle, native dex, provenance, and source for an official APK other than the embedded fallback. |
 
 Do not change a published release's assets in place. Advance the appropriate version and publish a new release.
@@ -65,6 +66,8 @@ Do not change a published release's assets in place. Advance the appropriate ver
 | Patched-app screens and behavior | `payload/mods/*.tsx`, `payload/mods/*.ts` |
 | Feature defaults, persistence, and cloud sync | `payload/mods/modPreferencesCore.ts`, `modPreferences.ts`, `cloudModsCore.ts`, `cloudMods.ts` |
 | Extra interface controls | `payload/mods/extraCustomizationCore.ts`, `extraCustomization.ts`, `ExtraCustomizationMenu.tsx` |
+| Mod settings search | `payload/mods/SettingsSearch.tsx`, `ModMenu.tsx`, `ExtraCustomizationMenu.tsx` |
+| Music player and lyrics | `payload/mods/MusicPlayer.tsx`, `music.ts`, `musicCore.ts`; `payload/native/MusicModule.java`, `MusicNotificationListener.java` |
 | Patched-app startup, app lock, and recovery | `payload/mods/ModsRoot.tsx`, `storageSnapshot.ts`, `restoreQueue.ts`, `toolsState.ts` |
 | Update notice and handoff to patcher | `payload/mods/PatchUpdatePrompt.tsx`, `updateCheck.ts`, `updateCheckCore.ts`, `patchInstallCore.ts` |
 | Discord desktop companion | `desktop-companion/companion.py`, `desktop-companion/test_companion.py`, `desktop-companion/README.md` |
@@ -72,6 +75,7 @@ Do not change a published release's assets in place. Advance the appropriate ver
 | Storage backups | `payload/mods/BackupTools.tsx`, `storageSnapshot.ts`, `snapshotCore.ts`, `restoreQueue.ts` |
 | Native loader and unlock bridge | `payload/native/*.java`, `scripts/build-native-updates.py`, `native-tools/src/main/java/dev/sparklecat/tools/PatchHost.java` |
 | Patcher UI and installation | `app/src/main/java/dev/sparklecat/pluralmods/MainActivity.java`, `ApkPatcher.java`, `SigningIdentity.java`, `ApkProvider.java` |
+| Optional music service manifest injection | `app/src/main/java/dev/sparklecat/pluralmods/MusicManifest.java`, `MusicManifestTest.java` |
 | Patcher downloads and release selection | `UpdateClient.java`, `UpdatePolicy.java`, `UpdateTrust.java`, `CompatibilityPack.java`, `ReleaseVersion.java` in the same Java package |
 | Patcher resources and permissions | `app/src/main/AndroidManifest.xml`, `app/src/main/res/`, `app/build.gradle` |
 | Build and publication | `scripts/prepare-patch-release.py`, `compatibility-release.py`, `release-artifact.py`, `.github/workflows/*.yml` |
@@ -88,7 +92,7 @@ python3 scripts/build-payloads.py
 bash gradlew :native-tools:test testDebugUnitTest lintDebug lintRelease assembleDebug assembleRelease
 ```
 
-The development APK is `app/build/outputs/apk/debug/app-debug.apk`; the release build is unsigned. `app/build.gradle` makes `preBuild` verify all three bundles and dex files and package a complete source ZIP into the APK. Generated bundles, dex files, APKs, and `.work/` are ignored; commit their source, configuration, and provenance instead. `scripts/build-payloads.py --variant wallpaper-storage` is useful during development, but build all three variants before packaging the patcher. `--patches-only` skips the Android dex build; `--legacy-runtime` is valid only with `--patches-only` and a configured `legacy_runtime`.
+The development APK is `app/build/outputs/apk/debug/app-debug.apk`; the release build is unsigned. `app/build.gradle` makes `preBuild` verify all three bundles and dex files and package a complete source ZIP into the APK. Generated bundles, dex files, APKs, and `.work/` are ignored; commit their source, configuration, and provenance instead. `scripts/build-payloads.py --variant wallpaper-storage` is useful during development, but build all three variants before packaging the patcher. `--patches-only` skips the Android dex build. `--legacy-runtime` and `--previous-runtime` each require `--patches-only` and their configured release field; they are mutually exclusive. Restore a full current-runtime build before packaging an APK.
 
 The builder resets and cleans **only** `.work/upstream`, installs upstream and test dependencies from lockfiles, and applies patches in this order: wallpaper (wallpaper variants only), profile palettes, PluralKit, no-speaker, confirmation, device unlock, extra customization, lock icon, then group view, with the blank-page navigation patch applied after the tab bar customization edits. It copies `payload/mods/`, writes generated `modOptions.ts` with variant/version/runtime flags, injects the mod menu into upstream Settings, adjusts wallpaper controls, adds cloud sync and the update notice to `App.tsx`, and makes `ModsRoot` the entry point in `index.js`. The builder keeps the original group pane alongside the enhanced one and switches between them using the group-view preference. Preference-sync opt-in is device-local and must never be restored from cloud data. Each variant must typecheck and pass the Node regression tests before its bundle is emitted. Wallpaper variants also run upstream background/restore tests. If an upstream anchor or patch fails, fix the integration against that exact upstream source; do not silently skip the change.
 
@@ -104,6 +108,16 @@ The builder resets and cleans **only** `.work/upstream`, installs upstream and t
 
 The existing feature switches are in `modPreferencesCore.ts`; the extra customization controls have their own core file. The enhanced group view switch also defaults normal member cards to banner backgrounds; preserve an explicitly selected background in the display options. Keep feature behavior gated at use sites, not only hidden in the menu. Test disabled behavior and saved preference restoration. For sensitive features, keep PluralKit tokens in app settings, omit them from diagnostics, and avoid putting private data into logs or release assets. Storage snapshots and restore have strict size, path, authentication, and cold-start recovery rules; read `snapshotCore.ts`, `storageSnapshot.ts`, and `restoreQueue.ts` before changing their format or timing.
 
+## Music and settings usability
+
+Music is Android-only and off by default. `musicCore.ts` validates preferences, snapshots, LRC parsing, and LRCLIB responses. `music.ts` owns the local `sparklecat.music.v1` preferences, foreground polling, and command lifecycle. Keep this record out of cloud sync. `MusicRoot` mounts only after setup and app unlock; poll only while enabled and foreground, discard stale native responses after disable/background, and clear sessions on stop. Use the existing `AppText`, theme, and controls so fonts and colors follow app settings. Render the dock in `TabHost` and the full-player shortcut in `HubScreen`.
+
+`DeviceUnlockPackage` registers `SparklecatMusic`. `MusicModule.java` reads active Android media sessions only after explicit notification-access approval and sends commands only when supported by the selected source. `MusicNotificationListener` is an empty protected service, not a notification-content reader. `MusicManifest.java` appends its binary-XML service declaration while preserving original string indices, resources, and style data; it must remain idempotent and reject malformed manifests. Inject it only for provenance declaring `native_music: true`. Music requires runtime `mods-6` and patcher 0.6.6 or later; the previous `mods-5` and legacy `mods-4` bundles set this capability false and explain how to rebuild. A JavaScript-only update cannot add a manifest service or bridge.
+
+Online lyrics requires a separate local opt-in. Send only song metadata to LRCLIB, never app/account data. Keep the bounded lyrics cache in memory, abort obsolete requests, handle missing/plain/instrumental lyrics and network/rate-limit errors, and allow corrected searches. Keep synchronized seeking capability-gated. The player/lyrics behavior adapts BitChord's `NowPlayingScreen`, `PlayerLyrics`, `PlayerQueue`, and `LrcLib`; preserve the attribution in `THIRD_PARTY_NOTICES.md` and `LICENSES/BitChord-GPL-3.0.txt` in source exports.
+
+`SettingsSearch.tsx` matches visible labels/descriptions with case/accent folding and all query words. Never index input values, tokens, or other private settings. Hidden search sections remain mounted so filtering cannot interrupt saves; matching Extra Customization sections expand while searching. Keep Done outside the scrolling content, preserve keyboard dismissal, and display preference-save failures.
+
 ## Desktop companion
 
 The companion's installed builds check GitHub's `desktop-vX.Y.Z` releases on startup and offer a manual check. Bump `VERSION` in `desktop-companion/updater.py` for each desktop release, and include the platform archives and installers from the desktop workflow. Updates verify GitHub's asset SHA-256 digest before replacing an installed copy, recover interrupted swaps, and restore the old copy if replacement or launch fails. Source and extracted builds do not self-update. Installers register the app in the Linux XDG menu, macOS Applications, or Windows Start menu; reinstalls replace the app and preserve user settings. Linux builds must include Pillow's `PIL._tkinter_finder` hidden import; the workflow opens the packaged GUI and tests the installed desktop launcher under Xvfb to catch startup failures.
@@ -116,23 +130,27 @@ The presence editor can load fronter names, pronouns, encrypted cloud avatars, i
 
 ## Validation
 
-Run the full payload build and Gradle checks above before a patcher release. For a JavaScript-only patch release, build and stage both runtimes when `legacy_runtime` is configured:
+Run the full payload build and Gradle checks above before a patcher release. Build and stage each configured runtime for patch releases:
 
 ```sh
 python3 scripts/build-payloads.py --patches-only --legacy-runtime
 python3 scripts/prepare-patch-release.py --legacy-runtime
+python3 scripts/build-payloads.py --patches-only --previous-runtime
+python3 scripts/prepare-patch-release.py --previous-runtime --append
 python3 scripts/build-payloads.py --patches-only
 python3 scripts/prepare-patch-release.py --append
 ```
 
 The staged assets are in `.work/patch-release/`; inspect `provenance.json` and each bundle SHA-256 before publishing. With a local official APK, run `PLURAL_STAR_APK=/absolute/path/to/app-release.apk bash gradlew testDebugUnitTest` to exercise real APK rewriting, signature checks, and unchanged-entry comparisons. CI runs the full build on push and pull request and uploads a **debug** APK for testing, not distribution.
 
+For music changes, run `tests/music.test.cjs` through the payload builder and the manifest/real-APK Gradle tests. On Android, test access denied/granted/revoked, multiple media sources, supported/unsupported commands, lyrics failure/retry, enable/disable/restart, lock/background behavior, and older-host messaging. Test with an actual media app where available; synthetic sessions do not prove every provider's queue or metadata support.
+
 For changes to installation or UI, test on an Android device or emulator: fresh official install, file/imported-installed APK selection, patch and install, an in-place rebuild with the same device signing key, offline behavior, and update prompts. For mod changes, also exercise enabled/disabled settings, restart, save restore, app lock, and the affected screen. Check all three variants and a matching compatibility pack when the change is variant- or upstream-sensitive. Android will reject an in-place update if the existing Plural Star installation has a different signing key; preserve user backups and never automate uninstalling it.
 
 ## Versioning and publishing
 
 - **JavaScript-only mod change:** increase `payload/release.json` `version`; leave `runtime` unchanged if the native API and embedded resources remain compatible. Replace the notes in `payload/mods/changelog.ts` with only this release's changes and set `changelogVersion` to the same version; the payload builder checks it. These notes appear after installing the patch and in the mod menu. Build/stage patches and publish `patches-v<version>` using `.github/workflows/patches.yml` or equivalent local checks. That workflow verifies uploaded asset digests and needs no APK signing key.
-- **Native loader, bridge, or packaged-resource change:** assign a new `runtime` in `payload/release.json` and retain a `legacy_runtime` only if you intentionally support it. Build and release a patcher APK containing the new dex and publish matching compatibility packs. Do not offer new-runtime JavaScript to older native hosts.
+- **Native loader, bridge, or packaged-resource change:** assign a new `runtime` in `payload/release.json` and retain `previous_runtime`/`legacy_runtime` only if you intentionally support those hosts. Build and release a patcher APK containing the new dex and publish matching compatibility packs. Do not offer new-runtime JavaScript to older native hosts. Keep corresponding build flags, capability guards, and `.github/workflows/patches.yml` stages in sync.
 - **Notification delivery changes:** rest mode also patches Notifee in the official APK's primary dex. `scripts/build-native-updates.py` and `PatchNotifications.java` generate `primary.dex` for the exact supported APK; compatibility packs must include that matching dex. Verify the injection when updating the official APK or Notifee, and keep rest mode disabled when its native bridge is unavailable.
 - **Patcher code/UI change or a new patcher APK:** increase both `versionCode` and `versionName` in `app/build.gradle`, replace `app/src/main/res/raw/changelog.txt` with only this release's changes, update release notes, then build, test, and sign the new APK. Keep `packageSource` includes current when adding top-level files so the next APK's source export contains every tracked source file. A documentation-only release does not require rebuilding the patcher.
 - **New official Plural Star version:** use `.github/workflows/compatibility.yml` or the local compatibility process. It resolves the latest stable official APK and tag commit, checks the exact APK digest, builds/tests/signs temporary test APKs, and publishes only a matching pack. A failing build does not replace older packs. If upstream changed in a way that breaks a patch or injection, fix that integration, advance the patch version, and rerun.

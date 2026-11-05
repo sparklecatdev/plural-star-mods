@@ -1,1 +1,1 @@
-Removed the Android Discord presence integration. Use the desktop companion to share your PluralKit front on Discord.
+Adds Android music access for the optional in-app player: artwork, playback controls, shared queues, and synced lyrics. Prepare and install Plural Star again to enable the feature. Includes searchable mod settings and Extra Customization.

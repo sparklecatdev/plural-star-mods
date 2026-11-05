@@ -1,9 +1,10 @@
 import {pickAndSaveImage} from '../utils/imagePicker';
 import {saveBioImageFromUri} from '../utils/mediaUtils';
 import React, {useRef, useState} from 'react';
-import {Image, Modal, PanResponder, ScrollView, TextInput, TouchableOpacity, View} from 'react-native';
+import {Image, Modal, PanResponder, ScrollView, TouchableOpacity, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {Text} from '../components/AppText';
+import {Text, TextInput} from '../components/AppText';
+import {matchesSettings, SettingsQuery, settingsText, SettingsSearch, useSettingsQuery} from './SettingsSearch';
 import {ColorPickerModal} from '../components/ColorPickerModal';
 import {Btn, ToggleRow as BaseToggleRow} from '../components/controls';
 import {fontScale, tierAccent} from '../theme';
@@ -35,13 +36,15 @@ const ELEMENT_COLOR_NAMES: Record<ElementColorOption, string> = {header: 'Top ba
 function Section({title, children}: {title: string; children: React.ReactNode}) {
   const T = useTheme(); const fs = fontScale(T);
   const [expanded, setExpanded] = useState(true);
-  return <View style={{gap: 10}}>
-    <TouchableOpacity accessibilityRole="button" accessibilityState={{expanded}} onPress={() => setExpanded(!expanded)}
+  const query = useSettingsQuery();
+  const shown = !!query.trim() || expanded;
+  return <View style={{gap: 10, display: matchesSettings(query, title + " " + settingsText(children)) ? undefined : 'none'}}>
+    <TouchableOpacity accessibilityRole="button" accessibilityState={{expanded: shown}} onPress={() => setExpanded(!expanded)}
       style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderColor: T.border}}>
       <Text style={{flex: 1, color: T.text, fontWeight: '700', fontSize: fs(17)}}>{title}</Text>
-      <Text style={{color: T.dim}}>{expanded ? '−' : '+'}</Text>
+      <Text style={{color: T.dim}}>{shown ? '−' : '+'}</Text>
     </TouchableOpacity>
-    {expanded && <View style={{gap: 12}}>{children}</View>}
+    {shown && <View style={{gap: 12}}>{children}</View>}
   </View>;
 }
 
@@ -88,6 +91,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
   const [cardPicker, setCardPicker] = useState<{area: CardArea; key: 'color' | 'borderColor'} | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
   const [picker, setPicker] = useState<ColorOption | null>(null);
   const save = async (next: ExtraCustomization) => {
     setBusy(true); setError('');
@@ -114,11 +118,15 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
   </View>;
   return <Modal visible animationType="slide" onRequestClose={() => { if (!busy && !picker && !elementPicker && !cardPicker && !tierPicker) onClose(); }}>
     <SafeAreaView style={{flex: 1, backgroundColor: T.bg}}>
-      <ScrollView contentContainerStyle={{padding: 24, gap: 14}} keyboardShouldPersistTaps="handled">
-        <View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}>
+      <View style={{paddingHorizontal: 24, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 12}}>
           <Text accessibilityRole="header" style={{flex: 1, color: T.text, fontSize: fs(24), fontWeight: '700'}}>Extra Customization</Text>
           <Btn variant="ghost" disabled={busy} onPress={onClose}>Done</Btn>
-        </View>
+      </View>
+      <View style={{paddingHorizontal: 24, paddingBottom: 12}}><SettingsSearch value={query} onChange={setQuery} />
+        {!!error && <Text accessibilityRole="alert" style={{color: T.danger, fontSize: fs(14)}}>{error}</Text>}
+      </View>
+      <SettingsQuery.Provider value={query}>
+      <ScrollView contentContainerStyle={{padding: 24, paddingTop: 8, gap: 14}} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         <Text style={{color: T.dim, fontSize: fs(14)}}>Hide what you do not use and adjust more of the app's colors.</Text>
         <Section title="Custom fields">
         <BaseToggleRow label="HTML tables in rich-text fields" desc="Render tables with supported inline CSS in member custom fields." value={prefs.fieldTables} disabled={busy} onToggle={() => toggle('fieldTables')} />
@@ -264,6 +272,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         <Btn variant="ghost" disabled={busy} onPress={() => { void save({...DEFAULT_EXTRA_CUSTOMIZATION, enabled: true}); }}>Reset extra customization</Btn>
         {!!error && <Text accessibilityRole="alert" style={{color: T.danger, fontSize: fs(14)}}>{error}</Text>}
       </ScrollView>
+      </SettingsQuery.Provider>
       {tierPicker && <ColorPickerModal visible title={`${FRONT_TIER_NAMES[tierPicker]} color`} value={tierAccent(T, tierPicker)} onClose={() => setTierPicker(null)}
         onSave={hex => { void save({...prefs, frontTierColors: {...prefs.frontTierColors, [tierPicker]: hex}}); setTierPicker(null); }}
         onClear={() => { const frontTierColors = {...prefs.frontTierColors}; delete frontTierColors[tierPicker]; void save({...prefs, frontTierColors}); setTierPicker(null); }} clearLabel="Use default" />}

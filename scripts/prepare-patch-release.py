@@ -12,11 +12,14 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--legacy-runtime', action='store_true')
+    parser.add_argument('--previous-runtime', action='store_true')
     parser.add_argument('--append', action='store_true')
     args = parser.parse_args()
     release = json.loads((ROOT / 'payload/release.json').read_text())
     version = release['version']
-    runtime = release['legacy_runtime'] if args.legacy_runtime else release['runtime']
+    if args.legacy_runtime and args.previous_runtime:
+        parser.error('Select one runtime')
+    runtime = release['legacy_runtime'] if args.legacy_runtime else release['previous_runtime'] if args.previous_runtime else release['runtime']
     if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version) or not re.fullmatch(r'[a-z0-9.-]{1,80}', runtime):
         raise ValueError('Invalid patch version or runtime')
     source = ROOT / 'app/src/main/assets/payloads'
@@ -41,7 +44,7 @@ def main():
         sums.append(f'{digest}  {name}')
     (output / 'SHA256SUMS').write_text('\n'.join(sums) + '\n')
     shutil.copyfile(source / 'provenance.json', output / f'provenance-{runtime}.json')
-    if not args.legacy_runtime:
+    if not args.legacy_runtime and not args.previous_runtime:
         shutil.copyfile(source / 'provenance.json', output / 'provenance.json')
     print(f'Prepared patches-v{version} in {output}')
 

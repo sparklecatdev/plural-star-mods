@@ -128,7 +128,8 @@ public class ApkPatcherTest {
                     ZipEntry e = entries.nextElement();
                     if (e.getName().equals(ApkPatcher.BUNDLE) || e.getName().equals("classes2.dex") || ApkPatcher.signatureEntry(e.getName())) continue;
                     assertNotNull(e.getName(), after.getEntry(e.getName()));
-                    assertArrayEquals(e.getName(), before.getInputStream(e).readAllBytes(), after.getInputStream(after.getEntry(e.getName())).readAllBytes());
+                    byte[] original = before.getInputStream(e).readAllBytes();
+                    assertArrayEquals(e.getName(), e.getName().equals("AndroidManifest.xml") ? MusicManifest.addService(original) : original, after.getInputStream(after.getEntry(e.getName())).readAllBytes());
                 }
                 assertArrayEquals(Files.readAllBytes(bundle.toPath()), after.getInputStream(after.getEntry(ApkPatcher.BUNDLE)).readAllBytes());
                 assertArrayEquals(Files.readAllBytes(nativeCode.toPath()), after.getInputStream(after.getEntry("classes2.dex")).readAllBytes());

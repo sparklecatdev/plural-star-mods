@@ -33,6 +33,8 @@ Building or modifying the project? See the [developer guide](fordevs.md).
 - **All patches included:** every patched APK includes wallpaper, storage tools, PluralKit front sync, enhanced group view, and more. Enhanced group view also gives the normal member list matching banner cards, with shared plain, member-color, and banner choices in display options. Create alters inside a group and filter its members by tag. Find its toggle in Extra Customization. Mod switches are off by default; enable features under Settings → sparklecat's mods.
 - **PluralKit front sync:** opt in under Settings → sparklecat's mods and enter your PluralKit token to mirror primary front changes using imported PluralKit member IDs. Adapted from the closed [PR #11](https://github.com/ByHanyou/Plural-Star/pull/11).
 - **Discord desktop companion:** show your Plural Star fronters in your Discord activity while Discord and the companion are running. See the [setup guide](desktop-companion/README.md).
+- **Music player:** optionally see and control music from Android media apps, with cover art, seeking, available queue and volume controls, and a compact player above navigation. Opt in separately to online lyrics, with synchronized highlighting, tap-to-seek, text sizes, timing adjustment, and corrected song searches. Inspired by BitChord; see [setup](#music-player).
+- **Search mod settings:** find controls across the mod menu and Extra Customization. The Done button stays visible while scrolling, and failed preference saves show an error.
 - **Offline source access:** save the complete patcher source ZIP from inside the patcher, including the wallpaper patch, payload build scripts, and exact upstream inputs.
 - **Latest upstream support:** the download resolves the newest stable official release. A scheduled build checks new releases every six hours and publishes matching compatibility packs when the mods and APK checks pass. No patcher update is needed for a compatible upstream release.
 - **Independent patch updates:** a themed notice at app startup opens the patcher, which downloads verified compatible patches and rebuilds the installed app. Patch releases do not require a new patcher release. The patcher also has its own APK updater.
@@ -50,7 +52,7 @@ Have a feature in mind? Message **sparklecatdev** directly, join the [patches Di
 
 ## Supported versions
 
-The patcher requires Android 8.0 or later. The patched app keeps the original package ID, minimum SDK, permissions, version name, and version code. A small compatibility loader is added. Patcher-managed installations always use their embedded bundle, so old downloaded patches cannot override a new installation; other native classes are preserved.
+The patcher requires Android 8.0 or later. The patched app keeps the original package ID, minimum SDK, version name, and version code. The patcher adds the compatibility loader, native mod bridges, and a protected notification-listener service for optional music access; rest mode also adapts native notification delivery. Patcher-managed installations always use their embedded bundle, so old downloaded patches cannot override a new installation.
 
 Optionally, select **Use a themed Plural Star icon** before preparing the app. On Android 13 or later, supported home screens can then color its monochrome star to match your theme when themed icons are enabled. The regular icon stays the same.
 
@@ -104,6 +106,16 @@ The save contains preferences and release identifiers, never executable code or 
 Import your PluralKit members, then open Plural Star **Settings → sparklecat's mods**, enable **PluralKit Front Sync**, and paste your system token (get it with `pk;token`). Changes save automatically. Sync is off by default. Subsequent primary front changes send the imported members' PluralKit IDs to your system; co-front and co-conscious tiers are excluded. An empty or entirely unmapped primary front sends a switch-out. Rapid changes are coalesced with a five-second cooldown; failed requests do not interrupt local saves and are retried on a subsequent front change. The [PluralKit API](https://pluralkit.me/api/endpoints/#create-switch) supports five- and six-character IDs and UUIDs.
 
 The token is stored in app settings and included in backups. Disabling sync cancels queued changes; a request already sent may still complete.
+
+## Music player
+
+Update to patcher **0.6.6 or later**, then prepare and install Plural Star again to add the native music bridge. A patch-only update on an older installation cannot add Android's music service.
+
+Open **Settings → sparklecat's mods → Music player**, enable the feature, and tap **Allow music access** to grant Plural Star notification access in Android settings. Start playback in your music app, then return to Plural Star. Open the player from the Hub or compact player. Choose a source if several media apps are active. Playback, seeking, queue, custom actions, and volume controls depend on what the source app exposes. This controls another app's playback; it does not provide a music library or streaming subscription.
+
+**Online lyrics** is a separate switch, off by default. Enabling it sends the current song's title, artist, album, and duration to [LRCLIB](https://lrclib.net/) when opening lyrics. Lyrics support synchronized highlighting, tap-to-seek, manual scrolling with Resume following, text sizes, and a timing offset. Correct the title or artist and retry when a match is missing. Some songs have plain lyrics or no match.
+
+Music settings stay on the device. Current sessions are read only while the feature is enabled and Plural Star is open and unlocked. Disabling the feature removes the player and stops polling; notification access can also be revoked in Android settings. The player follows Plural Star's selected font and colors. Its layout and lyrics behavior are adapted from [BitChord](https://github.com/sparklecatdev/BitChord-desktop); see [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Storage snapshots
 

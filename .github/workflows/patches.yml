@@ -22,6 +22,8 @@ jobs:
           node-version: 24
       - run: python3 scripts/build-payloads.py --patches-only --legacy-runtime
       - run: python3 scripts/prepare-patch-release.py --legacy-runtime
+      - run: python3 scripts/build-payloads.py --patches-only --previous-runtime
+      - run: python3 scripts/prepare-patch-release.py --previous-runtime --append
       - run: python3 scripts/build-payloads.py --patches-only
       - run: python3 scripts/prepare-patch-release.py --append
       - name: Publish verified patch assets
