@@ -89,6 +89,8 @@ Patch releases have their own version in `payload/release.json` and tags such as
 
 The patcher checks for updates automatically when opened, and again after 15 minutes when returning to it. Use **Check for updates** to check for patcher and mod updates at any time. New patcher releases are downloaded and verified in the background, then offered in a themed **Install / Later** prompt. Installation waits while patching or while the app is in the background. Choose **Later** to continue; the update is offered again the next time you open the patcher or check manually. Preview releases are included by default; turn that option off to check stable releases only. Patch updates are also checked automatically when opening the patcher, and fetched when preparing the modded app.
 
+If an older patcher shows **File exceeds the supported size limit**, install the [v0.6.8 patcher APK](https://github.com/sparklecatdev/plural-star-mods/releases/download/v0.6.8/sparklecat-plural-star-mods-0.6.8.apk) over your existing patcher once. Do not uninstall it or clear its data. This fixes update checks as the release history grows and preserves your device signing key.
+
 The updater checks the exact size and SHA-256 from `SHA256SUMS`, verifies the APK signature against the installed patcher's certificate, and requires the same package plus a newer version and version code. Downloads remain private until verified. Android asks for installation permission and confirmation. Offline or rate-limited checks do not interrupt app launch or patching; reopening the patcher retries the check.
 
 Keep the patcher installed and retain its app data so its per-device signing key stays available for future updates.

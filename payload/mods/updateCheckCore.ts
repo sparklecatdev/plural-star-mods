@@ -1,8 +1,23 @@
 export type PatchRelease = {version: string; runtime: string; variant: string; url: string; sha256: string; bytes: number; notes?: string};
 export type UpdateState = {automatic: boolean; lastChecked: number; available: string | null; release: PatchRelease | null; checking: boolean; error: string | null};
 type Preferences = Pick<UpdateState, 'automatic' | 'lastChecked' | 'available'>;
-export const UPDATE_API = 'https://api.github.com/repos/sparklecatdev/plural-star-mods/releases?per_page=100';
+const RELEASE_PAGE_SIZE = 20, MAX_RELEASES = 100, RELEASE_PAGE_LIMIT = 2 * 1024 * 1024;
+export const UPDATE_API = `https://api.github.com/repos/sparklecatdev/plural-star-mods/releases?per_page=${RELEASE_PAGE_SIZE}`;
 const DAY = 24 * 60 * 60 * 1000;
+export async function readReleases(read: (url: string, limit: number) => Promise<string>): Promise<Record<string, unknown>[]> {
+  const releases: Record<string, unknown>[] = [];
+  for (let page = 1; releases.length < MAX_RELEASES; page++) {
+    const text = await read(`${UPDATE_API}&page=${page}`, RELEASE_PAGE_LIMIT);
+    if (text.length > RELEASE_PAGE_LIMIT) throw Error('Update response is too large.');
+    const rows = JSON.parse(text);
+    if (!Array.isArray(rows) || rows.length > RELEASE_PAGE_SIZE || rows.some(row => !row || typeof row !== 'object' || Array.isArray(row))) {
+      throw Error('Invalid update response.');
+    }
+    releases.push(...rows);
+    if (rows.length < RELEASE_PAGE_SIZE) break;
+  }
+  return releases;
+}
 export function releaseNotes(body: unknown): string {
   return typeof body === 'string' && body.trim() ? body.slice(0, 6000).replace(/[\x00-\x08\x0B-\x1F\x7F]/g, '').trim() || 'No release notes were provided.' : 'No release notes were provided.';
 }

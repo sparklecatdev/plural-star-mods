@@ -1,2 +1,2 @@
-export const changelogVersion = '0.4.41';
-export const changelog = '• Redesigned music player to match BitChord’s mobile layout: large artwork, plain playback controls, volume slider, source selector, and a floating mini player.\n• Open full-size lyrics or the queue in place of the artwork while keeping playback controls available. Swipe artwork to change tracks or open the queue.\n• Customize the player, mini player, lyrics, and queue separately under Extra Customization → Cards and panels, including transparent backgrounds, colors, borders, corners, and spacing. The player respects your selected font and theme.';
+export const changelogVersion = '0.4.42';
+export const changelog = 'Fixes update checks failing as the release history grows. Launch notices now read release information in smaller pages. Install patcher 0.6.8 over your existing patcher to restore patcher and patch update checks; keep its app data to preserve your signing key.';

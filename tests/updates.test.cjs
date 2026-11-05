@@ -10,7 +10,7 @@ const {code} = babel.transformSync(fs.readFileSync(filename, 'utf8'), {filename,
   presets: [path.join(upstream, 'node_modules/@react-native/babel-preset')]});
 const moduleExports = {};
 vm.runInNewContext(code, {exports: moduleExports, require: n => require(require.resolve(n, {paths: [upstream]}))});
-const {compareVersions, parseVersion, latestPatch, createUpdateChecker} = moduleExports;
+const {compareVersions, parseVersion, latestPatch, createUpdateChecker, readReleases, UPDATE_API} = moduleExports;
 const runtime = 'plural-star-1.23.3-mods-1', variant = 'wallpaper-storage';
 const release = (tag, draft = false) => {
   const version = tag.split('-v').at(-1), name = `patches-${runtime}-${variant}-${version}.bundle`;
@@ -19,6 +19,49 @@ const release = (tag, draft = false) => {
     browser_download_url: `https://github.com/sparklecatdev/plural-star-mods/releases/download/${tag}/${name}`}]};
 };
 const latest = (rows, current = '0.3.0') => latestPatch(rows, current, runtime, variant);
+
+test('large release histories load in bounded pages and find patches on later pages', async () => {
+  const rows = Array.from({length: 40}, (_, i) => ({tag_name: `other-${i}`, body: 'x'.repeat(30000)}));
+  rows.push(release('patches-v0.4.5'), release('patches-v0.4.4'));
+  assert.ok(JSON.stringify(rows).length > 1024 * 1024);
+  let calls = 0;
+  const result = await readReleases(async (url, limit) => {
+    assert.equal(url, `${UPDATE_API}&page=${++calls}`);
+    assert.equal(limit, 2 * 1024 * 1024);
+    return JSON.stringify(rows.slice((calls - 1) * 20, calls * 20));
+  });
+  assert.equal(calls, 3);
+  assert.equal(result.length, rows.length);
+  assert.equal(latest(result).version, '0.4.5');
+});
+
+test('release pagination stops on short pages and never reads more than 100 releases', async () => {
+  for (const count of [0, 5, 20, 85, 100, 120]) {
+    const rows = Array.from({length: count}, () => ({}));
+    let calls = 0;
+    const result = await readReleases(async () => JSON.stringify(rows.slice(calls++ * 20, calls * 20)));
+    assert.equal(result.length, Math.min(count, 100));
+    assert.equal(calls, Math.min(Math.floor(count / 20) + 1, 5));
+  }
+});
+
+test('bad or failed release pages never return a partially successful update check', async () => {
+  for (const bad of ['not json', '{}', '[null]', '[[]]', JSON.stringify(Array(21).fill({})), ' '.repeat(2 * 1024 * 1024 + 1), new Error('offline')]) {
+    let calls = 0;
+    const fetch = () => readReleases(async () => {
+      if (++calls === 1) return JSON.stringify(Array(20).fill(release('patches-v0.4.5')));
+      if (bad instanceof Error) throw bad;
+      return bad;
+    });
+    await assert.rejects(fetch);
+    calls = 0;
+    const checker = createUpdateChecker('0.3.0', {read: async () => null, write: async () => {}, fetch});
+    await checker.check(true);
+    assert.ok(checker.getSnapshot().error);
+    assert.equal(checker.getSnapshot().available, null);
+    assert.equal(checker.getSnapshot().checking, false);
+  }
+});
 
 test('release notes follow the selected patch and remain bounded plain text', () => {
   const row = release('patches-v0.4.5');

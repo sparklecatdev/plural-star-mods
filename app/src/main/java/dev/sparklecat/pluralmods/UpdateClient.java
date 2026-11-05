@@ -3,15 +3,20 @@ package dev.sparklecat.pluralmods;
 import android.content.Context;
 import android.content.pm.*;
 import android.os.Build;
+import android.os.SystemClock;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import javax.net.ssl.HttpsURLConnection;
+import org.json.*;
 
 /** Public HTTPS releases only. Downloads stay private until hash, package and signer checks pass. */
 public final class UpdateClient {
     private final Context context;
+    private String releaseJson;
+    private long releaseCheckedAt;
+    interface ReleasePageReader { String read(String url, long limit) throws Exception; }
     public interface Progress { void update(String message); }
     public UpdateClient(Context context) { this.context = context.getApplicationContext(); }
     public File downloadOriginal(Progress progress) throws Exception {
@@ -56,7 +61,7 @@ public final class UpdateClient {
         CompatibilityPack cached = cachedCompatibility(base);
         try {
             progress.update("Checking compatibility…");
-            CompatibilityPack.Asset asset = CompatibilityPack.select(readText(UpdatePolicy.API, 1024 * 1024, true), base);
+            CompatibilityPack.Asset asset = CompatibilityPack.select(releases(), base);
             if (asset == null) {
                 if (cached != null) return cached;
                 throw new IOException("No tested patches are available for this APK yet. New official releases are checked automatically; try again later or report a compatibility issue.");
@@ -78,10 +83,32 @@ public final class UpdateClient {
     }
     public File updateFile() { return new File(context.getFilesDir(), "self-update.apk"); }
     public UpdatePolicy.Release check(boolean previews) throws Exception {
-        return UpdatePolicy.select(readText(UpdatePolicy.API, 1024 * 1024, true), BuildConfig.VERSION_NAME, previews);
+        return UpdatePolicy.select(releases(), BuildConfig.VERSION_NAME, previews);
     }
     public UpdatePolicy.PatchRelease checkPatch(String version, String runtime, String variant) throws Exception {
-        return UpdatePolicy.selectPatch(readText(UpdatePolicy.API, 1024 * 1024, true), version, runtime, variant);
+        return UpdatePolicy.selectPatch(releases(), version, runtime, variant);
+    }
+    private synchronized String releases() throws Exception {
+        if (releaseJson == null || SystemClock.elapsedRealtime() - releaseCheckedAt >= 60000) {
+            String fetched = readReleases((url, limit) -> readText(url, limit, true));
+            releaseJson = fetched;
+            releaseCheckedAt = SystemClock.elapsedRealtime();
+        }
+        return releaseJson;
+    }
+    static String readReleases(ReleasePageReader reader) throws Exception {
+        JSONArray releases = new JSONArray();
+        for (int page = 1; releases.length() < UpdatePolicy.MAX_RELEASES; page++) {
+            try {
+                JSONArray rows = new JSONArray(reader.read(UpdatePolicy.API + "&page=" + page, 2 * 1024 * 1024));
+                if (rows.length() > UpdatePolicy.RELEASE_PAGE_SIZE) throw new IOException("Release page exceeds the supported size.");
+                for (int i = 0; i < rows.length(); i++) releases.put(rows.getJSONObject(i));
+                if (rows.length() < UpdatePolicy.RELEASE_PAGE_SIZE) break;
+            } catch (JSONException e) {
+                throw new IOException("Could not read release information. Try again later.", e);
+            }
+        }
+        return releases.toString();
     }
     public File downloadPatch(UpdatePolicy.PatchRelease release, Progress progress) throws Exception {
         File target = new File(context.getFilesDir(), "patch-" + release.sha256 + ".bundle");

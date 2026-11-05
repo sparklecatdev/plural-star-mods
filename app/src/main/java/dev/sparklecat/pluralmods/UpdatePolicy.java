@@ -8,7 +8,8 @@ import org.json.*;
 
 public final class UpdatePolicy {
     public static final String REPO = "sparklecatdev/plural-star-mods";
-    public static final String API = "https://api.github.com/repos/" + REPO + "/releases?per_page=100";
+    static final int RELEASE_PAGE_SIZE = 20, MAX_RELEASES = 100;
+    public static final String API = "https://api.github.com/repos/" + REPO + "/releases?per_page=" + RELEASE_PAGE_SIZE;
     public static final String RELEASES = "https://github.com/" + REPO + "/releases";
     public static final long MAX_APK = 128L * 1024 * 1024;
     public static final class Release {

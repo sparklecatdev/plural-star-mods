@@ -1,7 +1,7 @@
 import {useSyncExternalStore} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import BlobUtil from 'react-native-blob-util';
-import {createUpdateChecker, UPDATE_API} from './updateCheckCore';
+import {createUpdateChecker, readReleases} from './updateCheckCore';
 import {payloadVersion, patchRuntime, patchVariant} from './modOptions';
 const KEY = 'sparklecat:updates';
 const root = `${BlobUtil.fs.dirs.DocumentDir}/sparklecat-updates`;
@@ -30,14 +30,13 @@ export const updateChecker = createUpdateChecker(payloadVersion, {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
     try {
-      const response = await fetch(UPDATE_API, {signal: controller.signal, headers: {Accept: 'application/vnd.github+json'}});
-      if (!response.ok) throw Error('Update check unavailable.');
-      if (Number(response.headers.get('content-length')) > 1024 * 1024) throw Error('Update response is too large.');
-      const text = await response.text();
-      if (text.length > 1024 * 1024) throw Error('Update response is too large.');
-      const releases = JSON.parse(text);
+      const releases = await readReleases(async (url, limit) => {
+        const response = await fetch(url, {signal: controller.signal, headers: {Accept: 'application/vnd.github+json'}});
+        if (!response.ok) throw Error('Update check unavailable.');
+        if (Number(response.headers.get('content-length')) > limit) throw Error('Update response is too large.');
+        return response.text();
+      });
       const failed = JSON.parse(await files.read('failed.json') || 'null');
-      if (!Array.isArray(releases)) throw Error('Invalid update response.');
       return releases.map(row => ({...row, assets: Array.isArray(row?.assets) ? row.assets.filter((asset: {digest?: string}) => asset?.digest !== `sha256:${failed?.sha256}`) : []}));
     } finally { clearTimeout(timeout); }
   },
