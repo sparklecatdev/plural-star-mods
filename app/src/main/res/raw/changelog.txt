@@ -1,1 +1,1 @@
-Adds Android music access for the optional in-app player: artwork, playback controls, shared queues, and synced lyrics. Prepare and install Plural Star again to enable the feature. Includes searchable mod settings and Extra Customization.
+Adds optional Last.fm scrobbling and Now Playing sharing to Music player settings. Prepare and install Plural Star again to add support, then connect Last.fm using your API key and shared secret. Sharing starts off; eligible listens queue offline and retry automatically. Credentials and queued listens stay encrypted on the device.

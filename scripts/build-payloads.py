@@ -353,7 +353,7 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
         shutil.copytree(ROOT / 'payload/mods', SOURCE / 'src/mods', dirs_exist_ok=True)
         assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', release['version'])
         assert re.fullmatch(r'[a-z0-9.-]{1,80}', release['runtime'])
-        (SOURCE / 'src/mods/modOptions.ts').write_text('export const options = ' + json.dumps({'wallpaper': wallpaper, 'storage': storage}) + ';\nexport const payloadVersion = ' + json.dumps(release['version']) + ';\nexport const patchRuntime = ' + json.dumps(release['runtime']) + ';\nexport const patchVariant = ' + json.dumps(variant) + ';\nexport const nativeUnlockSupported = ' + json.dumps(not args.legacy_runtime) + ';\n')
+        (SOURCE / 'src/mods/modOptions.ts').write_text('export const options = ' + json.dumps({'wallpaper': wallpaper, 'storage': storage}) + ';\nexport const payloadVersion = ' + json.dumps(release['version']) + ';\nexport const patchRuntime = ' + json.dumps(release['runtime']) + ';\nexport const patchVariant = ' + json.dumps(variant) + ';\nexport const nativeUnlockSupported = true;\n')
         # Install the entry point into Settings for every payload combination.
         settings = SOURCE / 'src/modals/SystemModal.tsx'
         settings_text = settings.read_text()
@@ -450,7 +450,7 @@ export const GroupBrowsePane = (props: React.ComponentProps<typeof Classic>) =>
     (destination / 'provenance.json').write_text(json.dumps({'upstream': commit, 'upstream_version': base['version'], 'wallpaper_pr': 24,
         'wallpaper_commit': '72aa97e443a313016d07c9dfec4f09a06edea304',
         'pluralkit_pr': 11, 'pluralkit_commit': 'c1bd5e2f7a5fbb7934733e331154307948424cb0', 'bundle_format': 'javascript',
-        'version': release['version'], 'runtime': release['runtime'], 'native_music': not (args.legacy_runtime or args.previous_runtime),
+        'version': release['version'], 'runtime': release['runtime'], 'native_music': not args.legacy_runtime,
         'bundles': {v: hashlib.sha256((destination / (v + '.bundle')).read_bytes()).hexdigest() for v in variants},
         'supported_apk_sha256': base['sha256']}, indent=2) + '\n')
 

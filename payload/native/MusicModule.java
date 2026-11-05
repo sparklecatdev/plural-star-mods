@@ -28,13 +28,21 @@ import java.security.MessageDigest;
 import java.util.Collections;
 import java.util.List;
 
-/** Foreground-only media controls; no player, account, or notification data is uploaded. */
+/** Foreground media controls and an independently opt-in, device-local Last.fm bridge. */
 public final class MusicModule extends ReactContextBaseJavaModule {
     private final ReactApplicationContext context;
     private String artworkKey = "", artworkUri = "";
 
     public MusicModule(ReactApplicationContext context) { super(context); this.context = context; }
     @Override public String getName() { return "SparklecatMusic"; }
+    private LastfmScrobbler scrobbler() { return LastfmScrobbler.get(context); }
+    @ReactMethod public void lastfmStatus(Promise promise) { scrobbler().status(promise); }
+    @ReactMethod public void lastfmMusicEnabled(boolean enabled, Promise promise) { scrobbler().musicEnabled(enabled, promise); }
+    @ReactMethod public void lastfmConfigure(boolean enabled, boolean nowPlaying, Promise promise) { scrobbler().configure(enabled, nowPlaying, promise); }
+    @ReactMethod public void lastfmBegin(String key, String secret, Promise promise) { scrobbler().begin(key, secret, promise); }
+    @ReactMethod public void lastfmFinish(Promise promise) { scrobbler().finish(promise); }
+    @ReactMethod public void lastfmDisconnect(Promise promise) { scrobbler().disconnect(promise); }
+    @ReactMethod public void lastfmRetry(Promise promise) { scrobbler().retry(promise); }
     private ComponentName listener() { return new ComponentName(context, MusicNotificationListener.class); }
     private boolean hasAccess() {
         if (Build.VERSION.SDK_INT >= 27) {
@@ -72,6 +80,7 @@ public final class MusicModule extends ReactContextBaseJavaModule {
             }
             if (selected == null) for (MediaController controller : available) if (playing(controller.getPlaybackState())) { selected = controller; break; }
             if (selected == null && !available.isEmpty()) selected = available.get(0);
+            scrobbler().source(preferredId);
             result.putArray("sessions", sources);
             if (selected != null) result.putMap("track", snapshot(selected));
             promise.resolve(result);

@@ -9,6 +9,8 @@ import {fontScale} from '../theme';
 import {closeMusic, musicCommand, musicPreferences, musicSupported, openMusic, openMusicAccess, refreshMusic, selectMusicSource, useMusic, useMusicEngine, useMusicPreferences} from './music';
 import {findLyrics, formatMusicTime, lyricIndex, trackKey} from './musicCore';
 import type {Lyrics, MusicPreferences, MusicTrack} from './musicCore';
+import {LastfmSettings} from './LastfmSettings';
+import {lastfmMusicEnabled} from './lastfm';
 
 const lyricsCache = new Map<string, Lyrics | null>();
 const paths = {play: 'M8 5v14l11-7z', pause: 'M7 5h4v14H7zM14 5h4v14h-4z', previous: 'M5 5v14M19 5L7 12l12 7z', next: 'M19 5v14M5 5l12 7-12 7z', music: 'M9 18V5l11-2v13M9 8l11-2M9 18c0 2-6 4-6 1s6-4 6-1zm11-2c0 2-6 4-6 1s6-4 6-1z'};
@@ -33,7 +35,11 @@ export function MusicSettings({disabled}: {disabled: boolean}) {
   const T = useTheme(); const fs = fontScale(T); const prefs = useMusicPreferences(); const [saving, setSaving] = useState(false); const [error, setError] = useState('');
   const save = async (update: Partial<MusicPreferences>) => {
     setSaving(true); setError('');
-    try { await musicPreferences.set(update); } catch { setError('Could not save music settings. Try again.'); } finally { setSaving(false); }
+    try {
+      if (update.enabled === false) await lastfmMusicEnabled(false);
+      await musicPreferences.set(update);
+      if (update.enabled === true) await lastfmMusicEnabled(true);
+    } catch { setError('Could not save music settings. Try again.'); } finally { setSaving(false); }
   };
   return <View style={{gap: 12}}>
     <ToggleRow label="Music player" desc={musicSupported ? 'See and control music playing in another Android app, with artwork, lyrics, and its shared queue.' : 'Update the patcher, then prepare and install Plural Star again to add Android music access.'}
@@ -43,6 +49,7 @@ export function MusicSettings({disabled}: {disabled: boolean}) {
       <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}><Btn disabled={disabled || saving} onPress={() => { void openMusicAccess(); }}>Allow music access</Btn><Btn variant="ghost" disabled={disabled || saving} onPress={openMusic}>Open player</Btn></View>
       <ToggleRow label="Show mini player" desc="Keep playback controls above the bottom bar while music is active. Music is also available from the hub." value={prefs.miniPlayer} disabled={disabled || saving} onToggle={() => { void save({miniPlayer: !prefs.miniPlayer}); }} />
       <ToggleRow label="Online lyrics" desc="Send the current song title, artist, and duration to LRCLIB when you open Lyrics. No account is needed." value={prefs.onlineLyrics} disabled={disabled || saving} onToggle={() => { void save({onlineLyrics: !prefs.onlineLyrics}); }} />
+      <LastfmSettings disabled={disabled || saving} />
     </>}
     {!!error && <Text accessibilityRole="alert" style={{color: T.danger}}>{error}</Text>}
   </View>;

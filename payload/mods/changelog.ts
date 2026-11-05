@@ -1,2 +1,2 @@
-export const changelogVersion = '0.4.39';
-export const changelog = '• Optional music player with artwork, playback controls, shared queues, and synced lyrics. Update the patcher and prepare the app again to enable music access.\n• Search the mod menu and Extra Customization settings.\n• Clearer save errors and easier access to settings controls.';
+export const changelogVersion = '0.4.40';
+export const changelog = '• Optional Last.fm scrobbling and Now Playing sharing in Music player settings. Update to patcher 0.6.7 and prepare the app again to add support.\n• Connect through Last.fm in your browser using your API key and shared secret. Both sharing switches start off.\n• Eligible listens queue offline and retry automatically. Credentials and queued listens stay encrypted on this device, outside cloud sync and backups.';

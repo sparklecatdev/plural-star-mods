@@ -124,6 +124,7 @@ test('lyrics handle provider errors, limits, invalid metadata and cancellation',
 function engineHarness(bridge) {
   let disk = null, appChange, tick;
   const engine = load('music.ts', {'./musicCore': core,
+    './lastfm': {lastfmMusicEnabled: async () => {}},
     'react-native': {Platform: {OS: 'android'}, NativeModules: {SparklecatMusic: bridge},
       AppState: {currentState: 'active', addEventListener: (_, listener) => { appChange = listener; return {remove: () => { appChange = undefined; }}; }}},
     '@react-native-async-storage/async-storage': {getItem: async () => disk, setItem: async (_, value) => { disk = value; }},
@@ -192,6 +193,7 @@ test('music controls respect the off switch and display preference save errors',
     'react-native-safe-area-context': {SafeAreaView: 'SafeAreaView'}, 'react-native-svg': {__esModule: true, default: 'Svg', Path: 'Path'},
     '../components/AppText': {Text: 'Text', TextInput: 'Input'}, '../components/controls': {Btn: host('Button'), ToggleRow: host('Toggle')},
     '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n}, './musicCore': core,
+    './LastfmSettings': {LastfmSettings: host('Lastfm')}, './lastfm': {lastfmMusicEnabled: async () => {}},
     './music': {musicSupported: true, useMusicPreferences: () => preferences, useMusic: () => ({foreground: true, track: snapshot().track}), musicPreferences: {set: async () => { throw Error('disk full'); }}},
   });
   let renderer;
@@ -202,4 +204,63 @@ test('music controls respect the off switch and display preference save errors',
   assert.match(renderer.root.findByProps({accessibilityRole: 'alert'}).props.children, /Could not save/);
   assert.equal(renderer.root.findByType('Toggle').props.value, false);
   await act(async () => renderer.unmount());
+});
+
+function lastfmBridge(overrides = {}) {
+  return {lastfmStatus: async () => '{}', lastfmMusicEnabled: async () => {}, lastfmConfigure: async () => {},
+    lastfmBegin: async () => '', lastfmFinish: async () => '', lastfmDisconnect: async () => {}, lastfmRetry: async () => {}, ...overrides};
+}
+const lastfm = bridge => load('lastfm.ts', {'react-native': {Platform: {OS: 'android'}, NativeModules: {SparklecatMusic: bridge}}});
+test('Last.fm requires the new native bridge, validates credentials and sign-in URLs, and never exposes native secrets', async () => {
+  const old = lastfm({getSnapshot: async () => snapshot()});
+  assert.equal(old.lastfmSupported, false); await old.lastfmMusicEnabled(false);
+  assert.equal((await old.lastfmStatus()).connected, false);
+  let calls = 0;
+  const key = 'a'.repeat(32), secret = 'b'.repeat(32);
+  const api = lastfm(lastfmBridge({lastfmStatus: async () => JSON.stringify({connected: true, username: 'Listener',
+    enabled: 'true', nowPlaying: 1, queued: 999, secret: 'private', session: 'private', token: 'private'}),
+    lastfmBegin: async (k, s) => { calls++; assert.equal(k, key); assert.equal(s, secret); return `https://www.last.fm/api/auth/?api_key=${key}&token=testtoken`; }}));
+  const status = await api.lastfmStatus();
+  assert.equal(status.connected, true); assert.equal(status.enabled, false); assert.equal(status.nowPlaying, false);
+  assert.equal(status.queued, 500); assert.equal(JSON.stringify(status).includes('private'), false);
+  await assert.rejects(api.lastfmBegin('bad', secret), /32-character/); assert.equal(calls, 0);
+  assert.match(await api.lastfmBegin(` ${key} `, secret), /^https:\/\/www\.last\.fm\//); assert.equal(calls, 1);
+  for (const url of ['https://example.test/api/auth/', 'https://www.last.fm.evil.test/api/auth/', `https://www.last.fm/api/auth/?api_key=${key}&token=token&redirect=bad`]) {
+    await assert.rejects(lastfm(lastfmBridge({lastfmBegin: async () => url})).lastfmBegin(key, secret), /invalid sign-in link/);
+  }
+  await assert.rejects(lastfm(lastfmBridge({lastfmStatus: async () => '[]'})).lastfmStatus(), /Could not read/);
+});
+
+test('Last.fm browser approval keeps both sharing toggles off until explicitly enabled and surfaces save errors', async () => {
+  let status = {...lastfm(lastfmBridge()).emptyLastfmStatus}, configured = [], opened = [], timer, renderer, fail = false;
+  const module = load('LastfmSettings.tsx', {
+    'react-native': {View: 'View', AppState: {currentState: 'active'}, Linking: {openURL: async url => { opened.push(url); }}},
+    '../components/AppText': {Text: 'Text', TextInput: 'Input'}, '../components/controls': {Btn: host('Button'), ToggleRow: host('Toggle')},
+    '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n},
+    './lastfm': {lastfmSupported: true, emptyLastfmStatus: status, lastfmStatus: async () => ({...status}),
+      lastfmBegin: async (key, secret) => { assert.equal(key, 'a'.repeat(32)); assert.equal(secret, 'b'.repeat(32)); status.pendingAuth = true; return 'https://www.last.fm/api/auth/'; },
+      lastfmFinish: async () => { status = {...status, pendingAuth: false, connected: true, username: 'Listener'}; },
+      lastfmConfigure: async (enabled, nowPlaying) => { if (fail) throw Error('device storage full'); configured.push({enabled, nowPlaying}); status = {...status, enabled, nowPlaying}; },
+      lastfmDisconnect: async () => { status = {...status, connected: false, enabled: false, nowPlaying: false}; },
+    },
+  }, {setInterval: callback => { timer = callback; return 1; }, clearInterval: () => { timer = undefined; }});
+  const button = label => renderer.root.findAllByType('Button').find(node => node.props.children === label);
+  const toggle = label => renderer.root.findAllByType('Toggle').find(node => node.props.label === label);
+  await act(async () => { renderer = create(React.createElement(module.LastfmSettings, {disabled: false})); });
+  assert.equal(button('Connect in browser').props.disabled, true);
+  await act(async () => { renderer.root.findByProps({accessibilityLabel: 'Last.fm API key'}).props.onChangeText('a'.repeat(32));
+    renderer.root.findByProps({accessibilityLabel: 'Last.fm shared secret'}).props.onChangeText('b'.repeat(32)); });
+  assert.equal(renderer.root.findByProps({accessibilityLabel: 'Last.fm shared secret'}).props.secureTextEntry, true);
+  await act(async () => button('Connect in browser').props.onPress());
+  assert.equal(opened.length, 1); assert.equal(renderer.root.findByProps({accessibilityLabel: 'Last.fm shared secret'}).props.value, '');
+  await act(async () => button('Finish connecting').props.onPress());
+  assert.equal(toggle('Last.fm scrobbling').props.value, false); assert.equal(toggle('Share Now Playing').props.value, false);
+  await act(async () => toggle('Last.fm scrobbling').props.onToggle());
+  assert.deepEqual(configured, [{enabled: true, nowPlaying: false}]);
+  fail = true;
+  await act(async () => toggle('Share Now Playing').props.onToggle());
+  assert.equal(toggle('Share Now Playing').props.value, false);
+  assert.match(renderer.root.findByProps({accessibilityRole: 'alert'}).props.children, /device storage full/);
+  await act(async () => button('Disconnect Last.fm').props.onPress());
+  assert.ok(button('Connect in browser')); await act(async () => renderer.unmount()); assert.equal(timer, undefined);
 });

@@ -88,7 +88,7 @@ function ModMenu({onClose}: {onClose: () => void}) {
         <SearchSection keywords="appearance colors navigation cards groups"><ToggleRow label="Extra Customization" desc="Hide tabs and features, simplify screens, and adjust more colors." value={extra.enabled} disabled={busy || saving || pkBusy}
           onToggle={() => { setSaving(true); setError(''); void extraCustomization.set({...extra, enabled: !extra.enabled}).catch(e => setError(String(e))).finally(() => setSaving(false)); }} />
         {extra.enabled && <Btn variant="ghost" disabled={busy || saving || pkBusy} onPress={() => setExtraOpen(true)}>Open Extra Customization</Btn>}</SearchSection>
-        <SearchSection keywords="music player lyrics media playback"><MusicSettings disabled={busy || saving || pkBusy} /></SearchSection>
+        <SearchSection keywords="music player lyrics media playback last.fm lastfm scrobbling offline"><MusicSettings disabled={busy || saving || pkBusy} /></SearchSection>
         <SearchSection keywords="rest mode sleep break snooze reminders notifications"><RestModeSettings disabled={busy || saving || pkBusy} /></SearchSection>
         <SearchSection keywords="PluralKit front sync token account"><PluralKitSettings disabled={busy || saving} onBusy={setPkBusy} /></SearchSection>
         {enabled.syncPreferences && <SearchSection keywords="cloud sync preferences Discord presence desktop companion"><CloudModSettings disabled={busy || saving || pkBusy} /><DesktopCompanionSettings disabled={busy || saving || pkBusy} /></SearchSection>}

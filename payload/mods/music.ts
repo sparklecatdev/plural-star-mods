@@ -3,13 +3,14 @@ import {AppState, NativeModules, Platform} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {createMusicPreferences, MUSIC_PREFERENCES_KEY, normalizeMusicSnapshot} from './musicCore';
 import type {MusicSnapshot} from './musicCore';
+import {lastfmMusicEnabled} from './lastfm';
 
 type MusicBridge = {getSnapshot: (id: string) => Promise<unknown>; openAccessSettings: () => Promise<void>; command: (id: string, action: string, value: string) => Promise<void>};
 const bridge: MusicBridge | undefined = Platform.OS === 'android' ? NativeModules.SparklecatMusic : undefined;
 export const musicSupported = !!bridge?.getSnapshot && !!bridge?.command && !!bridge?.openAccessSettings;
 export const musicPreferences = createMusicPreferences({read: () => AsyncStorage.getItem(MUSIC_PREFERENCES_KEY), write: value => AsyncStorage.setItem(MUSIC_PREFERENCES_KEY, value)});
 export function useMusicPreferences() {
-  useEffect(() => { void musicPreferences.load().catch(error => update({error: `Could not load music settings: ${message(error)}`})); }, []);
+  useEffect(() => { void musicPreferences.load().then(() => lastfmMusicEnabled(musicPreferences.getSnapshot().enabled)).catch(error => update({error: `Could not load music settings: ${message(error)}`})); }, []);
   return useSyncExternalStore(musicPreferences.subscribe, musicPreferences.getSnapshot, musicPreferences.getSnapshot);
 }
 type State = MusicSnapshot & {open: boolean; busy: boolean; error: string; ready: boolean; foreground: boolean};
@@ -44,7 +45,7 @@ export async function musicCommand(action: string, value = '') {
   catch (error) { if (current === generation) update({error: message(error)}); }
   finally { if (current === generation) update({busy: false}); }
 }
-/** Poll only while the unlocked app is visible; no background listener collects notifications. */
+/** Player UI polls only while unlocked and visible. Opt-in Last.fm accounting is managed natively. */
 export function useMusicEngine() {
   const prefs = useMusicPreferences();
   useEffect(() => {
