@@ -128,12 +128,17 @@ test('per-screen card settings validate, sync, and preserve defaults', () => {
   assert.deepEqual(plain(extra.cardAppearance(defaults, 'front')), {});
   const settings = extra.sanitizeExtraCustomization({enabled: true, cards: {
     front: {transparent: true, hideBorder: true, radius: 24, padding: 8, color: '#aabbcc', borderColor: 'bad'},
-    members: {radius: 999, padding: -1, transparent: 'yes'}, unknown: {color: '#123456'},
+    members: {radius: 999, padding: -1, transparent: 'yes'},
+    music: {transparent: true}, miniPlayer: {color: '#a1b2c3'}, lyrics: {padding: 12}, queue: {hideBorder: true}, unknown: {color: '#123456'},
   }});
   assert.deepEqual(plain(extra.cardAppearance(settings, 'front')), {backgroundColor: 'transparent', borderWidth: 0, borderRadius: 24, padding: 8});
   assert.deepEqual(plain(extra.cardAppearance({...settings, enabled: false}, 'front')), {});
   assert.deepEqual(plain(settings.cards.members), {transparent: false, hideBorder: false, radius: null, padding: null});
   assert.equal(settings.cards.unknown, undefined);
+  assert.equal(extra.cardAppearance(settings, 'music').backgroundColor, 'transparent');
+  assert.equal(extra.cardAppearance(settings, 'miniPlayer').backgroundColor, '#A1B2C3');
+  assert.equal(extra.cardAppearance(settings, 'lyrics').padding, 12);
+  assert.equal(extra.cardAppearance(settings, 'queue').borderWidth, 0);
   assert.equal(settings.cards.front.color, '#AABBCC');
   assert.equal(settings.cards.front.borderColor, undefined);
   const saved = record(); saved.settings.extraCustomization = settings;

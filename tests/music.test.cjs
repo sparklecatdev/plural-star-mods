@@ -20,6 +20,7 @@ function load(name, imports = {}, globals = {}) {
   return exports;
 }
 const core = load('musicCore.ts');
+const extraCore = load('extraCustomizationCore.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return {promise, resolve, reject}; };
 const snapshot = (title = 'Song') => ({access: true, sessions: [{id: 'player:1', name: 'Music', playing: true}], track: {
@@ -47,7 +48,7 @@ test('music is off by default; settings persist serially and recover from failed
   assert.deepEqual(plain(reopened.getSnapshot()), plain(prefs.getSnapshot()));
   assert.equal(reopened.getSnapshot().lyricOffset, 10000);
   assert.equal(core.normalizeMusicPreferences({enabled: 'true', onlineLyrics: 1, lyricSize: 99, lyricOffset: NaN}).enabled, false);
-  assert.equal(core.normalizeMusicPreferences({lyricSize: 99}).lyricSize, 22);
+  assert.equal(core.normalizeMusicPreferences({lyricSize: 99}).lyricSize, 34);
   const corrupt = core.createMusicPreferences({read: async () => '{broken', write: async () => {}});
   await corrupt.load(); assert.equal(corrupt.getSnapshot().enabled, false);
 });
@@ -189,11 +190,14 @@ test('settings search matches accents and all words without indexing secret valu
 test('music controls respect the off switch and display preference save errors', async () => {
   let preferences = {...core.DEFAULT_MUSIC_PREFERENCES};
   const {MusicSettings, MusicDock, MusicHubButton} = load('MusicPlayer.tsx', {
-    'react-native': {View: 'View', TouchableOpacity: 'Button', Modal: 'Modal', ScrollView: 'ScrollView', Image: 'Image', ActivityIndicator: 'Spinner', PanResponder: {create: () => ({panHandlers: {}})}, useWindowDimensions: () => ({width: 400})},
+    'react-native': {View: 'View', TouchableOpacity: 'Button', Modal: 'Modal', ScrollView: 'ScrollView', Image: 'Image', ActivityIndicator: 'Spinner', PanResponder: {create: () => ({panHandlers: {}})}, useWindowDimensions: () => ({width: 400, height: 840})},
     'react-native-safe-area-context': {SafeAreaView: 'SafeAreaView'}, 'react-native-svg': {__esModule: true, default: 'Svg', Path: 'Path'},
     '../components/AppText': {Text: 'Text', TextInput: 'Input'}, '../components/controls': {Btn: host('Button'), ToggleRow: host('Toggle')},
     '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n}, './musicCore': core,
     './LastfmSettings': {LastfmSettings: host('Lastfm')}, './lastfm': {lastfmMusicEnabled: async () => {}},
+    '../store/appStore': {useAppStore: select => select({appSettings: {}})}, '../utils/mediaFiles': {fs: {dirs: {DocumentDir: '/data/files'}}},
+    './modOptions': {options: {wallpaper: true}}, './modPreferences': {useModPreferences: () => ({wallpaper: false})},
+    './extraCustomization': {...extraCore, useExtraCustomization: () => extraCore.DEFAULT_EXTRA_CUSTOMIZATION},
     './music': {musicSupported: true, useMusicPreferences: () => preferences, useMusic: () => ({foreground: true, track: snapshot().track}), musicPreferences: {set: async () => { throw Error('disk full'); }}},
   });
   let renderer;
@@ -203,6 +207,124 @@ test('music controls respect the off switch and display preference save errors',
   await act(async () => renderer.root.findByType('Toggle').props.onToggle());
   assert.match(renderer.root.findByProps({accessibilityRole: 'alert'}).props.children, /Could not save/);
   assert.equal(renderer.root.findByType('Toggle').props.value, false);
+  await act(async () => renderer.unmount());
+});
+
+
+function playerHarness(findLyrics = core.findLyrics) {
+  const h = {prefs: {...core.DEFAULT_MUSIC_PREFERENCES, enabled: true},
+    extra: extraCore.DEFAULT_EXTRA_CUSTOMIZATION, calls: [], appSettings: {}, wallpaper: false, dimensions: {width: 400, height: 840},
+    state: {...core.normalizeMusicSnapshot(snapshot()), foreground: true, open: true, ready: true, busy: false, error: ''}};
+  const ui = load('MusicPlayer.tsx', {
+    'react-native': {View: 'View', TouchableOpacity: 'Button', Modal: 'Modal', ScrollView: 'ScrollView', Image: 'Image', ActivityIndicator: 'Spinner', PanResponder: {create: () => ({panHandlers: {}})}, PixelRatio: {get: () => 3}, useWindowDimensions: () => h.dimensions},
+    'react-native-safe-area-context': {SafeAreaView: 'SafeAreaView'}, 'react-native-svg': {__esModule: true, default: 'Svg', Path: 'Path'},
+    '../components/AppText': {Text: 'Text', TextInput: 'Input'}, '../components/controls': {Btn: host('Button'), ToggleRow: host('Toggle')},
+    '../themeContext': {useTheme: () => theme}, '../theme': {fontScale: () => n => n}, './musicCore': {...core, findLyrics},
+    '../store/appStore': {useAppStore: select => select({appSettings: h.appSettings})}, '../utils/mediaFiles': {fs: {dirs: {DocumentDir: '/data/files'}}},
+    './modOptions': {options: {wallpaper: true}}, './modPreferences': {useModPreferences: () => ({wallpaper: h.wallpaper})},
+    './extraCustomization': {...extraCore, useExtraCustomization: () => h.extra},
+    './LastfmSettings': {LastfmSettings: host('Lastfm')}, './lastfm': {lastfmMusicEnabled: async () => {}},
+    './music': {musicSupported: true, useMusicEngine: () => {}, useMusicPreferences: () => h.prefs, useMusic: () => h.state,
+      musicPreferences: {set: async value => { h.prefs = {...h.prefs, ...value}; }},
+      musicCommand: async (...args) => h.calls.push(args), closeMusic: () => h.calls.push(['close']),
+      selectMusicSource: id => h.calls.push(['source', id]), refreshMusic: async () => {}, openMusicAccess: async () => {}, openMusic: () => {}},
+  });
+  return {...ui, h};
+}
+const button = (renderer, label) => renderer.root.findAllByType('Button').find(node => node.props.accessibilityLabel === label);
+
+test('player panels preserve controls, gate unsupported commands, and dismiss in order', async () => {
+  const {MusicRoot, h} = playerHarness();
+  h.state.track = {...h.state.track, canQueue: true, canVolume: true, volume: 4, maxVolume: 10,
+    queue: [{id: '1', title: 'Song', artist: 'Artist', active: true}, {id: '2', title: 'Next song', artist: 'Artist', active: false}]};
+  let renderer;
+  const element = () => React.createElement(MusicRoot);
+  await act(async () => { renderer = create(element()); });
+  assert.equal(button(renderer, 'Previous track').props.disabled, true);
+  await act(async () => button(renderer, 'Pause music').props.onPress());
+  await act(async () => renderer.root.findByProps({accessibilityLabel: 'Playback position'}).props.onAccessibilityAction({nativeEvent: {actionName: 'increment'}}));
+  await act(async () => renderer.root.findByProps({accessibilityLabel: 'Music volume'}).props.onAccessibilityAction({nativeEvent: {actionName: 'decrement'}}));
+  assert.deepEqual(h.calls, [['pause'], ['seek', '20000'], ['volume', '3']]);
+  await act(async () => button(renderer, 'Show queue').props.onPress());
+  await act(async () => button(renderer, 'Next song').props.onPress());
+  assert.deepEqual(h.calls.at(-1), ['queue', '2']);
+  assert.equal(button(renderer, 'Hide queue').props.accessibilityState.selected, true);
+  h.dimensions = {width: 840, height: 400};
+  await act(async () => renderer.update(element()));
+  const controls = renderer.root.findAllByType('View').find(node => node.props.style?.width === '50%');
+  assert.ok(controls, 'landscape queue keeps a separate column for controls');
+  assert.equal(controls.parent.props.style.flexDirection, 'row');
+  assert.ok(button(renderer, 'Next song'));
+  await act(async () => button(renderer, 'Show lyrics').props.onPress());
+  assert.equal(controls.parent.props.style.flexDirection, 'row');
+  assert.ok(renderer.root.findAllByType('Button').some(node => node.props.children === 'Enable online lyrics'));
+  await act(async () => button(renderer, 'Show queue').props.onPress());
+  await act(async () => button(renderer, 'Choose music source').props.onPress());
+  assert.equal(renderer.root.findAllByType('Modal').length, 2);
+  await act(async () => renderer.root.findAllByType('Modal')[1].props.onRequestClose());
+  assert.equal(renderer.root.findAllByType('Modal').length, 1);
+  assert.ok(button(renderer, 'Hide queue'));
+  await act(async () => renderer.root.findByType('Modal').props.onRequestClose());
+  assert.ok(button(renderer, 'Show queue'));
+  h.state.busy = true;
+  await act(async () => renderer.update(element()));
+  assert.equal(button(renderer, 'Pause music').props.disabled, true);
+  assert.equal(button(renderer, 'Next track').props.disabled, true);
+  await act(async () => renderer.root.findByProps({accessibilityLabel: 'Music volume'}).props.onAccessibilityAction({nativeEvent: {actionName: 'increment'}}));
+  assert.deepEqual(h.calls.at(-1), ['queue', '2']);
+  await act(async () => renderer.root.findByType('Modal').props.onRequestClose());
+  assert.deepEqual(h.calls.at(-1), ['close']);
+  h.prefs.enabled = false;
+  await act(async () => renderer.update(element()));
+  assert.equal(renderer.toJSON(), null);
+  await act(async () => renderer.unmount());
+});
+
+test('lyrics stay opt-in, show timed lines, seek with the saved offset, and abort on leaving', async () => {
+  let lookups = 0, signal;
+  const {MusicRoot, h} = playerHarness(async (_, requestSignal) => {
+    lookups++; signal = requestSignal;
+    return {lines: [{time: 20000, text: 'A lyric line'}], plain: '', instrumental: false};
+  });
+  let renderer;
+  const element = () => React.createElement(MusicRoot);
+  await act(async () => { renderer = create(element()); });
+  assert.equal(lookups, 0);
+  await act(async () => button(renderer, 'Show lyrics').props.onPress());
+  assert.equal(lookups, 0);
+  assert.ok(renderer.root.findAllByType('Button').some(node => node.props.children === 'Enable online lyrics'));
+  h.prefs = {...h.prefs, onlineLyrics: true, lyricOffset: 500};
+  await act(async () => renderer.update(element()));
+  assert.equal(lookups, 1);
+  await act(async () => button(renderer, 'A lyric line, 0:20').props.onPress());
+  assert.deepEqual(h.calls.at(-1), ['seek', '19500']);
+  await act(async () => button(renderer, 'Lyrics options').props.onPress());
+  assert.equal(renderer.root.findAllByType('Modal').length, 2);
+  await act(async () => renderer.root.findAllByType('Modal')[1].props.onRequestClose());
+  await act(async () => button(renderer, 'Hide lyrics').props.onPress());
+  assert.equal(signal.aborted, true);
+  assert.equal(lookups, 1);
+  await act(async () => renderer.unmount());
+});
+
+test('music appearance respects the customization switch and uses a separate wallpaper backdrop', async () => {
+  const {MusicRoot, h} = playerHarness();
+  h.extra = extraCore.sanitizeExtraCustomization({enabled: false, cards: {music: {transparent: true, color: '#123456', radius: 24}}});
+  h.wallpaper = true; h.appSettings = {backgroundImage: 'background-test.png'};
+  let renderer;
+  const element = () => React.createElement(MusicRoot);
+  const playerStyle = () => Object.assign({}, ...renderer.root.findAllByType('View').find(node => Array.isArray(node.props.style) && node.props.style[0]?.maxWidth === 1000).props.style);
+  await act(async () => { renderer = create(element()); });
+  assert.equal(playerStyle().borderRadius, undefined);
+  assert.equal(renderer.root.findByType('Modal').props.transparent, undefined);
+  assert.equal(renderer.root.findByType('Image').props.source.uri, 'file:///data/files/ps_backgrounds/background-test.png');
+  h.extra = {...h.extra, enabled: true};
+  await act(async () => renderer.update(element()));
+  assert.equal(playerStyle().backgroundColor, 'transparent');
+  assert.equal(playerStyle().borderRadius, 24);
+  h.appSettings = {backgroundImage: '../private.png'};
+  await act(async () => renderer.update(element()));
+  assert.equal(renderer.root.findAllByType('Image').length, 0);
   await act(async () => renderer.unmount());
 });
 

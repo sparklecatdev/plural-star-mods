@@ -17,6 +17,7 @@ import type {FrontTierOption, CardArea, CardAppearance, ElementColorOption, Colo
 const ToggleRow = (props: Omit<React.ComponentProps<typeof BaseToggleRow>, 'desc'>) => <BaseToggleRow {...props} desc="" />;
 
 const FRONT_TIER_NAMES: Record<FrontTierOption, string> = {primary: 'Primary front', coFront: 'Co-front', coConscious: 'Co-conscious'};
+const CARD_NAMES: Record<CardArea, string> = {front: 'Front cards', members: 'Members cards', journal: 'Journal cards', history: 'History cards', music: 'Music player', miniPlayer: 'Mini player', lyrics: 'Music lyrics', queue: 'Music queue'};
 
 const TAB_NAMES: Record<string, string> = {front: 'Front', hub: 'Hub', members: 'Members', journal: 'Journal', history: 'History'};
 const TILE_NAMES: Record<string, string> = {
@@ -234,11 +235,11 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
         <Text style={{color: T.dim, fontSize: fs(13)}}>Choose the appearance of cards on each screen. Default keeps the original style.</Text>
         {CARD_AREAS.map(area => {
           const card = prefs.cards[area];
-          const name = area[0].toUpperCase() + area.slice(1);
-          return <Section key={area} title={`${name} cards`}>
+          const name = CARD_NAMES[area];
+          return <Section key={area} title={name}>
             <ToggleRow label="Transparent background" value={card?.transparent === true} disabled={busy} onToggle={() => updateCard(area, {transparent: !card?.transparent})} />
             <ToggleRow label="Show border" value={!card?.hideBorder} disabled={busy} onToggle={() => updateCard(area, {hideBorder: !card?.hideBorder})} />
-            {(['color', 'borderColor'] as const).map(key => <TouchableOpacity key={key} disabled={busy} accessibilityRole="button" accessibilityLabel={`Edit ${name} card ${key === 'color' ? 'background' : 'border'} color`} onPress={() => setCardPicker({area, key})} style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 9, gap: 12}}>
+            {(['color', 'borderColor'] as const).map(key => <TouchableOpacity key={key} disabled={busy} accessibilityRole="button" accessibilityLabel={`Edit ${name} ${key === 'color' ? 'background' : 'border'} color`} onPress={() => setCardPicker({area, key})} style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 9, gap: 12}}>
               <View style={{width: 24, height: 24, borderRadius: 6, borderWidth: 1, borderColor: T.border, backgroundColor: card?.[key] || (key === 'color' ? T.card : T.border)}} />
               <Text style={{flex: 1, color: T.text, fontSize: fs(14)}}>{key === 'color' ? 'Background color' : 'Border color'}</Text>
               <Text style={{color: T.dim, fontSize: fs(12)}}>{card?.[key] || 'Default'}</Text>
@@ -276,7 +277,7 @@ export function ExtraCustomizationMenu({onClose}: {onClose: () => void}) {
       {tierPicker && <ColorPickerModal visible title={`${FRONT_TIER_NAMES[tierPicker]} color`} value={tierAccent(T, tierPicker)} onClose={() => setTierPicker(null)}
         onSave={hex => { void save({...prefs, frontTierColors: {...prefs.frontTierColors, [tierPicker]: hex}}); setTierPicker(null); }}
         onClear={() => { const frontTierColors = {...prefs.frontTierColors}; delete frontTierColors[tierPicker]; void save({...prefs, frontTierColors}); setTierPicker(null); }} clearLabel="Use default" />}
-      {cardPicker && <ColorPickerModal visible title={`${cardPicker.area[0].toUpperCase() + cardPicker.area.slice(1)} card ${cardPicker.key === 'color' ? 'background' : 'border'} color`}
+      {cardPicker && <ColorPickerModal visible title={`${CARD_NAMES[cardPicker.area]} ${cardPicker.key === 'color' ? 'background' : 'border'} color`}
         value={prefs.cards[cardPicker.area]?.[cardPicker.key] || (cardPicker.key === 'color' ? T.card : T.border)} onClose={() => setCardPicker(null)}
         onSave={hex => { updateCard(cardPicker.area, {[cardPicker.key]: hex}); setCardPicker(null); }}
         onClear={() => { updateCard(cardPicker.area, {[cardPicker.key]: undefined}); setCardPicker(null); }} clearLabel="Use default" />}

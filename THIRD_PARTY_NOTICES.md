@@ -39,9 +39,10 @@ Its copyright and license are retained in the dependency JAR. dexlib2 is not
 included in either Android app; the generated DEX contains the upstream classes
 and this project's bundle loader.
 
-The optional music player and lyrics behavior in payload/mods/MusicPlayer.tsx
-and musicCore.ts adapt BitChord contributors’ NowPlayingScreen, PlayerLyrics,
-PlayerQueue, and LrcLib at commit b690dc146009d4815825fa4a20815ef2e4ee8898:
+The optional music player UI and lyrics behavior in payload/mods/MusicPlayer.tsx
+and musicCore.ts adapt BitChord contributors’ NowPlayingScreen, PlayerControls,
+MiniPlayer, PlayerLyrics, PlayerQueue, and LrcLib at commit
+b690dc146009d4815825fa4a20815ef2e4ee8898:
 https://github.com/sparklecatdev/BitChord-desktop
 
 The adaptation was made on 2026-11-05 for Android media-session control in

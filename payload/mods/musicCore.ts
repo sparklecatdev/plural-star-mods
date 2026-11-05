@@ -1,7 +1,7 @@
 // Lyrics timing and matching follow BitChord's player approach. See THIRD_PARTY_NOTICES.md.
 export const MUSIC_PREFERENCES_KEY = 'sparklecat.music.v1';
 export type MusicPreferences = {enabled: boolean; onlineLyrics: boolean; miniPlayer: boolean; followLyrics: boolean; lyricSize: number; lyricOffset: number};
-export const DEFAULT_MUSIC_PREFERENCES: MusicPreferences = {enabled: false, onlineLyrics: false, miniPlayer: true, followLyrics: true, lyricSize: 22, lyricOffset: 0};
+export const DEFAULT_MUSIC_PREFERENCES: MusicPreferences = {enabled: false, onlineLyrics: false, miniPlayer: true, followLyrics: true, lyricSize: 34, lyricOffset: 0};
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const number = (value: unknown, max: number) => typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(max, value)) : 0;
 const text = (value: unknown, max = 1000) => typeof value === 'string' ? value.slice(0, max) : '';
@@ -10,7 +10,7 @@ export function normalizeMusicPreferences(value: unknown): MusicPreferences {
   const data = object(value);
   return {enabled: data.enabled === true, onlineLyrics: data.onlineLyrics === true,
     miniPlayer: data.miniPlayer !== false, followLyrics: data.followLyrics !== false,
-    lyricSize: [18, 22, 28, 34].includes(Number(data.lyricSize)) ? Number(data.lyricSize) : 22,
+    lyricSize: [18, 22, 28, 34].includes(Number(data.lyricSize)) ? Number(data.lyricSize) : DEFAULT_MUSIC_PREFERENCES.lyricSize,
     lyricOffset: typeof data.lyricOffset === 'number' && Number.isFinite(data.lyricOffset) ? Math.round(Math.max(-10000, Math.min(10000, data.lyricOffset))) : 0};
 }
 
