@@ -55,6 +55,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
+          SPARKLECAT_TEST_TRAY=1 dbus-run-session -- python -m unittest discover -s desktop-companion -p test_linux_tray.py
           dist/Sparklecat-Discord-Companion/Sparklecat-Discord-Companion --self-test
           SSL_CERT_FILE=/nonexistent SSL_CERT_DIR=/nonexistent dist/Sparklecat-Discord-Companion/Sparklecat-Discord-Companion --self-test
           XDG_CONFIG_HOME="$(mktemp -d)" XDG_DATA_HOME="$(mktemp -d)" timeout 20s xvfb-run -a dist/Sparklecat-Discord-Companion/Sparklecat-Discord-Companion --gui-self-test

@@ -16,7 +16,7 @@ import zipfile
 from pathlib import Path
 from photos import upload_context
 
-VERSION = (0, 6, 11)
+VERSION = (0, 6, 12)
 RELEASES = 'https://api.github.com/repos/sparklecatdev/plural-star-mods/releases?per_page=100'
 NAME = 'Sparklecat-Discord-Companion'
 

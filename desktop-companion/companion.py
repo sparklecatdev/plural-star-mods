@@ -648,6 +648,15 @@ def main():
         check_updates(startup=True)
 
     def poll():
+        tray_poll = getattr(state['tray'], 'poll', None)
+        if tray_poll:
+            try:
+                tray_poll()
+            except OSError:
+                state['tray'].stop()
+                state['tray'] = None
+                show_window()
+                status.set('Tray disconnected.')
         try:
             while True:
                 message = messages.get_nowait()
@@ -708,12 +717,29 @@ def main():
         if mode == 'tray':
             try:
                 if not state['tray']:
-                    import pystray
                     image = icon_image(icon_path.get())
-                    tray = pystray.Icon('sparklecat-companion', image, title.get().strip() or default_title,
-                        menu=pystray.Menu(pystray.MenuItem('Open window', lambda: messages.put(('tray', 'open')), default=True),
-                                          pystray.MenuItem('Close app', lambda: messages.put(('tray', 'quit')))))
-                    tray.run_detached()
+                    tray_title = title.get().strip() or default_title
+
+                    def tray_action(action):
+                        messages.put(('tray', action))
+
+                    tray = None
+                    if sys.platform.startswith('linux'):
+                        from linux_tray import LinuxTray, TrayUnavailable
+                        try:
+                            tray = LinuxTray(image, tray_title, tray_action)
+                        except TrayUnavailable:
+                            desktops = os.environ.get('XDG_CURRENT_DESKTOP', '').lower().split(':')
+                            if {'kde', 'plasma'}.intersection(desktops) or os.environ.get('KDE_FULL_SESSION') == 'true':
+                                raise
+                    if tray is None:
+                        import pystray
+                        menu = pystray.Menu(
+                            pystray.MenuItem('Open window', lambda: tray_action('open'), default=True),
+                            pystray.MenuItem('Close app', lambda: tray_action('quit')),
+                        )
+                        tray = pystray.Icon('sparklecat-companion', image, tray_title, menu=menu)
+                        tray.run_detached()
                     state['tray'] = tray
                 root.withdraw()
             except Exception as error:
@@ -781,6 +807,7 @@ if __name__ == '__main__':
         assert keyring.get_keyring() and Image.new('RGB', (1, 1)) and importlib.util.find_spec('pystray')
         assert len(derive('test')[2]) == SecretBox.KEY_SIZE
         if sys.platform.startswith('linux'):
+            import linux_tray
             from photos import upload_context
             assert upload_context().cert_store_stats()['x509_ca'] > 0
     else:
