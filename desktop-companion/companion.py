@@ -63,13 +63,16 @@ def activity_for(members, presence=None):
         return None
     members = [{'name': m, 'pronouns': '', 'avatar': ''} if isinstance(m, str) else m for m in members]
     names = [m.get('name', '') for m in members]
+    nicknames = [member.get('nickname') or name for member, name in zip(members, names)]
     first = members[0] if members else {}
     avatar = first.get('avatar', '')
     parsed_avatar = urlparse(avatar)
     if parsed_avatar.scheme != 'https' or not parsed_avatar.netloc:
         avatar = ''
     substitutions = {'{fronters}': ', '.join(names) or 'Nobody', '{count}': str(len(names)),
-                     '{name}': first.get('name', ''), '{pronouns}': first.get('pronouns', ''), '{avatar}': avatar}
+                     '{nicknames}': ', '.join(nicknames) or 'Nobody',
+                     '{name}': first.get('name', ''), '{nickname}': nicknames[0] if nicknames else '',
+                     '{pronouns}': first.get('pronouns', ''), '{avatar}': avatar}
     def render(value, limit=128):
         for key, replacement in substitutions.items():
             value = value.replace(key, replacement)
@@ -493,7 +496,7 @@ def main():
         allow_photos = tk.BooleanVar(value=share_photos.is_set())
         pause_games = tk.BooleanVar(value=game_settings['enabled'])
         game_names = tk.StringVar(value=game_settings['names'])
-        ttk.Label(panel, text='Use {fronters}, {count}, {name}, {pronouns} and {avatar}.\n{name}, {pronouns} and {avatar} use the first fronter.\n{avatar} needs a public HTTPS photo URL for Discord.', justify='left').grid(row=0, column=0, columnspan=2, sticky='w')
+        ttk.Label(panel, text='Use {fronters} or {nicknames} for everyone fronting, and {count} for the total.\n{name}, {nickname}, {pronouns} and {avatar} use the first fronter.\nNicknames fall back to names. {avatar} needs a public HTTPS URL.', justify='left').grid(row=0, column=0, columnspan=2, sticky='w')
         for row, (key, label) in enumerate(fields, 1):
             ttk.Label(panel, text=label).grid(row=row, column=0, sticky='w', padx=(0, 8))
             ttk.Entry(panel, textvariable=variables[key], width=42).grid(row=row, column=1, sticky='ew')
@@ -523,7 +526,7 @@ def main():
         def values():
             return clean_presence({**{key: var.get() for key, var in variables.items()}, 'show_empty': show_empty.get()})
         def update_preview(*_):
-            members = state['front'] if state['front'] is not None else [{'name': 'Alex', 'pronouns': 'they/them', 'avatar': ''}, {'name': 'Sam', 'pronouns': 'she/her', 'avatar': ''}]
+            members = state['front'] if state['front'] is not None else [{'name': 'Alex', 'nickname': 'Lex', 'pronouns': 'they/them', 'avatar': ''}, {'name': 'Sam', 'pronouns': 'she/her', 'avatar': ''}]
             activity = activity_for(members, values()) or {}
             lines = ['Preview (' + ('your cloud data' if state['front'] is not None else 'example data') + ')', activity.get('details', ''), activity.get('state', '')]
             first = members[0] if members else {}
@@ -588,7 +591,8 @@ def main():
                 messagebox.showerror('Could not save presence', status.get(), parent=dialog)
         ttk.Button(panel, text='Save presence', command=apply).grid(row=16, column=0, sticky='w')
         ttk.Button(panel, text='Load my fronters', command=load_front).grid(row=16, column=1, sticky='e')
-        ttk.Button(panel, text='Use fronter photo', command=lambda: variables['large_image'].set('{avatar}')).grid(row=17, column=0, columnspan=2, sticky='w', pady=(8, 0))
+        ttk.Button(panel, text='Use fronter photo', command=lambda: variables['large_image'].set('{avatar}')).grid(row=17, column=0, sticky='w', pady=(8, 0))
+        ttk.Button(panel, text='Show nicknames on second line', command=lambda: variables['state'].set('{nicknames}')).grid(row=17, column=1, sticky='e', pady=(8, 0))
         if value.get() and state['front'] is None:
             load_front()
         dialog.protocol('WM_DELETE_WINDOW', close_dialog)
@@ -738,8 +742,11 @@ def main():
         first_line.delete(0, 'end')
         first_line.insert(0, 'Saved presence test')
         next(widget for widget in panel.winfo_children()
+             if isinstance(widget, ttk.Button) and widget.cget('text') == 'Show nicknames on second line').invoke()
+        next(widget for widget in panel.winfo_children()
              if isinstance(widget, ttk.Button) and widget.cget('text') == 'Save presence').invoke()
         assert settings.load()['presence']['details'] == 'Saved presence test'
+        assert settings.load()['presence']['state'] == '{nicknames}'
         value.set('test password')
         original_credential = settings.credential
         def unavailable_credential(*args, **kwargs):

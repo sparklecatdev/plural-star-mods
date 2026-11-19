@@ -67,9 +67,9 @@ class CloudTests(unittest.TestCase):
             client = cloud.Cloud('password', 'https://example.com')
         client.master = master
         client.read_manifest = lambda: ({}, manifest)
-        client.read_entry = lambda _, path, default: ([{'id': 'a', 'name': 'Alex', 'pronouns': 'they/them', 'avatar': 'cloud:media'}] if path == 'ps:members' else {'primary': {'memberIds': ['a', 'a']}})
+        client.read_entry = lambda _, path, default: ([{'id': 'a', 'name': 'Alex', 'nickname': ' Lex ', 'pronouns': 'they/them', 'avatar': 'cloud:media'}] if path == 'ps:members' else {'primary': {'memberIds': ['a', 'a']}})
         client.request = mock.Mock(return_value=ciphertext)
-        expected = [{'id': 'a', 'name': 'Alex', 'pronouns': 'they/them', 'avatar': 'cloud:media', 'photo': photo.getvalue()}]
+        expected = [{'id': 'a', 'name': 'Alex', 'nickname': 'Lex', 'pronouns': 'they/them', 'avatar': 'cloud:media', 'photo': photo.getvalue()}]
         self.assertEqual(client.get_front_members(include_avatars=True), expected)
         self.assertEqual(client.get_front_members(include_avatars=True), expected)
         client.request.assert_called_once()

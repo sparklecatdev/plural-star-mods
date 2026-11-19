@@ -247,7 +247,9 @@ def front_members(members, front):
         member = records[member_id]
         name = member['name'].strip()
         if name:
+            nickname = member.get('nickname')
             result.append({'id': member_id, 'name': name,
+                           'nickname': nickname.strip() if isinstance(nickname, str) else '',
                            'pronouns': member.get('pronouns', '') if isinstance(member.get('pronouns'), str) else '',
                            'avatar': member.get('avatar', '') if isinstance(member.get('avatar'), str) else ''})
     return result

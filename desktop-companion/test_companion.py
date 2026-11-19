@@ -52,6 +52,15 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(activity['assets']['large_image'], 'https://example.com/avatar.png')
         self.assertNotIn('assets', companion.activity_for(members[1:], options))
 
+    def test_nickname_templates_fall_back_to_names(self):
+        members = [{'name': 'Alex', 'nickname': 'Lex'}, {'name': 'Sam', 'nickname': ''}, 'Jo']
+        activity = companion.activity_for(members, {'details': '{nickname} / {name}', 'state': '{nicknames}'})
+        self.assertEqual(activity['details'], 'Lex / Alex')
+        self.assertEqual(activity['state'], 'Lex, Sam, Jo')
+        self.assertEqual(companion.activity_for(members)['state'], 'Alex, Sam, Jo')
+        self.assertEqual(companion.activity_for(members[1:], {'state': '{nickname}'})['state'], 'Sam')
+        self.assertEqual(companion.activity_for([], {'state': '{nicknames}', 'show_empty': True})['state'], 'Nobody')
+
     def test_worker_sends_hosted_photo_and_preserves_text_on_upload_failure(self):
         original = [{'name': 'Alex', 'avatar': 'cloud:photo', 'photo': b'private photo'}]
         hosted = [{**original[0], 'avatar': 'https://n.uguu.se/abcdefgh.png'}]
